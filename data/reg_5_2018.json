@@ -1,0 +1,121 @@
+{
+  "document": {
+    "doc_id": "reg_5_2018",
+    "doc_title": "نظام تعديل نظام بيع وإيجار عقارات وأراضي الدولة والقطاع العام لأغراض الاستثمار والمساطحة عليها رقم 6 لسنة 2017 — رقم 5 لسنة 2018",
+    "doc_type": "نظام",
+    "doc_number": 5,
+    "doc_year": 2018,
+    "gazette": "الوقائع العراقية - العدد 4491 - 14/5/2018",
+    "issuing_authority": "مجلس الوزراء (قرار 161 لسنة 2018)",
+    "based_on": "المادة 80/ثالثاً من الدستور، والفقرة (أ) من البند (خامساً) من المادة 10، والبند (أولاً) من المادة 30 من قانون الاستثمار 13 لسنة 2006",
+    "source_file": "07_نظام_5_2018.txt",
+    "verification": "مدقّق",
+    "amends": "reg_6_2017",
+    "tags_note": "حقول الوسم تصنيف مشتق — النص الحرفي هو المرجع.",
+    "verification_note": "المصدر نص حرفي من الوقائع العراقية العدد 4491 (موقع وزارة العدل moj.gov.iq)؛ طوبق المحتوى 100%."
+  },
+  "records": [
+    {
+      "id": "reg_5_2018/art_1",
+      "record_type": "مادة",
+      "doc_id": "reg_5_2018",
+      "chapter_no": null,
+      "chapter_title": null,
+      "article_no": 1,
+      "article_label_ar": "المادة 1",
+      "article_text": "تُلغى الفقرة (أولاً) من المادة 4 من النظام ويحل محلها ما يأتي: «أولاً ـ تُملك الأراضي المخصصة للمشروعات السكنية ضمن التصميم الأساس ببدل بيع قدره 2% من قيمة الأرض، على أن يتولّى المستثمر إيصال البنى التحتية الخارجية للمشروع مجاناً، وتُخصَّص ابتداءً نسبة لا تزيد على 10% من المساحة المخصصة للمشروع السكني للجهة المالكة لغرض استثمارها بما لا يخلّ بالتصميم الأساس والقطاعي للمشروع.»",
+      "clauses": [],
+      "amendments": [
+        "يلغي ويستبدل reg_6_2017/art_4 الفقرة أولاً"
+      ],
+      "cross_refs": [
+        "reg_6_2017/art_4"
+      ],
+      "tags": {
+        "applicable_sectors": [
+          "housing",
+          "real_estate"
+        ],
+        "investor_type": "both",
+        "capital_tier": null,
+        "jurisdiction": "governorate"
+      },
+      "verification": "مدقّق"
+    },
+    {
+      "id": "reg_5_2018/art_2",
+      "record_type": "مادة",
+      "doc_id": "reg_5_2018",
+      "chapter_no": null,
+      "chapter_title": null,
+      "article_no": 2,
+      "article_label_ar": "المادة 2",
+      "article_text": "تُلغى الفقرة (ثانياً) من المادة 7 من النظام.",
+      "clauses": [],
+      "amendments": [
+        "يلغي reg_6_2017/art_7 الفقرة ثانياً"
+      ],
+      "cross_refs": [
+        "reg_6_2017/art_7"
+      ],
+      "tags": {
+        "applicable_sectors": [
+          "all"
+        ],
+        "investor_type": "both",
+        "capital_tier": null,
+        "jurisdiction": "governorate"
+      },
+      "verification": "مدقّق"
+    },
+    {
+      "id": "reg_5_2018/art_3",
+      "record_type": "مادة",
+      "doc_id": "reg_5_2018",
+      "chapter_no": null,
+      "chapter_title": null,
+      "article_no": 3,
+      "article_label_ar": "المادة 3",
+      "article_text": "يُلغى نصّ الفقرة (أولاً) من المادة 8 من النظام ويحل محلها ما يأتي: «المادة 8 ـ أولاً ـ لا تسري أحكام هذا النظام على المشروعات الاستثمارية السكنية الحاصلة على إجازات استثمار قبل صدور هذا النظام.»",
+      "clauses": [],
+      "amendments": [
+        "يلغي ويستبدل reg_6_2017/art_8 الفقرة أولاً"
+      ],
+      "cross_refs": [
+        "reg_6_2017/art_8"
+      ],
+      "tags": {
+        "applicable_sectors": [
+          "housing"
+        ],
+        "investor_type": "both",
+        "capital_tier": null,
+        "jurisdiction": "governorate"
+      },
+      "verification": "مدقّق"
+    },
+    {
+      "id": "reg_5_2018/art_4",
+      "record_type": "مادة",
+      "doc_id": "reg_5_2018",
+      "chapter_no": null,
+      "chapter_title": null,
+      "article_no": 4,
+      "article_label_ar": "المادة 4",
+      "article_text": "يُنفَّذ هذا النظام اعتباراً من 21/8/2017.",
+      "clauses": [],
+      "amendments": [],
+      "cross_refs": [],
+      "tags": {
+        "applicable_sectors": [
+          "all"
+        ],
+        "investor_type": null,
+        "capital_tier": null,
+        "jurisdiction": "governorate"
+      },
+      "verification": "مدقّق"
+    }
+  ],
+  "articles_count": 4
+}
