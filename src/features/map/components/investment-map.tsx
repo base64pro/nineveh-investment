@@ -30,20 +30,67 @@ type MapData = {
 };
 
 type StyleSource = { url?: string; tiles?: string[]; [k: string]: unknown };
+type StyleLayer = {
+  id: string;
+  type: string;
+  source?: string;
+  minzoom?: number;
+  layout?: Record<string, unknown>;
+  paint?: Record<string, unknown>;
+  [k: string]: unknown;
+};
 type StyleJson = {
   sprite?: string;
   glyphs?: string;
   sources?: Record<string, StyleSource>;
+  layers?: StyleLayer[];
   [k: string]: unknown;
 };
 
 const ARABIC_LABEL = ["coalesce", ["get", "name:ar"], ["get", "name:latin"], ["get", "name"]];
 
+/** طبقاتنا فوق القاعدة (قناع التعتيم ثم الحدود وتسمياتها). */
+function overlayLayers(): StyleLayer[] {
+  const C = BOUNDARY_COLORS;
+  const line = (id: string, color: string, width: number, minzoom: number): StyleLayer => ({
+    id: `bnd-${id}-line`,
+    type: "line",
+    source: `bnd-${id}`,
+    minzoom,
+    paint: { "line-color": color, "line-width": width, "line-opacity": 0.9, "line-blur": 0.4 },
+  });
+  const label = (id: string, minzoom: number, size: number): StyleLayer => ({
+    id: `bnd-${id}-label`,
+    type: "symbol",
+    source: `bnd-${id}`,
+    minzoom,
+    layout: {
+      "text-field": ["coalesce", ["get", "name_ar"], ["get", "name_en"]],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": size,
+    },
+    paint: {
+      "text-color": C.label,
+      "text-halo-color": C.labelHalo,
+      "text-halo-width": 1.4,
+    },
+  });
+  return [
+    { id: "dim-mask", type: "fill", source: "dim-mask", paint: { "fill-color": DIM_COLOR } },
+    line("governorate", C.governorate.line, C.governorate.width, 0),
+    label("governorate", 0, 18),
+    line("districts", C.districts.line, C.districts.width, 0),
+    label("districts", 7, 14),
+    line("subdistricts", C.subdistricts.line, C.subdistricts.width, 8),
+    label("subdistricts", 9.5, 12),
+  ];
+}
+
 /**
- * يجلب نمط MapTiler عبر الوسيط بلا تخزين، ويحوّل عناوينه النسبية (/api/maptiler)
- * إلى مطلقة، ثم يعيده ككائن — يضمن صحّة sprite/glyphs/tiles بمعزل عن الكاش.
+ * يبني كائن النمط كاملاً: قاعدة MapTiler (عبر الوسيط، بلا تخزين، عناوين مطلقة)
+ * + تعريب + ضبط كحلي + طبقاتنا (الحدود والقناع) — فتظهر من أوّل إطار وعند كل تبديل.
  */
-async function loadStyle(base: BaseStyle): Promise<StyleSpecification> {
+async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecification> {
   const res = await fetch(styleUrl(base), { cache: "no-store" });
   const style = (await res.json()) as StyleJson;
   const origin = window.location.origin;
@@ -53,7 +100,6 @@ async function loadStyle(base: BaseStyle): Promise<StyleSpecification> {
   style.sprite = abs(style.sprite);
   style.glyphs = abs(style.glyphs);
   for (const src of Object.values(style.sources ?? {})) {
-    // تضمين TileJSON ببلاطات مطلقة (إزالة الاعتماد على حلّ العناوين النسبية)
     if (typeof src.url === "string" && src.url.startsWith("/api/maptiler")) {
       const tj = (await fetch(abs(src.url)!, { cache: "no-store" }).then((r) => r.json())) as {
         tiles?: string[];
@@ -73,102 +119,28 @@ async function loadStyle(base: BaseStyle): Promise<StyleSpecification> {
     }
     if (Array.isArray(src.tiles)) src.tiles = src.tiles.map((t) => abs(t) ?? t);
   }
-  return style as unknown as StyleSpecification;
-}
 
-function trySetPaint(map: GLMap, layerId: string, prop: string, value: string): void {
-  if (!map.getLayer(layerId)) return;
-  try {
-    map.setPaintProperty(layerId, prop, value);
-  } catch {
-    // طبقة غير متوافقة — تجاهل
-  }
-}
-
-/** ضبط القاعدة الداكنة نحو الكحلي المات. */
-function tuneNavy(map: GLMap): void {
-  trySetPaint(map, "background", "background-color", NAVY.background);
-  trySetPaint(map, "water", "fill-color", NAVY.water);
-}
-
-/** تسميات القاعدة بالعربية (name:ar) — §هـ.4. */
-function localizeArabic(map: GLMap): void {
-  const layers = map.getStyle()?.layers ?? [];
-  for (const layer of layers) {
-    if (layer.type !== "symbol") continue;
-    const layout = layer.layout as Record<string, unknown> | undefined;
-    if (!layout || !("text-field" in layout)) continue;
-    try {
-      map.setLayoutProperty(layer.id, "text-field", ARABIC_LABEL);
-    } catch {
-      // تجاهل الطبقات غير القابلة للتعريب
+  // تعريب التسميات (name:ar) + ضبط القاعدة الداكنة نحو الكحلي المات
+  for (const layer of style.layers ?? []) {
+    if (layer.type === "symbol" && layer.layout && "text-field" in layer.layout) {
+      layer.layout["text-field"] = ARABIC_LABEL;
+    }
+    if (base === "dark") {
+      if (layer.id === "background") layer.paint = { ...layer.paint, "background-color": NAVY.background };
+      if (layer.id === "water") layer.paint = { ...layer.paint, "fill-color": NAVY.water };
     }
   }
-}
 
-function addDimMask(map: GLMap, maskFC: MapData["maskFC"]): void {
-  if (map.getSource("dim-mask")) return;
-  map.addSource("dim-mask", { type: "geojson", data: maskFC });
-  map.addLayer({ id: "dim-mask", type: "fill", source: "dim-mask", paint: { "fill-color": DIM_COLOR } });
-}
+  // حقن مصادرنا وطبقاتنا داخل النمط (تظهر من أوّل إطار وفوراً عند التبديل)
+  const sources = style.sources ?? {};
+  sources["dim-mask"] = { type: "geojson", data: data.maskFC } as unknown as StyleSource;
+  sources["bnd-governorate"] = { type: "geojson", data: data.gov } as unknown as StyleSource;
+  sources["bnd-districts"] = { type: "geojson", data: data.districts } as unknown as StyleSource;
+  sources["bnd-subdistricts"] = { type: "geojson", data: data.subdistricts } as unknown as StyleSource;
+  style.sources = sources;
+  style.layers = [...(style.layers ?? []), ...overlayLayers()];
 
-function addBoundary(
-  map: GLMap,
-  id: string,
-  data: FeatureCollection,
-  opts: { line: string; width: number },
-  lineMinZoom: number,
-  labelMinZoom: number,
-  labelSize: number,
-): void {
-  const source = `bnd-${id}`;
-  if (!map.getSource(source)) map.addSource(source, { type: "geojson", data });
-
-  const lineId = `${source}-line`;
-  if (!map.getLayer(lineId)) {
-    map.addLayer({
-      id: lineId,
-      type: "line",
-      source,
-      minzoom: lineMinZoom,
-      paint: {
-        "line-color": opts.line,
-        "line-width": opts.width,
-        "line-opacity": 0.9,
-        "line-blur": 0.4,
-      },
-    });
-  }
-
-  const labelId = `${source}-label`;
-  if (!map.getLayer(labelId)) {
-    map.addLayer({
-      id: labelId,
-      type: "symbol",
-      source,
-      minzoom: labelMinZoom,
-      layout: {
-        "text-field": ["coalesce", ["get", "name_ar"], ["get", "name_en"]],
-        "text-font": ["Noto Sans Regular"],
-        "text-size": labelSize,
-      },
-      paint: {
-        "text-color": BOUNDARY_COLORS.label,
-        "text-halo-color": BOUNDARY_COLORS.labelHalo,
-        "text-halo-width": 1.4,
-      },
-    });
-  }
-}
-
-/** يضيف كل طبقاتنا فوق القاعدة (يُعاد عند كل تغيير نمط). */
-function applyCustomLayers(map: GLMap, data: MapData, base: BaseStyle): void {
-  addDimMask(map, data.maskFC);
-  addBoundary(map, "governorate", data.gov, BOUNDARY_COLORS.governorate, 0, 0, 18);
-  addBoundary(map, "districts", data.districts, BOUNDARY_COLORS.districts, 0, 7, 14);
-  addBoundary(map, "subdistricts", data.subdistricts, BOUNDARY_COLORS.subdistricts, 8, 9.5, 12);
-  if (base === "dark") tuneNavy(map);
-  localizeArabic(map);
+  return style as unknown as StyleSpecification;
 }
 
 export default function InvestmentMap() {
@@ -190,19 +162,22 @@ export default function InvestmentMap() {
         maplibregl.setRTLTextPlugin("/vendor/mapbox-gl-rtl-text.js", true);
       }
 
-      const [gov, districts, subdistricts, style] = (await Promise.all([
+      const [gov, districts, subdistricts] = (await Promise.all([
         fetch("/api/boundaries/governorate").then((r) => r.json()),
         fetch("/api/boundaries/districts").then((r) => r.json()),
         fetch("/api/boundaries/subdistricts").then((r) => r.json()),
-        loadStyle(DEFAULT_BASE),
-      ])) as [FeatureCollection, FeatureCollection, FeatureCollection, StyleSpecification];
-      if (cancelled || !containerRef.current) return;
+      ])) as [FeatureCollection, FeatureCollection, FeatureCollection];
+      if (cancelled) return;
 
       const bounds = bbox(gov) as [number, number, number, number];
       const maskFC = mask(gov as FeatureCollection<Polygon | MultiPolygon>) as Feature<
         Polygon | MultiPolygon
       >;
-      dataRef.current = { gov, districts, subdistricts, maskFC, bounds };
+      const data: MapData = { gov, districts, subdistricts, maskFC, bounds };
+      dataRef.current = data;
+
+      const style = await buildStyle(DEFAULT_BASE, data);
+      if (cancelled || !containerRef.current) return;
 
       map = new maplibregl.Map({
         container: containerRef.current,
@@ -215,25 +190,23 @@ export default function InvestmentMap() {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
-      // إعادة طبقاتنا بثبات عند كل تحميل نمط (الأوّل + بعد كل setStyle)
-      const ensureLayers = () => {
+      // صورة شفّافة بديلة لأي صورة مفقودة (تمنع المربّعات السوداء وتُسكت التحذيرات)
+      map.on("styleimagemissing", (e) => {
         const m = mapRef.current;
-        const d = dataRef.current;
-        if (!m || !d || !m.isStyleLoaded()) return;
-        if (m.getLayer("bnd-governorate-line")) return; // مُطبَّقة بالفعل
-        applyCustomLayers(m, d, baseRef.current);
-      };
-      map.on("styledata", ensureLayers);
+        if (!m || m.hasImage(e.id)) return;
+        m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+      });
 
-      // قفل الحدود على المنظر المستقرّ (يمنع قفزة بعد الدخول)
+      // قفل الحدود على اتحاد (صندوق المحافظة + هامش) ∪ (المنظر الحالي) → بلا قفزة + تنقّل سلس
       const lockView = () => {
         const m = mapRef.current;
         if (!m) return;
-        const [w, s, e, n] = bounds; // صندوق المحافظة + هامش واسع (تنقّل سلس)
+        const [w, s, e, n] = bounds;
         const p = MAX_BOUNDS_PADDING_DEG;
+        const vb = m.getBounds();
         m.setMaxBounds([
-          [w - p, s - p],
-          [e + p, n + p],
+          [Math.min(w - p, vb.getWest()), Math.min(s - p, vb.getSouth())],
+          [Math.max(e + p, vb.getEast()), Math.max(n + p, vb.getNorth())],
         ]);
         m.setMinZoom(m.getZoom()); // الأدنى = المحافظة كاملة
       };
@@ -241,7 +214,6 @@ export default function InvestmentMap() {
       map.on("load", () => {
         const m = mapRef.current;
         if (cancelled || !m) return;
-        ensureLayers();
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
       });
@@ -256,10 +228,11 @@ export default function InvestmentMap() {
 
   async function switchBase(next: BaseStyle): Promise<void> {
     const map = mapRef.current;
-    if (!map || next === baseRef.current) return;
+    const data = dataRef.current;
+    if (!map || !data || next === baseRef.current) return;
     baseRef.current = next;
     setBase(next);
-    map.setStyle(await loadStyle(next)); // معالج styledata يعيد طبقاتنا
+    map.setStyle(await buildStyle(next, data)); // النمط الجديد يحوي طبقاتنا → فوري
   }
 
   function resetView(): void {
