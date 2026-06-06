@@ -13,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:counts": "tsx scripts/check-counts.ts",
-    "import": "tsx scripts/import/index.ts"
+    "migrate:dry": "tsx scripts/migrate.ts --dry-run",
+    "migrate": "tsx scripts/migrate.ts",
+    "import": "tsx scripts/import/index.ts",
+    "verify:db": "tsx scripts/verify-counts.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",

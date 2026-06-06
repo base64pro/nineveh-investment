@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readData } from "../lib/data";
 import { assertCount, EXPECTED, LEGAL_PER_DOC } from "../lib/counts";
 import { upsertAll } from "../lib/upsert";
+import { asNumber } from "../lib/coerce";
 import type { RawLegalDocument, RawLegalFile, RawLegalRecord } from "./raw-types";
 
 const LEGAL_FILES = [
@@ -22,8 +23,8 @@ function docToRow(d: RawLegalDocument): Record<string, unknown> {
     doc_id: d.doc_id,
     doc_title: d.doc_title,
     doc_type: d.doc_type ?? null,
-    doc_number: d.doc_number ?? null,
-    doc_year: d.doc_year ?? null,
+    doc_number: asNumber(d.doc_number, "doc_number"),
+    doc_year: asNumber(d.doc_year, "doc_year"),
     issuing_authority: d.issuing_authority ?? null,
     amended_by: d.amended_by ?? [],
     gazette: d.gazette ?? null,
@@ -43,15 +44,15 @@ function recToRow(r: RawLegalRecord, docId: string): Record<string, unknown> {
     id: r.id,
     record_type: r.record_type,
     doc_id: r.doc_id,
-    chapter_no: r.chapter_no ?? null,
+    chapter_no: asNumber(r.chapter_no, "chapter_no"),
     chapter_title: r.chapter_title ?? null,
-    article_no: r.article_no ?? null,
+    article_no: asNumber(r.article_no, "article_no"),
     article_label_ar: r.article_label_ar ?? null,
     article_text: r.article_text ?? null,
     clauses: r.clauses ?? null,
     amendments: r.amendments ?? null,
     cross_refs: r.cross_refs ?? null,
-    section_no: r.section_no ?? null,
+    section_no: asNumber(r.section_no, "section_no"),
     section_title: r.section_title ?? null,
     fee_items: r.fee_items ?? null,
     applicable_sectors: t?.applicable_sectors ?? null,

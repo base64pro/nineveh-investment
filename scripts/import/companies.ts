@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readData } from "../lib/data";
 import { assertCount, EXPECTED } from "../lib/counts";
 import { upsertAll } from "../lib/upsert";
+import { asBool, asNumber } from "../lib/coerce";
 import { COMPANY_JSON_TO_COLUMN } from "../../src/lib/company-fields";
 import type { CountedFile } from "./raw-types";
 
@@ -20,8 +21,12 @@ function toRow(r: RawCompany): Record<string, unknown> {
   for (const [jsonKey, column] of Object.entries(COMPANY_JSON_TO_COLUMN)) {
     row[column] = r[jsonKey] ?? null;
   }
-  // أعمدة NOT NULL ذات قيم افتراضية (لا تأليف — مجرّد صون القيد)
-  row.is_excluded = r["مستثناة"] ?? false;
+  // أعمدة مُنمَّطة (تطبيع: فراغ → null)
+  row.capital_iqd = asNumber(r["رأس المال بالدينار"], "capital_iqd");
+  row.capital_usd = asNumber(r["رأس المال بالدولار"], "capital_usd");
+  row.meets_250k_threshold = asBool(r["تستوفي عتبة 250 ألف"], "meets_250k_threshold");
+  // أعمدة NOT NULL ذات قيم افتراضية (صون القيد، لا تأليف)
+  row.is_excluded = asBool(r["مستثناة"], "is_excluded") ?? false;
   row.shareholders = r["المساهمون والنسب"] ?? [];
   row.source = r["المصدر"] ?? [];
   row.matched_opportunities = r["الفرص المطابقة"] ?? [];
