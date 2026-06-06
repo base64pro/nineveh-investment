@@ -1,7 +1,6 @@
-// الرئيسية = الخريطة (الواجهة المحورية §هـ.1). محميّة بـmiddleware.
-// الهيدبار الفعلي والأقسام لاحقاً؛ هنا تراكب مؤقّت للعنوان والخروج.
+// الرئيسية = الخريطة (الأرضية §هـ.1) + السايدبار اليمين (§هـ.1). محميّة بـmiddleware.
 import { createClient } from "@/lib/supabase/server";
-import { signOut } from "./actions";
+import { AppSidebar } from "@/features/shell/app-sidebar";
 import InvestmentMap from "@/features/map/components/investment-map";
 
 export default async function Home() {
@@ -12,17 +11,18 @@ export default async function Home() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden">
-      <InvestmentMap />
+      {/* الخريطة تملأ المساحة وتترك شريطاً (56px) يميناً للسايدبار — دون لمس مكوّن م1 */}
+      <div className="absolute inset-y-0 left-0 right-14">
+        <InvestmentMap />
+      </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 p-3">
-        <span className="pointer-events-auto rounded-md border border-border bg-card/80 px-3 py-1.5 text-sm font-medium backdrop-blur">
+      <AppSidebar userEmail={user?.email ?? null} />
+
+      {/* عنوان النظام (تراكب علوي خفيف؛ الهيدبار الفعلي في م5) */}
+      <div className="absolute left-3 top-3 z-10">
+        <span className="rounded-md border border-border bg-card/80 px-3 py-1.5 text-sm font-medium backdrop-blur">
           نظام إدارة الاستثمار في نينوى
         </span>
-        <form action={signOut} className="pointer-events-auto">
-          <button className="rounded-md border border-border bg-card/80 px-3 py-1.5 text-sm backdrop-blur transition hover:bg-accent">
-            خروج{user?.email ? ` · ${user.email}` : ""}
-          </button>
-        </form>
       </div>
     </main>
   );
