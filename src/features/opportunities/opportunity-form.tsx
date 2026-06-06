@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { OPPORTUNITY_FORM_FIELDS } from "./fields";
 import { saveOpportunity } from "./actions";
 import type { Opportunity } from "@/types/entities";
@@ -78,20 +79,12 @@ export function OpportunityForm({
           </div>
         ))}
         <div className="flex justify-start gap-2 pt-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={saving}>
             {saving ? "جارٍ الحفظ…" : "حفظ"}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border px-4 py-2 text-sm transition hover:bg-accent"
-          >
+          </Button>
+          <Button type="button" variant="outline" onClick={onClose}>
             إلغاء
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>
