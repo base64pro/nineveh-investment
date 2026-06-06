@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 import bbox from "@turf/bbox";
 import mask from "@turf/mask";
-import type { Map as GLMap } from "maplibre-gl";
+import type { Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { cn } from "@/lib/utils";
 import {
@@ -29,7 +29,52 @@ type MapData = {
   bounds: [number, number, number, number];
 };
 
+type StyleSource = { url?: string; tiles?: string[]; [k: string]: unknown };
+type StyleJson = {
+  sprite?: string;
+  glyphs?: string;
+  sources?: Record<string, StyleSource>;
+  [k: string]: unknown;
+};
+
 const ARABIC_LABEL = ["coalesce", ["get", "name:ar"], ["get", "name:latin"], ["get", "name"]];
+
+/**
+ * يجلب نمط MapTiler عبر الوسيط بلا تخزين، ويحوّل عناوينه النسبية (/api/maptiler)
+ * إلى مطلقة، ثم يعيده ككائن — يضمن صحّة sprite/glyphs/tiles بمعزل عن الكاش.
+ */
+async function loadStyle(base: BaseStyle): Promise<StyleSpecification> {
+  const res = await fetch(styleUrl(base), { cache: "no-store" });
+  const style = (await res.json()) as StyleJson;
+  const origin = window.location.origin;
+  const abs = (u: string | undefined): string | undefined =>
+    typeof u === "string" && u.startsWith("/api/maptiler") ? origin + u : u;
+
+  style.sprite = abs(style.sprite);
+  style.glyphs = abs(style.glyphs);
+  for (const src of Object.values(style.sources ?? {})) {
+    // تضمين TileJSON ببلاطات مطلقة (إزالة الاعتماد على حلّ العناوين النسبية)
+    if (typeof src.url === "string" && src.url.startsWith("/api/maptiler")) {
+      const tj = (await fetch(abs(src.url)!, { cache: "no-store" }).then((r) => r.json())) as {
+        tiles?: string[];
+        minzoom?: number;
+        maxzoom?: number;
+        bounds?: number[];
+        attribution?: string;
+      };
+      if (Array.isArray(tj.tiles)) src.tiles = tj.tiles.map((t) => abs(t) ?? t);
+      if (typeof tj.minzoom === "number") src.minzoom = tj.minzoom;
+      if (typeof tj.maxzoom === "number") src.maxzoom = tj.maxzoom;
+      if (Array.isArray(tj.bounds)) src.bounds = tj.bounds;
+      if (typeof tj.attribution === "string") src.attribution = tj.attribution;
+      delete src.url;
+    } else if (typeof src.url === "string") {
+      src.url = abs(src.url);
+    }
+    if (Array.isArray(src.tiles)) src.tiles = src.tiles.map((t) => abs(t) ?? t);
+  }
+  return style as unknown as StyleSpecification;
+}
 
 function trySetPaint(map: GLMap, layerId: string, prop: string, value: string): void {
   if (!map.getLayer(layerId)) return;
@@ -145,12 +190,13 @@ export default function InvestmentMap() {
         maplibregl.setRTLTextPlugin("/vendor/mapbox-gl-rtl-text.js", true);
       }
 
-      const [gov, districts, subdistricts] = (await Promise.all([
+      const [gov, districts, subdistricts, style] = (await Promise.all([
         fetch("/api/boundaries/governorate").then((r) => r.json()),
         fetch("/api/boundaries/districts").then((r) => r.json()),
         fetch("/api/boundaries/subdistricts").then((r) => r.json()),
-      ])) as [FeatureCollection, FeatureCollection, FeatureCollection];
-      if (cancelled) return;
+        loadStyle(DEFAULT_BASE),
+      ])) as [FeatureCollection, FeatureCollection, FeatureCollection, StyleSpecification];
+      if (cancelled || !containerRef.current) return;
 
       const bounds = bbox(gov) as [number, number, number, number];
       const maskFC = mask(gov as FeatureCollection<Polygon | MultiPolygon>) as Feature<
@@ -160,7 +206,7 @@ export default function InvestmentMap() {
 
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: styleUrl(DEFAULT_BASE),
+        style,
         center: MAP_CENTER,
         zoom: INITIAL_ZOOM,
         maxZoom: MAX_ZOOM,
@@ -208,12 +254,12 @@ export default function InvestmentMap() {
     };
   }, []);
 
-  function switchBase(next: BaseStyle): void {
+  async function switchBase(next: BaseStyle): Promise<void> {
     const map = mapRef.current;
     if (!map || next === baseRef.current) return;
     baseRef.current = next;
     setBase(next);
-    map.setStyle(styleUrl(next)); // معالج styledata يعيد طبقاتنا
+    map.setStyle(await loadStyle(next)); // معالج styledata يعيد طبقاتنا
   }
 
   function resetView(): void {
@@ -233,7 +279,7 @@ export default function InvestmentMap() {
           <button
             key={b.id}
             type="button"
-            onClick={() => switchBase(b.id)}
+            onClick={() => void switchBase(b.id)}
             className={cn(
               "rounded px-2 py-1 text-xs transition",
               base === b.id ? "bg-primary text-primary-foreground" : "hover:bg-accent",

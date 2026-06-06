@@ -1,12 +1,11 @@
 /**
  * تأكيد صلاحية مفتاح MapTiler وتوفّر الأنماط، وأنّ الوسيط يزيل المفتاح فعلياً
- * من النمط الحقيقي ويُنتج عناوين مطلقة (لا يعرض المفتاح في المخرجات).
+ * من النمط الحقيقي ويحوّله لمسار الوسيط (لا يعرض المفتاح في المخرجات).
  */
 import { requireEnv } from "./lib/env";
 import { rewriteKeyless } from "../src/features/map/lib/proxy-rewrite";
 
 const STYLES = ["streets-v2-dark", "streets-v2", "hybrid"] as const;
-const ORIGIN = "http://localhost:3000";
 
 async function main(): Promise<void> {
   const key = requireEnv("MAPTILER_KEY");
@@ -18,14 +17,14 @@ async function main(): Promise<void> {
       ok = false;
       continue;
     }
-    const rewritten = rewriteKeyless(await res.text(), ORIGIN);
+    const rewritten = rewriteKeyless(await res.text());
     const noLeak = !rewritten.includes(key) && !rewritten.includes("api.maptiler.com");
-    const absolute = rewritten.includes(`${ORIGIN}/api/maptiler`);
-    const good = noLeak && absolute;
+    const proxied = rewritten.includes("/api/maptiler");
+    const good = noLeak && proxied;
     if (!good) ok = false;
-    console.log(`${good ? "✓" : "✗"} ${id}: ${res.status} · بلا تسرّب=${noLeak} · مطلق=${absolute}`);
+    console.log(`${good ? "✓" : "✗"} ${id}: ${res.status} · بلا تسرّب=${noLeak} · موجَّه=${proxied}`);
   }
-  console.log(ok ? "✓ الأنماط صالحة، والوسيط يزيل المفتاح ويُنتج عناوين مطلقة." : "✗ مشكلة في المفتاح/التحويل.");
+  console.log(ok ? "✓ الأنماط صالحة، والوسيط يزيل المفتاح ويوجّه العناوين." : "✗ مشكلة في المفتاح/التحويل.");
   if (!ok) process.exitCode = 1;
 }
 

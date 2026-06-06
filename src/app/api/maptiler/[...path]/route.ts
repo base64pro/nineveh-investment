@@ -18,11 +18,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   if (!upstream.ok) return new NextResponse(`upstream ${upstream.status}`, { status: upstream.status });
 
   const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
-  const headers = new Headers({ "content-type": contentType, "cache-control": "public, max-age=86400" });
+  const isJson = contentType.includes("json");
+  // JSON (style/tilejson/sprite-index) لا يُخزَّن (يتغيّر بالتحويل)؛ الثنائي يُخزَّن طويلاً.
+  const headers = new Headers({
+    "content-type": contentType,
+    "cache-control": isJson ? "no-store" : "public, max-age=86400",
+  });
 
-  if (contentType.includes("json")) {
-    const rewritten = rewriteKeyless(await upstream.text(), req.nextUrl.origin);
-    return new NextResponse(rewritten, { status: 200, headers });
+  if (isJson) {
+    return new NextResponse(rewriteKeyless(await upstream.text()), { status: 200, headers });
   }
   return new NextResponse(await upstream.arrayBuffer(), { status: 200, headers });
 }
