@@ -15,17 +15,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   const upstreamUrl = `${MAPTILER_UPSTREAM}/${path.map(encodeURIComponent).join("/")}?${search.toString()}`;
 
   const upstream = await fetch(upstreamUrl);
-  if (!upstream.ok)
-    return new NextResponse(`upstream ${upstream.status}`, { status: upstream.status });
+  if (!upstream.ok) return new NextResponse(`upstream ${upstream.status}`, { status: upstream.status });
 
   const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
-  const headers = new Headers({
-    "content-type": contentType,
-    "cache-control": "public, max-age=86400",
-  });
+  const headers = new Headers({ "content-type": contentType, "cache-control": "public, max-age=86400" });
 
   if (contentType.includes("json")) {
-    return new NextResponse(rewriteKeyless(await upstream.text()), { status: 200, headers });
+    const rewritten = rewriteKeyless(await upstream.text(), req.nextUrl.origin);
+    return new NextResponse(rewritten, { status: 200, headers });
   }
   return new NextResponse(await upstream.arrayBuffer(), { status: 200, headers });
 }

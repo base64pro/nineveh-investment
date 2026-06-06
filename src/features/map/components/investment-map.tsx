@@ -16,7 +16,6 @@ import {
   MAP_CENTER,
   MAX_BOUNDS_PADDING_DEG,
   MAX_ZOOM,
-  MIN_ZOOM,
   NAVY,
   styleUrl,
   type BaseStyle,
@@ -65,12 +64,7 @@ function localizeArabic(map: GLMap): void {
 function addDimMask(map: GLMap, maskFC: MapData["maskFC"]): void {
   if (map.getSource("dim-mask")) return;
   map.addSource("dim-mask", { type: "geojson", data: maskFC });
-  map.addLayer({
-    id: "dim-mask",
-    type: "fill",
-    source: "dim-mask",
-    paint: { "fill-color": DIM_COLOR },
-  });
+  map.addLayer({ id: "dim-mask", type: "fill", source: "dim-mask", paint: { "fill-color": DIM_COLOR } });
 }
 
 function addBoundary(
@@ -137,7 +131,6 @@ export default function InvestmentMap() {
   const mapRef = useRef<GLMap | null>(null);
   const dataRef = useRef<MapData | null>(null);
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
-  const reapplyRef = useRef<(() => void) | null>(null);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
 
   useEffect(() => {
@@ -176,32 +169,35 @@ export default function InvestmentMap() {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
-      const reapply = () => {
+      // إعادة طبقاتنا بثبات عند كل تحميل نمط (الأوّل + بعد كل setStyle)
+      const ensureLayers = () => {
         const m = mapRef.current;
         const d = dataRef.current;
-        if (!m || !d) return;
-        if (!m.isStyleLoaded()) {
-          m.once("styledata", reapply);
-          return;
-        }
+        if (!m || !d || !m.isStyleLoaded()) return;
+        if (m.getLayer("bnd-governorate-line")) return; // مُطبَّقة بالفعل
         applyCustomLayers(m, d, baseRef.current);
       };
-      reapplyRef.current = reapply;
+      map.on("styledata", ensureLayers);
+
+      // قفل الحدود على المنظر المستقرّ (يمنع قفزة بعد الدخول)
+      const lockView = () => {
+        const m = mapRef.current;
+        if (!m) return;
+        const vb = m.getBounds();
+        const p = MAX_BOUNDS_PADDING_DEG;
+        m.setMaxBounds([
+          [vb.getWest() - p, vb.getSouth() - p],
+          [vb.getEast() + p, vb.getNorth() + p],
+        ]);
+        m.setMinZoom(m.getZoom()); // الأدنى = المحافظة كاملة
+      };
 
       map.on("load", () => {
         const m = mapRef.current;
         if (cancelled || !m) return;
-        reapply();
-        m.fitBounds(bounds, { padding: 48, duration: 2200 });
-        m.once("moveend", () => {
-          const [w, s, e, n] = bounds;
-          const p = MAX_BOUNDS_PADDING_DEG;
-          m.setMaxBounds([
-            [w - p, s - p],
-            [e + p, n + p],
-          ]);
-          m.setMinZoom(MIN_ZOOM);
-        });
+        ensureLayers();
+        m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
+        m.once("moveend", lockView);
       });
     })();
 
@@ -217,8 +213,7 @@ export default function InvestmentMap() {
     if (!map || next === baseRef.current) return;
     baseRef.current = next;
     setBase(next);
-    map.setStyle(styleUrl(next));
-    if (reapplyRef.current) map.once("styledata", reapplyRef.current);
+    map.setStyle(styleUrl(next)); // معالج styledata يعيد طبقاتنا
   }
 
   function resetView(): void {

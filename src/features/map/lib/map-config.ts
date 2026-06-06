@@ -2,9 +2,9 @@
 
 export const MAP_CENTER: [number, number] = [43.13, 36.34]; // من nineveh_maptiler.html
 export const INITIAL_ZOOM = 5; // منظر واسع للدخول المتسارع
-export const MIN_ZOOM = 7; // لا إبعاد أبعد من المحافظة كاملة
 export const MAX_ZOOM = 18; // مستوى القطعة
-export const MAX_BOUNDS_PADDING_DEG = 0.4; // هامش حول صندوق المحافظة (درجات)
+// هامش صغير يُضاف للمنظر المستقرّ عند قفل maxBounds (يمنع قفزة بعد الدخول)
+export const MAX_BOUNDS_PADDING_DEG = 0.05;
 
 export type BaseStyle = "dark" | "light" | "satellite";
 
