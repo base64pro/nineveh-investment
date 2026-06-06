@@ -12,7 +12,8 @@ const readex = Readex_Pro({
 
 export const metadata: Metadata = {
   title: "نظام إدارة الاستثمار في نينوى",
-  description: "نظام قيادة استثمارية لهيئة استثمار نينوى — خريطة تفاعلية وقرار مسند بالبيانات والقانون.",
+  description:
+    "نظام قيادة استثمارية لهيئة استثمار نينوى — خريطة تفاعلية وقرار مسند بالبيانات والقانون.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

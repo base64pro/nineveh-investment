@@ -19,7 +19,8 @@ export function asNumber(v: unknown, field: string): number | null {
   if (c === null) return null;
   if (typeof c === "number") return c;
   const n = Number(c);
-  if (Number.isNaN(n)) throw new Error(`قيمة غير رقمية في ${field}: «${String(c)}» — توقّف (لا تأليف).`);
+  if (Number.isNaN(n))
+    throw new Error(`قيمة غير رقمية في ${field}: «${String(c)}» — توقّف (لا تأليف).`);
   return n;
 }
 

@@ -21,7 +21,9 @@ async function main(): Promise<void> {
     console.log(`${blocked ? "✓" : "✗"} anon ${t}: صفوف=${rows}${error ? " (محجوب بخطأ)" : ""}`);
   }
 
-  console.log(allBlocked ? "✓ anon محجوب عن كل الجداول (RLS سليم)." : "✗ anon وصل لبيانات — خلل RLS.");
+  console.log(
+    allBlocked ? "✓ anon محجوب عن كل الجداول (RLS سليم)." : "✗ anon وصل لبيانات — خلل RLS.",
+  );
   if (!allBlocked) process.exitCode = 1;
 }
 

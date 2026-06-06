@@ -17,11 +17,15 @@ async function main(): Promise<void> {
 
   const user = data.users.find((u) => u.email?.toLowerCase() === EMAIL.toLowerCase());
   if (!user) {
-    console.log(`✗ المستخدم ${EMAIL} غير موجود — أنشئه في لوحة Supabase Auth (Add user + Auto Confirm).`);
+    console.log(
+      `✗ المستخدم ${EMAIL} غير موجود — أنشئه في لوحة Supabase Auth (Add user + Auto Confirm).`,
+    );
     process.exitCode = 1;
     return;
   }
-  console.log(`✓ المستخدم ${EMAIL} موجود · مؤكَّد البريد: ${user.email_confirmed_at ? "نعم" : "لا"}`);
+  console.log(
+    `✓ المستخدم ${EMAIL} موجود · مؤكَّد البريد: ${user.email_confirmed_at ? "نعم" : "لا"}`,
+  );
 }
 
 void main();

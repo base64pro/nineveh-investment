@@ -28,7 +28,9 @@ async function main(): Promise<void> {
   try {
     await client.connect();
   } catch (err) {
-    console.error("✗ فشل الاتصال بـDATABASE_URL — تحقّق من الترميز (محارف خاصّة في كلمة المرور تحتاج URL-encoding) أو الشبكة/المنفذ 5432.");
+    console.error(
+      "✗ فشل الاتصال بـDATABASE_URL — تحقّق من الترميز (محارف خاصّة في كلمة المرور تحتاج URL-encoding) أو الشبكة/المنفذ 5432.",
+    );
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }

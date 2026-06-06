@@ -20,7 +20,10 @@ export interface RawLegalTags {
   jurisdiction?: Jurisdiction | null;
 }
 export type RawLegalRecord = Partial<
-  Omit<LegalRecord, "created_at" | "applicable_sectors" | "investor_type" | "capital_tier" | "jurisdiction">
+  Omit<
+    LegalRecord,
+    "created_at" | "applicable_sectors" | "investor_type" | "capital_tier" | "jurisdiction"
+  >
 > & { tags?: RawLegalTags | null };
 
 export type RawLegalDocument = Partial<Omit<LegalDocument, "created_at">>;

@@ -1,14 +1,8 @@
-// الرئيسية (محميّة بـmiddleware). الواجهة الفعلية (الخريطة والأقسام) تُبنى لاحقاً.
+// الرئيسية = الخريطة (الواجهة المحورية §هـ.1). محميّة بـmiddleware.
+// الهيدبار الفعلي والأقسام لاحقاً؛ هنا تراكب مؤقّت للعنوان والخروج.
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
-
-const STATES = [
-  { label: "معلَنة", className: "bg-state-announced" },
-  { label: "قيد الإنجاز", className: "bg-state-inprogress" },
-  { label: "منجزة", className: "bg-state-completed" },
-  { label: "مسحوبة", className: "bg-state-withdrawn" },
-  { label: "مفترضة", className: "bg-state-assumed" },
-] as const;
+import InvestmentMap from "@/features/map/components/investment-map";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -17,28 +11,19 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8 text-center">
-      <h1 className="text-3xl font-bold tracking-tight">نظام إدارة الاستثمار في نينوى</h1>
-      <p className="text-muted-foreground">الأساس (م0) — جاهز.</p>
-      {user ? <p className="text-sm">مُسجَّل الدخول: {user.email}</p> : null}
+    <main className="relative h-screen w-screen overflow-hidden">
+      <InvestmentMap />
 
-      <ul className="flex flex-wrap items-center justify-center gap-4">
-        {STATES.map((s) => (
-          <li key={s.label} className="flex items-center gap-2 text-sm">
-            <span className={`size-4 rounded-full ${s.className}`} aria-hidden />
-            <span>{s.label}</span>
-          </li>
-        ))}
-      </ul>
-
-      <form action={signOut}>
-        <button
-          type="submit"
-          className="rounded-md border border-border px-4 py-2 text-sm transition hover:bg-accent"
-        >
-          تسجيل الخروج
-        </button>
-      </form>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 p-3">
+        <span className="pointer-events-auto rounded-md border border-border bg-card/80 px-3 py-1.5 text-sm font-medium backdrop-blur">
+          نظام إدارة الاستثمار في نينوى
+        </span>
+        <form action={signOut} className="pointer-events-auto">
+          <button className="rounded-md border border-border bg-card/80 px-3 py-1.5 text-sm backdrop-blur transition hover:bg-accent">
+            خروج{user?.email ? ` · ${user.email}` : ""}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

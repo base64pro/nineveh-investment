@@ -22,6 +22,8 @@ export const LEGAL_PER_DOC: Readonly<Record<string, number>> = {
 /** يؤكّد تطابق العدّ، ويرمي خطأً يوقف الاستيراد عند أي تباين. */
 export function assertCount(label: string, actual: number, expected: number): void {
   if (actual !== expected) {
-    throw new Error(`تباين في العدّ [${label}]: المتوقّع ${expected} والفعلي ${actual} — توقّف (§ح.4 لا تأليف).`);
+    throw new Error(
+      `تباين في العدّ [${label}]: المتوقّع ${expected} والفعلي ${actual} — توقّف (§ح.4 لا تأليف).`,
+    );
   }
 }

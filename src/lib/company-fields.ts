@@ -34,7 +34,11 @@ export const COMPANY_FIELDS: readonly CompanyFieldDef[] = [
   { jsonKey: "المصدر", column: "source", label: "المصدر" },
   { jsonKey: "الفرص المطابقة", column: "matched_opportunities", label: "الفرص المطابقة" },
   { jsonKey: "ملاحظات", column: "notes", label: "ملاحظات" },
-  { jsonKey: "تاريخ الإضافة وآخر تعديل", column: "updated_at_label", label: "تاريخ الإضافة والتعديل" },
+  {
+    jsonKey: "تاريخ الإضافة وآخر تعديل",
+    column: "updated_at_label",
+    label: "تاريخ الإضافة والتعديل",
+  },
   { jsonKey: null, column: "projects", label: "سجلّ المشاريع/الخبرة" },
 ] as const;
 
