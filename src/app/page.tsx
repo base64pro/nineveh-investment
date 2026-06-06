@@ -12,7 +12,7 @@ export default async function Home() {
   return (
     <main className="relative h-screen w-screen overflow-hidden">
       {/* الخريطة تملأ المساحة وتترك شريطاً (56px) يميناً للسايدبار — دون لمس مكوّن م1 */}
-      <div className="absolute inset-y-0 left-0 right-14">
+      <div className="absolute inset-y-0 left-0 right-20">
         <InvestmentMap />
       </div>
 
