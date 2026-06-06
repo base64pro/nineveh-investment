@@ -6,3 +6,9 @@ coverage
 data
 *.geojson
 package-lock.json
+
+# المصدر الأوحد للحقيقة — لا يُنسَّق آلياً
+CLAUDE.md
+README.md
+docs
+public/vendor
