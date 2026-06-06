@@ -17,7 +17,8 @@
     "migrate": "tsx scripts/migrate.ts",
     "import": "tsx scripts/import/index.ts",
     "verify:db": "tsx scripts/verify-counts.ts",
-    "verify:rls": "tsx scripts/verify-rls.ts"
+    "verify:rls": "tsx scripts/verify-rls.ts",
+    "verify:user": "tsx scripts/verify-user.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
