@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* السمة الفاتحة (متاحة — §هـ.3) */
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 222 47% 20%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 92%;
+    --secondary-foreground: 222 47% 20%;
+    --muted: 210 40% 94%;
+    --muted-foreground: 215 20% 40%;
+    --accent: 210 40% 90%;
+    --accent-foreground: 222 47% 20%;
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 85%;
+    --input: 214 32% 85%;
+    --ring: 222 47% 30%;
+    --radius: 0.625rem;
+  }
+
+  /* السمة الأساسية: داكن = كحلي مات (التوقيع البصري — §هـ.3) */
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 96%;
+    --card: 222 44% 14%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 44% 14%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 14%;
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 18%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 22%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 50% 45%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 217 33% 24%;
+    --input: 217 33% 24%;
+    --ring: 213 40% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  /* الأرقام لاتينية دائماً (§ح.3) */
+  html {
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+}
