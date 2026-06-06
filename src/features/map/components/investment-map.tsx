@@ -229,11 +229,11 @@ export default function InvestmentMap() {
       const lockView = () => {
         const m = mapRef.current;
         if (!m) return;
-        const vb = m.getBounds();
+        const [w, s, e, n] = bounds; // صندوق المحافظة + هامش واسع (تنقّل سلس)
         const p = MAX_BOUNDS_PADDING_DEG;
         m.setMaxBounds([
-          [vb.getWest() - p, vb.getSouth() - p],
-          [vb.getEast() + p, vb.getNorth() + p],
+          [w - p, s - p],
+          [e + p, n + p],
         ]);
         m.setMinZoom(m.getZoom()); // الأدنى = المحافظة كاملة
       };

@@ -1,5 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { rewriteKeyless } from "./proxy-rewrite";
+import { buildUpstreamUrl, rewriteKeyless } from "./proxy-rewrite";
+
+describe("buildUpstreamUrl — ترميز مسار الوسيط", () => {
+  it("يحفظ @ في sprite@2x ولا يرمّزها", () => {
+    const u = buildUpstreamUrl(
+      ["maps", "streets-v2-dark", "sprite@2x.json"],
+      new URLSearchParams(),
+      "K",
+    );
+    expect(u).toContain("/maps/streets-v2-dark/sprite@2x.json");
+    expect(u).not.toContain("%40");
+    expect(u).toContain("key=K");
+  });
+
+  it("يرمّز المسافات في fontstack", () => {
+    const u = buildUpstreamUrl(["fonts", "Noto Sans Regular", "0-255.pbf"], new URLSearchParams(), "K");
+    expect(u).toContain("/fonts/Noto%20Sans%20Regular/0-255.pbf");
+  });
+});
 
 describe("وسيط MapTiler — منع تسرّب المفتاح (القاعدة 6)", () => {
   it("يحوّل النطاق إلى مسار الوسيط ويحذف المفتاح", () => {
