@@ -6,6 +6,7 @@ import bbox from "@turf/bbox";
 import mask from "@turf/mask";
 import type { Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import { Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -263,12 +264,14 @@ export default function InvestmentMap() {
         ))}
       </div>
 
-      {/* العودة لكامل نينوى (§هـ.4) */}
+      {/* العودة لكامل نينوى (§هـ.4) — يسار الخريطة، تحت مبدّل القاعدة */}
       <button
         type="button"
         onClick={resetView}
-        className="absolute start-3 top-16 z-10 rounded-md border border-border bg-card/85 px-2 py-1 text-xs backdrop-blur transition hover:bg-accent"
+        title="إعادة العرض إلى كامل نينوى"
+        className="absolute end-3 top-28 z-10 inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/85 px-2.5 py-1.5 text-xs font-medium text-foreground/90 shadow-[0_0_18px_-6px_rgba(148,175,209,0.55)] ring-1 ring-inset ring-foreground/5 backdrop-blur transition hover:bg-accent hover:text-foreground"
       >
+        <Maximize2 className="size-3.5 text-primary/70" aria-hidden />
         كامل نينوى
       </button>
     </div>

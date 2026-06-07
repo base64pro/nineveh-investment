@@ -25,7 +25,6 @@ import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StateBadge } from "@/features/parcels/state-badge";
 import { OpportunityForm } from "./opportunity-form";
 import { OpportunityDetail } from "./opportunity-detail";
 import { deleteOpportunity } from "./actions";
@@ -250,14 +249,13 @@ export function OpportunitiesPanel() {
                     type="button"
                     onClick={() => toggleExpand(o.record_id)}
                     aria-expanded={isOpen}
-                    className="flex min-w-0 flex-1 flex-col gap-1 py-2.5 text-start"
+                    className="flex min-w-0 flex-1 flex-col gap-1.5 py-2.5 text-start"
                   >
-                    {/* مسار العنوان: العنوان + شارة الحالة (يسار الأعلى، ثابتة) + سهم الطي */}
+                    {/* مسار العنوان: العنوان + سهم الطي */}
                     <div className="flex w-full items-start gap-2">
                       <h4 className={cn("min-w-0 flex-1 text-[15px] font-semibold leading-snug", isOpen ? "line-clamp-2" : "truncate")}>
                         {orNA(o.title)}
                       </h4>
-                      <StateBadge state="announced" glow={false} />
                       <ChevronDown
                         className={cn(
                           "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -266,11 +264,11 @@ export function OpportunitiesPanel() {
                         aria-hidden
                       />
                     </div>
-                    {o.sector ? (
-                      <div className="flex">
-                        <Chip icon={Tag} value={sectorLabel(o.sector)} />
-                      </div>
-                    ) : null}
+                    {/* أسفل البطاقة: القطاع (يمين) + كلمة الحالة بيضاء (يسار) */}
+                    <div className="flex w-full items-center gap-2">
+                      {o.sector ? <Chip icon={Tag} value={sectorLabel(o.sector)} /> : null}
+                      <span className="ms-auto text-xs font-medium text-foreground">معلَنة</span>
+                    </div>
                   </button>
                 </div>
 
