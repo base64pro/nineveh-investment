@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { LogOut, X } from "lucide-react";
 import { signOut } from "@/app/actions";
 import { useRealtimeSync } from "@/lib/data/realtime";
@@ -20,8 +21,16 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   return (
     <>
       {/* اللوحة — overlay إلى يسار الشريط (تُبنى أقسامها في م2.2) */}
-      {activeSection ? (
-        <aside className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[92vw] flex-col border-s border-border bg-card/95 shadow-xl backdrop-blur">
+      <AnimatePresence>
+        {activeSection ? (
+          <motion.aside
+            key={activeSection.id}
+            initial={{ x: "100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "100%", opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[92vw] flex-col border-s border-border bg-card/95 shadow-xl backdrop-blur"
+          >
           <header className="flex items-center justify-between border-b border-border p-3">
             <h2 className="text-sm font-bold">{activeSection.label}</h2>
             <button
@@ -48,8 +57,9 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               </div>
             )}
           </div>
-        </aside>
-      ) : null}
+          </motion.aside>
+        ) : null}
+      </AnimatePresence>
 
       {/* الشريط — يمين الشاشة (§هـ.1) */}
       <nav className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col items-center gap-1.5 border-s border-border bg-card/90 py-3 backdrop-blur">

@@ -7,11 +7,13 @@ export interface FieldDef {
   type: FieldType;
 }
 
-// حقول التحرير (المفاتيح الأساسية؛ نافذة القطعة بكل الحقول في م3). بلا معرّف داخلي/تحقّق (§ح).
+// حقول التحرير — كل الحقول القابلة للتحرير (§هـ.5 «أيّ حقل»). بلا معرّف داخلي/تحقّق (§ح).
 export const OPPORTUNITY_FORM_FIELDS: readonly FieldDef[] = [
   { key: "title", label: "العنوان", type: "text" },
   { key: "project_type", label: "نوع المشروع", type: "text" },
   { key: "sector", label: "القطاع", type: "text" },
+  { key: "description", label: "الوصف", type: "textarea" },
+  { key: "raw_details", label: "التفاصيل", type: "textarea" },
   { key: "parcel_no", label: "رقم القطعة", type: "text" },
   { key: "muqataa_no", label: "رقم المقاطعة", type: "text" },
   { key: "muqataa_name", label: "اسم المقاطعة", type: "text" },
@@ -19,6 +21,7 @@ export const OPPORTUNITY_FORM_FIELDS: readonly FieldDef[] = [
   { key: "area_olk", label: "المساحة (أولك)", type: "number" },
   { key: "area_m2", label: "المساحة (م²)", type: "number" },
   { key: "area_total_m2", label: "المساحة الكلية (م²)", type: "number" },
+  { key: "area_factor_note", label: "ملاحظة المساحة", type: "text" },
   { key: "owner", label: "العائدية/المالك", type: "text" },
   { key: "zoning", label: "التخطيط", type: "text" },
   { key: "announcement_number", label: "رقم الإعلان", type: "text" },
@@ -28,7 +31,18 @@ export const OPPORTUNITY_FORM_FIELDS: readonly FieldDef[] = [
   { key: "opp_status", label: "حالة الإعلان", type: "text" },
   { key: "doc_fee", label: "أجور الوثائق", type: "number" },
   { key: "conditions", label: "الشروط", type: "textarea" },
+  { key: "source_url", label: "المصدر (رابط)", type: "text" },
   { key: "notes", label: "ملاحظات", type: "textarea" },
+];
+
+// حقول لها قيم معلومة ← قائمة منسدلة (datalist: اقتراحات + إدخال حرّ، بلا تأليف).
+export const OPPORTUNITY_OPTION_FIELDS: readonly string[] = [
+  "sector",
+  "project_type",
+  "district",
+  "muqataa_name",
+  "announcement_type",
+  "opp_status",
 ];
 
 // حقول العرض التفصيلي (بلا معرّف داخلي/تحقّق/إحالات داخلية — §ح).
