@@ -8,6 +8,7 @@ import { formatArea, formatDate, NOT_AVAILABLE, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { formatNumber } from "@/lib/format";
 import { licenseStatusLabel } from "./fields";
+import { VisitsLog } from "./visits/visits-log";
 import type { License } from "@/types/entities";
 
 const NUMERIC = new Set(["area_olk", "area_m2", "area_total_m2", "capital", "lease_rate", "term_years"]);
@@ -176,6 +177,11 @@ export function LicenseDetail({
             </a>
           ) : null}
         </div>
+
+        {/* سجلّ الزيارات (§ج.8/7) — للرخص قيد الإنجاز/المنجزة */}
+        {o.status === "in-progress" || o.status === "completed" ? (
+          <VisitsLog parcelRef={String(o.record_id)} />
+        ) : null}
       </div>
     </Dialog>
   );
