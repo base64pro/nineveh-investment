@@ -15,6 +15,7 @@ const TABLES = [
   "map_elements",
   "assumed_parcels",
   "parcel_geometry",
+  "field_options",
 ] as const;
 
 export function useRealtimeSync(): void {

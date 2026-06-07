@@ -5,9 +5,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { OptionField } from "@/components/ui/option-field";
+import { useFieldOptions } from "@/lib/data/use-field-options";
 import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "./fields";
 import { saveOpportunity } from "./actions";
 import type { Opportunity } from "@/types/entities";
+
+const OPTION_SET = new Set(OPPORTUNITY_OPTION_FIELDS);
+const LARGE_TEXTAREAS = new Set(["description", "raw_details"]);
 
 function initialValue(o: Opportunity | null | undefined, key: string): string {
   if (!o) return "";
@@ -29,7 +34,11 @@ export function OpportunityForm({
   optionSets?: Record<string, string[]>;
 }) {
   const queryClient = useQueryClient();
+  const { data: custom } = useFieldOptions();
   const [saving, setSaving] = useState(false);
+
+  const merged = (key: string): string[] =>
+    Array.from(new Set([...(optionSets?.[key] ?? []), ...(custom?.[key] ?? [])])).sort();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -52,50 +61,69 @@ export function OpportunityForm({
     }
   }
 
+  const compactFields = OPPORTUNITY_FORM_FIELDS.filter((f) => f.type !== "textarea");
+  const textareaFields = OPPORTUNITY_FORM_FIELDS.filter((f) => f.type === "textarea");
+
   return (
     <Dialog open={open} onClose={onClose} title={initial ? "تعديل فرصة" : "إضافة فرصة"} size="lg">
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {OPPORTUNITY_FORM_FIELDS.map((f) => {
-            const options = OPPORTUNITY_OPTION_FIELDS.includes(f.key) ? (optionSets?.[f.key] ?? []) : null;
-            const isWide = f.type === "textarea";
+          {compactFields.map((f) => {
+            if (OPTION_SET.has(f.key)) {
+              return (
+                <OptionField
+                  key={f.key}
+                  id={`opp-${f.key}`}
+                  name={f.key}
+                  label={f.label}
+                  defaultValue={initialValue(initial, f.key)}
+                  fieldKey={f.key}
+                  options={merged(f.key)}
+                />
+              );
+            }
             return (
-              <div key={f.key} className={isWide ? "space-y-1 sm:col-span-2" : "space-y-1"}>
+              <div key={f.key} className="space-y-1">
                 <label htmlFor={`opp-${f.key}`} className="block text-xs text-muted-foreground">
                   {f.label}
                 </label>
-                {f.type === "textarea" ? (
-                  <textarea
-                    id={`opp-${f.key}`}
-                    name={f.key}
-                    rows={2}
-                    defaultValue={initialValue(initial, f.key)}
-                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  />
-                ) : (
-                  <>
-                    <input
-                      id={`opp-${f.key}`}
-                      name={f.key}
-                      type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
-                      step={f.type === "number" ? "any" : undefined}
-                      list={options ? `dl-${f.key}` : undefined}
-                      defaultValue={initialValue(initial, f.key)}
-                      className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    {options ? (
-                      <datalist id={`dl-${f.key}`}>
-                        {options.map((opt) => (
-                          <option key={opt} value={opt} />
-                        ))}
-                      </datalist>
-                    ) : null}
-                  </>
-                )}
+                <input
+                  id={`opp-${f.key}`}
+                  name={f.key}
+                  type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                  step={f.type === "number" ? "any" : undefined}
+                  defaultValue={initialValue(initial, f.key)}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
               </div>
             );
           })}
         </div>
+
+        {/* حقول النصّ المطوّل مستقلّة وأكبر (الوصف/التفاصيل أبرز) */}
+        <div className="space-y-3">
+          {textareaFields.map((f) => {
+            const large = LARGE_TEXTAREAS.has(f.key);
+            return (
+              <div key={f.key} className="space-y-1">
+                <label htmlFor={`opp-${f.key}`} className="block text-xs font-medium text-muted-foreground">
+                  {f.label}
+                </label>
+                <textarea
+                  id={`opp-${f.key}`}
+                  name={f.key}
+                  rows={large ? 6 : 3}
+                  defaultValue={initialValue(initial, f.key)}
+                  className={
+                    "w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring " +
+                    (large ? "min-h-36" : "min-h-20")
+                  }
+                />
+              </div>
+            );
+          })}
+        </div>
+
         <div className="flex justify-start gap-2 pt-1">
           <Button type="submit" disabled={saving}>
             {saving ? "جارٍ الحفظ…" : "حفظ"}
