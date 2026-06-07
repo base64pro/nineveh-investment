@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Download, Eye, MapPin, Pencil, Plus, Ruler, Trash2, User } from "lucide-react";
+import { Building2, Download, Eye, Home, MapPin, Pencil, Plus, Ruler, Trash2, User } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
 import { exportCsv } from "@/lib/export-csv";
 import { formatArea, orNA } from "@/lib/display";
@@ -36,6 +36,7 @@ export function OpportunitiesPanel() {
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
   const [district, setDistrict] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
   const [muqataa, setMuqataa] = useState("");
   const [oppStatus, setOppStatus] = useState("");
   const [availableOnly, setAvailableOnly] = useState(false);
@@ -49,6 +50,7 @@ export function OpportunitiesPanel() {
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
   const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
   const muqataas = useMemo(() => distinct(all.map((o) => o.muqataa_no)), [all]);
+  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
   const statuses = useMemo(() => distinct(all.map((o) => o.opp_status)), [all]);
   const availableCount = useMemo(() => all.filter(isAvailable).length, [all]);
 
@@ -57,11 +59,12 @@ export function OpportunitiesPanel() {
       sector: sectors,
       project_type: distinct(all.map((o) => o.project_type)),
       district: districts,
+      neighborhood: neighborhoods,
       muqataa_name: distinct(all.map((o) => o.muqataa_name)),
       announcement_type: distinct(all.map((o) => o.announcement_type)),
       opp_status: statuses,
     }),
-    [all, sectors, districts, statuses],
+    [all, sectors, districts, neighborhoods, statuses],
   );
 
   const filtered = useMemo(() => {
@@ -69,16 +72,17 @@ export function OpportunitiesPanel() {
     return all.filter((o) => {
       if (sector && o.sector !== sector) return false;
       if (district && o.district !== district) return false;
+      if (neighborhood && o.neighborhood !== neighborhood) return false;
       if (muqataa && o.muqataa_no !== muqataa) return false;
       if (oppStatus && o.opp_status !== oppStatus) return false;
       if (availableOnly && !isAvailable(o)) return false;
       if (needle) {
-        const hay = `${o.title ?? ""} ${o.parcel_no ?? ""} ${o.owner ?? ""} ${o.muqataa_name ?? ""}`.toLowerCase();
+        const hay = `${o.title ?? ""} ${o.parcel_no ?? ""} ${o.owner ?? ""} ${o.muqataa_name ?? ""} ${o.neighborhood ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [all, q, sector, district, muqataa, oppStatus, availableOnly]);
+  }, [all, q, sector, district, neighborhood, muqataa, oppStatus, availableOnly]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((o) => selected.has(o.record_id));
 
@@ -127,6 +131,10 @@ export function OpportunitiesPanel() {
           <select value={district} onChange={(e) => setDistrict(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
             <option value="">كل الأقضية</option>
             {districts.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
+            <option value="">كل الأحياء</option>
+            {neighborhoods.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
           <select value={muqataa} onChange={(e) => setMuqataa(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
             <option value="">كل المقاطعات</option>
@@ -206,6 +214,7 @@ export function OpportunitiesPanel() {
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
                     <InfoRow icon={MapPin} label="القطعة" value={orNA(o.parcel_no)} />
                     <InfoRow icon={Building2} label="المقاطعة" value={orNA(o.muqataa_no)} />
+                    {o.neighborhood ? <InfoRow icon={Home} label="الحي" value={o.neighborhood} /> : null}
                     <InfoRow icon={Ruler} label="المساحة" value={formatArea(o.area_total_m2)} />
                     <InfoRow icon={User} label="العائدية" value={orNA(o.owner)} />
                   </div>

@@ -81,6 +81,7 @@ export interface Opportunity {
   muqataa_no: string | null;
   muqataa_name: string | null;
   district: string | null;
+  neighborhood: string | null;
   area_olk: number | null;
   area_m2: number | null;
   area_total_m2: number | null;
