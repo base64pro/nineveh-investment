@@ -3,7 +3,20 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Download, Eye, Home, MapPin, Pencil, Plus, Ruler, Trash2, User } from "lucide-react";
+import {
+  Building2,
+  Download,
+  Eye,
+  Home,
+  MapPin,
+  Pencil,
+  Plus,
+  Ruler,
+  Tag,
+  Trash2,
+  User,
+  type LucideIcon,
+} from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
 import { exportCsv } from "@/lib/export-csv";
 import { formatArea, orNA } from "@/lib/display";
@@ -20,12 +33,25 @@ const isAvailable = (o: Opportunity): boolean => !(Array.isArray(o.license_ref) 
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
 
-function InfoRow({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {
+function Cell({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground" title={`${label}: ${value}`}>
-      <Icon className="size-3.5 shrink-0 opacity-70" />
-      <span className="truncate">{value}</span>
+    <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/40 px-2 py-1.5">
+      <Icon className="size-3.5 shrink-0 text-primary/60" />
+      <div className="min-w-0">
+        <div className="text-[10px] leading-none text-muted-foreground">{label}</div>
+        <div className="mt-0.5 truncate text-xs font-semibold" title={value}>
+          {value}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-2 py-0.5 text-[11px] text-secondary-foreground">
+      <Icon className="size-3 opacity-70" /> {value}
+    </span>
   );
 }
 
@@ -188,51 +214,61 @@ export function OpportunitiesPanel() {
           {filtered.map((o) => (
             <li
               key={o.record_id}
-              className="group rounded-xl border border-border/60 bg-gradient-to-b from-card/70 to-card/30 p-3.5 shadow-sm transition hover:border-primary/30 hover:shadow-[0_0_24px_-8px] hover:shadow-primary/25"
+              className="group relative overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-state-announced/40 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
             >
-              <div className="flex items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={selected.has(o.record_id)}
-                  onChange={() => toggleOne(o.record_id)}
-                  className="mt-1 size-3.5"
-                  aria-label="تحديد"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-semibold leading-snug">{orNA(o.title)}</h4>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {isAvailable(o) ? (
-                        <span className="rounded-full bg-state-completed/15 px-2 py-0.5 text-[10px] font-medium text-state-completed ring-1 ring-state-completed/40 shadow-[0_0_10px_-2px] shadow-state-completed/50">
-                          متاحة
-                        </span>
-                      ) : null}
-                      <StateBadge state="announced" />
+              {/* شريط الحالة الجانبي (معلَنة) */}
+              <span
+                className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-state-announced to-state-announced/20"
+                aria-hidden
+              />
+              <div className="p-3.5 ps-4">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(o.record_id)}
+                    onChange={() => toggleOne(o.record_id)}
+                    className="mt-1 size-4 shrink-0 cursor-pointer accent-state-announced"
+                    aria-label="تحديد"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="line-clamp-2 text-[15px] font-semibold leading-snug">{orNA(o.title)}</h4>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {isAvailable(o) ? (
+                          <span className="rounded-full bg-state-completed/15 px-2 py-0.5 text-[10px] font-medium text-state-completed ring-1 ring-state-completed/40 shadow-[0_0_10px_-2px] shadow-state-completed/50">
+                            متاحة
+                          </span>
+                        ) : null}
+                        <StateBadge state="announced" />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-                    <InfoRow icon={MapPin} label="القطعة" value={orNA(o.parcel_no)} />
-                    <InfoRow icon={Building2} label="المقاطعة" value={orNA(o.muqataa_no)} />
-                    {o.neighborhood ? <InfoRow icon={Home} label="الحي" value={o.neighborhood} /> : null}
-                    <InfoRow icon={Ruler} label="المساحة" value={formatArea(o.area_total_m2)} />
-                    <InfoRow icon={User} label="العائدية" value={orNA(o.owner)} />
+                    {o.sector || o.neighborhood ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {o.sector ? <Chip icon={Tag} value={o.sector} /> : null}
+                        {o.neighborhood ? <Chip icon={Home} value={o.neighborhood} /> : null}
+                      </div>
+                    ) : null}
                   </div>
-                  {o.sector ? (
-                    <p className="mt-1.5 text-[11px] text-muted-foreground">القطاع: {orNA(o.sector)}</p>
-                  ) : null}
+                </div>
 
-                  <div className="mt-2.5 flex gap-1.5">
-                    <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
-                      <Eye className="size-3" /> عرض
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
-                      <Pencil className="size-3" /> تعديل
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف">
-                      <Trash2 className="size-3" /> حذف
-                    </Button>
-                  </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Cell icon={MapPin} label="القطعة" value={orNA(o.parcel_no)} />
+                  <Cell icon={Building2} label="المقاطعة" value={orNA(o.muqataa_no)} />
+                  <Cell icon={Ruler} label="المساحة الكلية" value={formatArea(o.area_total_m2)} />
+                  <Cell icon={User} label="العائدية" value={orNA(o.owner)} />
+                </div>
+
+                <div className="mt-3 flex items-center gap-1.5 border-t border-border/50 pt-2.5">
+                  <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
+                    <Eye className="size-3.5" /> عرض
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
+                    <Pencil className="size-3.5" /> تعديل
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
+                    <Trash2 className="size-3.5" /> حذف
+                  </Button>
                 </div>
               </div>
             </li>
