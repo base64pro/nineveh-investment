@@ -35,7 +35,7 @@ const distinct = (values: (string | null)[]): string[] =>
 
 function Cell({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/40 px-2 py-1.5">
+    <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-background/40 px-2 py-1.5">
       <Icon className="size-3.5 shrink-0 text-primary/60" />
       <div className="min-w-0">
         <div className="text-[10px] leading-none text-muted-foreground">{label}</div>
@@ -214,7 +214,7 @@ export function OpportunitiesPanel() {
           {filtered.map((o) => (
             <li
               key={o.record_id}
-              className="group relative overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-state-announced/40 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
+              className="group relative overflow-hidden rounded-xl border border-border/80 ring-1 ring-inset ring-foreground/5 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-state-announced/50 hover:ring-state-announced/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
             >
               {/* شريط الحالة الجانبي (معلَنة) */}
               <span
@@ -259,7 +259,7 @@ export function OpportunitiesPanel() {
                   <Cell icon={User} label="العائدية" value={orNA(o.owner)} />
                 </div>
 
-                <div className="mt-3 flex items-center gap-1.5 border-t border-border/50 pt-2.5">
+                <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5">
                   <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
                     <Eye className="size-3.5" /> عرض
                   </Button>
