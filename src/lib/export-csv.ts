@@ -3,6 +3,7 @@ import { toLatinDigits } from "./format";
 export interface CsvColumn {
   key: string;
   label: string;
+  format?: (value: unknown) => unknown;
 }
 
 function cell(value: unknown): string {
@@ -14,7 +15,9 @@ function cell(value: unknown): string {
 /** تصدير CSV (BOM لدعم العربية في Excel). PDF البراندد في م6. */
 export function exportCsv(filename: string, rows: Record<string, unknown>[], columns: CsvColumn[]): void {
   const header = columns.map((c) => cell(c.label)).join(",");
-  const body = rows.map((r) => columns.map((c) => cell(r[c.key])).join(",")).join("\n");
+  const body = rows
+    .map((r) => columns.map((c) => cell(c.format ? c.format(r[c.key]) : r[c.key])).join(","))
+    .join("\n");
   const csv = `﻿${header}\n${body}`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);

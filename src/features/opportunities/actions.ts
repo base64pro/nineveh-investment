@@ -2,6 +2,7 @@
 
 // طفرات الفرص عبر Server Action (§ج.4) ← Postgres ← Realtime ← انعكاس فوري.
 import { createClient } from "@/lib/supabase/server";
+import { sectorCode } from "@/lib/sectors";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -11,9 +12,11 @@ export async function saveOpportunity(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const record_id = id ?? Date.now();
+  // توحيد القطاع: التسمية العربية ← رمز ثابت للتخزين (لا تنقسم القيم).
+  const normalized = "sector" in values ? { ...values, sector: sectorCode(values.sector as string | null) } : values;
   const { error } = await supabase
     .from("opportunities")
-    .upsert({ ...values, record_id, kind: "opportunity" }, { onConflict: "record_id" });
+    .upsert({ ...normalized, record_id, kind: "opportunity" }, { onConflict: "record_id" });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

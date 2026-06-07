@@ -5,6 +5,7 @@ import { Building2, Calendar, FileText, Landmark, MapPin, Ruler, Tag } from "luc
 import { Dialog } from "@/components/ui/dialog";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { formatArea, formatDate, NOT_AVAILABLE, orNA } from "@/lib/display";
+import { sectorLabel } from "@/lib/sectors";
 import { formatNumber } from "@/lib/format";
 import type { Opportunity } from "@/types/entities";
 
@@ -13,6 +14,7 @@ const DATE = new Set(["publish_date", "deadline"]);
 
 function val(o: Opportunity, key: string): string {
   const v = (o as unknown as Record<string, unknown>)[key];
+  if (key === "sector") return sectorLabel(typeof v === "string" ? v : null);
   if (DATE.has(key)) return formatDate(typeof v === "string" ? v : null);
   if (NUMERIC.has(key)) return v === null || v === undefined ? NOT_AVAILABLE : formatNumber(Number(v));
   return orNA(v);
@@ -113,7 +115,7 @@ export function OpportunityDetail({
             <Fact icon={MapPin} label="القطعة" value={orNA(o.parcel_no)} />
             <Fact icon={Building2} label="المقاطعة" value={orNA(o.muqataa_no)} />
             <Fact icon={Ruler} label="المساحة الكلية" value={formatArea(o.area_total_m2)} />
-            <Fact icon={Landmark} label="القطاع" value={orNA(o.sector)} />
+            <Fact icon={Landmark} label="القطاع" value={sectorLabel(o.sector)} />
           </div>
         </div>
 

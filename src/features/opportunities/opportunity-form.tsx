@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { OptionField } from "@/components/ui/option-field";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "./fields";
+import { sectorLabel } from "@/lib/sectors";
 import { saveOpportunity } from "./actions";
 import type { Opportunity } from "@/types/entities";
 
@@ -70,15 +71,20 @@ export function OpportunityForm({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {compactFields.map((f) => {
             if (OPTION_SET.has(f.key)) {
+              // القطاع: عرض عربي والتخزين بالرمز (يُوحَّد في الحفظ عبر sectorCode).
+              const isSector = f.key === "sector";
+              const raw = initialValue(initial, f.key);
+              const dv = isSector && raw ? sectorLabel(raw) : raw;
+              const opts = isSector ? merged(f.key).map((c) => sectorLabel(c)) : merged(f.key);
               return (
                 <OptionField
                   key={f.key}
                   id={`opp-${f.key}`}
                   name={f.key}
                   label={f.label}
-                  defaultValue={initialValue(initial, f.key)}
+                  defaultValue={dv}
                   fieldKey={f.key}
-                  options={merged(f.key)}
+                  options={opts}
                 />
               );
             }

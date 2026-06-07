@@ -22,6 +22,7 @@ import { useTable } from "@/lib/data/use-table";
 import { cn } from "@/lib/utils";
 import { exportCsv } from "@/lib/export-csv";
 import { formatArea, orNA } from "@/lib/display";
+import { sectorLabel } from "@/lib/sectors";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StateBadge } from "@/features/parcels/state-badge";
@@ -163,7 +164,7 @@ export function OpportunitiesPanel() {
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <select value={sector} onChange={(e) => setSector(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
             <option value="">كل القطاعات</option>
-            {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+            {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
           </select>
           <select value={district} onChange={(e) => setDistrict(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
             <option value="">كل الأقضية</option>
@@ -236,37 +237,40 @@ export function OpportunitiesPanel() {
                 />
 
                 {/* رأس البطاقة (دائم): اسم الفرصة + القطاع + الحالة — النقر يطوي/يفتح */}
-                <div className="flex items-center gap-2 ps-4 pe-3">
+                <div className="flex items-start gap-2 ps-4 pe-3">
                   <input
                     type="checkbox"
                     checked={selected.has(o.record_id)}
                     onChange={() => toggleOne(o.record_id)}
                     onClick={(e) => e.stopPropagation()}
-                    className="size-4 shrink-0 cursor-pointer accent-state-announced"
+                    className="mt-3 size-4 shrink-0 cursor-pointer accent-state-announced"
                     aria-label="تحديد"
                   />
                   <button
                     type="button"
                     onClick={() => toggleExpand(o.record_id)}
                     aria-expanded={isOpen}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 py-2.5 text-start"
+                    className="flex min-w-0 flex-1 flex-col gap-1 py-2.5 text-start"
                   >
-                    <div className="min-w-0 flex-1">
-                      <h4 className={cn("text-[15px] font-semibold leading-snug", isOpen ? "line-clamp-2" : "truncate")}>
+                    {/* مسار العنوان: العنوان + شارة الحالة (يسار الأعلى، ثابتة) + سهم الطي */}
+                    <div className="flex w-full items-start gap-2">
+                      <h4 className={cn("min-w-0 flex-1 text-[15px] font-semibold leading-snug", isOpen ? "line-clamp-2" : "truncate")}>
                         {orNA(o.title)}
                       </h4>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        {o.sector ? <Chip icon={Tag} value={o.sector} /> : null}
-                        <StateBadge state="announced" />
-                      </div>
+                      <StateBadge state="announced" glow={false} />
+                      <ChevronDown
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                          isOpen && "rotate-180",
+                        )}
+                        aria-hidden
+                      />
                     </div>
-                    <ChevronDown
-                      className={cn(
-                        "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                        isOpen && "rotate-180",
-                      )}
-                      aria-hidden
-                    />
+                    {o.sector ? (
+                      <div className="flex">
+                        <Chip icon={Tag} value={sectorLabel(o.sector)} />
+                      </div>
+                    ) : null}
                   </button>
                 </div>
 

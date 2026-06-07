@@ -1,4 +1,5 @@
 import type { CsvColumn } from "@/lib/export-csv";
+import { sectorLabel } from "@/lib/sectors";
 
 export type FieldType = "text" | "number" | "date" | "textarea";
 export interface FieldDef {
@@ -81,7 +82,7 @@ export const OPPORTUNITY_DETAIL_FIELDS: readonly FieldDef[] = [
 // أعمدة التصدير (بلا معرّف داخلي ولا حالة تحقّق — §ح).
 export const OPPORTUNITY_EXPORT_COLUMNS: readonly CsvColumn[] = [
   { key: "title", label: "العنوان" },
-  { key: "sector", label: "القطاع" },
+  { key: "sector", label: "القطاع", format: (v) => (v ? sectorLabel(String(v)) : null) },
   { key: "parcel_no", label: "رقم القطعة" },
   { key: "muqataa_no", label: "المقاطعة" },
   { key: "district", label: "القضاء" },
