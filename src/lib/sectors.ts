@@ -10,6 +10,8 @@ const SECTOR_LABELS: Record<string, string> = {
   industrial: "صناعي",
   housing: "سكني",
   tourism: "سياحي",
+  services: "خدمي",
+  agricultural: "زراعي",
 };
 
 const SECTOR_CODES: Record<string, string> = Object.fromEntries(

@@ -9,6 +9,7 @@ import { useCounts } from "@/lib/data/use-counts";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { OpportunitiesPanel } from "@/features/opportunities/opportunities-panel";
+import { LicensesPanel } from "@/features/licenses/licenses-panel";
 import { SECTIONS } from "./sections";
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
@@ -45,6 +46,8 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
           <div className="min-h-0 flex-1">
             {activeSection.id === "opportunities" ? (
               <OpportunitiesPanel />
+            ) : activeSection.id === "licenses" ? (
+              <LicensesPanel />
             ) : (
               <div className="space-y-3 p-4 text-sm">
                 {activeSection.table && counts ? (
