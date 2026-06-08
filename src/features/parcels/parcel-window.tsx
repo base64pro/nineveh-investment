@@ -121,11 +121,13 @@ export function ParcelWindow({
   entity,
   onClose,
   onMoved,
+  readOnly = false,
 }: {
   kind: ParcelKind;
   entity: AnyEntity;
   onClose: () => void;
   onMoved: (ref: { kind: ParcelKind; id: string }) => void;
+  readOnly?: boolean;
 }) {
   const cfg = KINDS[kind];
   const queryClient = useQueryClient();
@@ -149,6 +151,7 @@ export function ParcelWindow({
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (readOnly) return;
     setSaving(true);
     const fd = new FormData(e.currentTarget);
     const values: Record<string, unknown> = {};
@@ -219,22 +222,24 @@ export function ParcelWindow({
               {subParts.length ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{subParts.join(" · ")}</p> : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StateBadge state={state} />
-                <span className="inline-flex items-center gap-1 rounded-full bg-secondary/40 px-2 py-0.5 text-xs ring-1 ring-inset ring-border/60" title="نقل الحالة">
-                  <ArrowLeftRight className="size-3 text-muted-foreground" />
-                  <select
-                    value={state}
-                    disabled={moving}
-                    onChange={(e) => void handleMove(e.target.value as ParcelState)}
-                    aria-label="نقل الحالة"
-                    className="cursor-pointer bg-transparent text-xs font-medium text-foreground outline-none disabled:opacity-50"
-                  >
-                    {STATE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </span>
+                {!readOnly ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-secondary/40 px-2 py-0.5 text-xs ring-1 ring-inset ring-border/60" title="نقل الحالة">
+                    <ArrowLeftRight className="size-3 text-muted-foreground" />
+                    <select
+                      value={state}
+                      disabled={moving}
+                      onChange={(e) => void handleMove(e.target.value as ParcelState)}
+                      aria-label="نقل الحالة"
+                      className="cursor-pointer bg-transparent text-xs font-medium text-foreground outline-none disabled:opacity-50"
+                    >
+                      {STATE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                ) : null}
                 <span className="inline-flex items-center gap-1 rounded-full bg-secondary/50 px-2 py-0.5 text-xs text-foreground/80 ring-1 ring-inset ring-border/60">
                   <Tag className="size-3" /> {sectorLabel(entity.sector as string | null)}
                 </span>
@@ -255,8 +260,9 @@ export function ParcelWindow({
 
           {/* جسم التحرير المباشر */}
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-5 sm:grid-cols-2">
-              {missingHints.length ? (
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <fieldset disabled={readOnly} className="m-0 grid grid-cols-1 gap-3 border-0 p-0 sm:grid-cols-2">
+              {!readOnly && missingHints.length ? (
                 <div className="rounded-lg border border-state-announced/40 bg-state-announced/10 p-2.5 text-xs text-state-announced sm:col-span-2">
                   أكمل الحقول المطلوبة: {missingHints.map((h) => h.label).join(" · ")}
                 </div>
@@ -337,14 +343,19 @@ export function ParcelWindow({
                   <VisitsLog parcelRef={String(entity.record_id ?? "")} />
                 </div>
               ) : null}
-              <TransferLogView log={Array.isArray(entity.transfer_log) ? (entity.transfer_log as TransferEntry[]) : []} />
+              </fieldset>
+              <div className="mt-3">
+                <TransferLogView log={Array.isArray(entity.transfer_log) ? (entity.transfer_log as TransferEntry[]) : []} />
+              </div>
             </div>
 
             {/* ذيل ثابت: حفظ التحرير المباشر */}
             <footer className="flex shrink-0 items-center justify-start gap-2 border-t border-border/70 bg-card/80 px-5 py-3">
-              <Button type="submit" disabled={saving}>
-                {saving ? "جارٍ الحفظ…" : "حفظ"}
-              </Button>
+              {!readOnly ? (
+                <Button type="submit" disabled={saving}>
+                  {saving ? "جارٍ الحفظ…" : "حفظ"}
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={onClose}>
                 إغلاق
               </Button>

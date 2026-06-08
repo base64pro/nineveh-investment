@@ -36,10 +36,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { LiveLocationButton } from "@/components/ui/live-location-button";
-import { requestFlyTo, requestStartDraw } from "@/features/map/lib/map-nav-store";
+import { requestFlyTo, requestOpenParcelDetail, requestStartDraw } from "@/features/map/lib/map-nav-store";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { LicenseForm } from "./license-form";
-import { LicenseDetail } from "./license-detail";
 import { deleteLicense } from "./actions";
 import { LICENSE_EXPORT_COLUMNS } from "./fields";
 import type { License } from "@/types/entities";
@@ -107,7 +106,6 @@ export function LicensesPanel({
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<License | null>(null);
-  const [detail, setDetail] = useState<License | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
@@ -355,7 +353,7 @@ export function LicensesPanel({
                     </div>
 
                     <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5">
-                      <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
+                      <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: true })} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
                       {o.parcel_no ? (
@@ -363,7 +361,7 @@ export function LicensesPanel({
                           <PenTool className="size-3.5" /> ارسم
                         </Button>
                       ) : null}
-                      <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
+                      <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
@@ -379,7 +377,6 @@ export function LicensesPanel({
       </div>
 
       <LicenseForm open={formOpen} onClose={() => setFormOpen(false)} initial={editing} optionSets={optionSets} />
-      <LicenseDetail open={detail !== null} onClose={() => setDetail(null)} license={detail} />
     </div>
   );
 }

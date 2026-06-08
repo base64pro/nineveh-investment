@@ -41,7 +41,7 @@ export function onOpenParcelForm(listener: Listener): () => void {
 
 // فتح نافذة القطعة الموحّدة (من إشارة الخريطة أو السايدبار) — للأنواع الثلاثة (م3.1).
 export type ParcelKind = "opportunity" | "license" | "assumed";
-export type ParcelRef = { kind: ParcelKind; id: string };
+export type ParcelRef = { kind: ParcelKind; id: string; readOnly?: boolean };
 type DetailListener = (ref: ParcelRef) => void;
 const detailListeners = new Set<DetailListener>();
 export function requestOpenParcelDetail(ref: ParcelRef): void {
