@@ -5,7 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   BadgeCheck,
+  Building2,
   Calendar,
+  CheckCheck,
   ChevronDown,
   Download,
   Eye,
@@ -13,6 +15,7 @@ import {
   Landmark,
   ListChecks,
   MapPin,
+  MapPinned,
   Pencil,
   Plus,
   Ruler,
@@ -27,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { exportCsv } from "@/lib/export-csv";
 import { formatArea, formatDate, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
-import { NINEVEH_DISTRICTS } from "@/lib/nineveh-geo";
+import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StateBadge } from "@/features/parcels/state-badge";
@@ -53,6 +56,14 @@ const STATUS_ACCENT: Record<string, string> = {
   completed: "from-state-completed to-state-completed/20",
   withdrawn: "from-state-withdrawn to-state-withdrawn/20",
 };
+
+// حقل تصفية أنيق موحّد (منسدلة + تحرير نصّ).
+const FILTER_INPUT =
+  "w-full rounded-lg border border-input bg-background/60 px-2 py-1.5 outline-none transition focus:ring-2 focus:ring-ring";
+
+// قرص ثلاثي الأبعاد بلون واحد بلا حدود، توهّج خفيف (ظلّ سفلي للطفو) — متسق للأزرار والعدّادات.
+const ORB =
+  "relative grid place-items-center rounded-full text-foreground bg-[radial-gradient(circle_at_50%_28%,#4f6498,#2a3a5c)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.32),0_10px_22px_-8px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_2px_rgba(255,255,255,0.45),0_15px_28px_-8px_rgba(0,0,0,0.85)] active:translate-y-0 active:scale-95";
 
 function Cell({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
@@ -89,8 +100,8 @@ export function LicensesPanel({
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
   const [district, setDistrict] = useState("");
+  const [subdistrict, setSubdistrict] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
-  const [muqataa, setMuqataa] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -100,43 +111,51 @@ export function LicensesPanel({
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
   const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
-  const muqataas = useMemo(() => distinct(all.map((o) => o.muqataa_no)), [all]);
+  const subdistricts = useMemo(() => distinct(all.map((o) => o.subdistrict)), [all]);
   const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
   const districtOptions = useMemo(
     () => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(),
     [districts],
+  );
+  const subdistrictOptions = useMemo(
+    () => Array.from(new Set([...NINEVEH_SUBDISTRICTS, ...subdistricts])).sort(),
+    [subdistricts],
   );
   const optionSets = useMemo(
     () => ({
       sector: sectors,
       project_type: distinct(all.map((o) => o.project_type)),
       district: districtOptions,
+      subdistrict: subdistrictOptions,
       neighborhood: neighborhoods,
       muqataa_name: distinct(all.map((o) => o.muqataa_name)),
       land_right: distinct(all.map((o) => o.land_right)),
       investor_nationality: distinct(all.map((o) => o.investor_nationality)),
     }),
-    [all, sectors, districtOptions, neighborhoods],
+    [all, sectors, districtOptions, subdistrictOptions, neighborhoods],
   );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    const secNeedle = sector.trim();
     const dNeedle = district.trim().toLowerCase();
+    const subNeedle = subdistrict.trim().toLowerCase();
     const nNeedle = neighborhood.trim().toLowerCase();
     return all.filter((o) => {
       if (status && o.status !== status) return false;
-      if (sector && o.sector !== sector) return false;
+      if (secNeedle && !sectorLabel(o.sector).includes(secNeedle)) return false;
       if (dNeedle && !(o.district ?? "").toLowerCase().includes(dNeedle)) return false;
+      if (subNeedle && !(o.subdistrict ?? "").toLowerCase().includes(subNeedle)) return false;
       if (nNeedle && !(o.neighborhood ?? "").toLowerCase().includes(nNeedle)) return false;
-      if (muqataa && o.muqataa_no !== muqataa) return false;
       if (needle) {
-        const hay = `${o.title ?? ""} ${o.license_number ?? ""} ${o.owner ?? ""} ${o.investor_name ?? ""} ${o.parcel_no ?? ""} ${o.muqataa_name ?? ""} ${o.neighborhood ?? ""}`.toLowerCase();
+        const hay = `${o.title ?? ""} ${o.license_number ?? ""} ${o.owner ?? ""} ${o.investor_name ?? ""} ${o.parcel_no ?? ""} ${o.muqataa_name ?? ""} ${o.subdistrict ?? ""} ${o.neighborhood ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [all, q, status, sector, district, neighborhood, muqataa]);
+  }, [all, q, status, sector, district, subdistrict, neighborhood]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((o) => selected.has(o.record_id));
 
@@ -204,68 +223,44 @@ export function LicensesPanel({
           placeholder="بحث (عنوان/رقم رخصة/مالك/مستثمر/قطعة)…"
           className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        {/* فلترة متقدّمة: قطاع · قضاء · مقاطعة */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <select value={sector} onChange={(e) => setSector(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل القطاعات</option>
-            {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
-          </select>
-          <input
-            list="lic-district-opts"
-            value={district}
-            onChange={(e) => setDistrict(e.target.value)}
-            placeholder="القضاء"
-            className="w-28 rounded-md border border-input bg-background px-2 py-1 outline-none focus:ring-2 focus:ring-ring"
-          />
-          <datalist id="lic-district-opts">
-            {districtOptions.map((d) => <option key={d} value={d} />)}
-          </datalist>
-          <input
-            list="lic-neighborhood-opts"
-            value={neighborhood}
-            onChange={(e) => setNeighborhood(e.target.value)}
-            placeholder="الحي/المنطقة"
-            className="w-28 rounded-md border border-input bg-background px-2 py-1 outline-none focus:ring-2 focus:ring-ring"
-          />
-          <datalist id="lic-neighborhood-opts">
-            {neighborhoods.map((n) => <option key={n} value={n} />)}
-          </datalist>
-          <select value={muqataa} onChange={(e) => setMuqataa(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل المقاطعات</option>
-            {muqataas.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+        {/* تصفية متقدّمة (٤ حقول متساوية): قطاع · قضاء · ناحية · حي — منسدلة + تحرير نصّ */}
+        <div className="grid grid-cols-4 gap-1.5 text-xs">
+          <input list="lic-sector-opts" value={sector} onChange={(e) => setSector(e.target.value)} placeholder="قطاع" className={FILTER_INPUT} />
+          <datalist id="lic-sector-opts">{sectorLabelOptions.map((s) => <option key={s} value={s} />)}</datalist>
+          <input list="lic-district-opts" value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="قضاء" className={FILTER_INPUT} />
+          <datalist id="lic-district-opts">{districtOptions.map((d) => <option key={d} value={d} />)}</datalist>
+          <input list="lic-subdistrict-opts" value={subdistrict} onChange={(e) => setSubdistrict(e.target.value)} placeholder="ناحية" className={FILTER_INPUT} />
+          <datalist id="lic-subdistrict-opts">{subdistrictOptions.map((s) => <option key={s} value={s} />)}</datalist>
+          <input list="lic-neighborhood-opts" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="حي" className={FILTER_INPUT} />
+          <datalist id="lic-neighborhood-opts">{neighborhoods.map((n) => <option key={n} value={n} />)}</datalist>
         </div>
-        <div className="flex items-center gap-3 pt-0.5">
-          {/* زر الإضافة الدائري المبهر + العدّاد (معروض/الكل) */}
+        {/* ثلاث دوائر إجراء ثلاثية الأبعاد: تحديد الكل (يسار) · إضافة (وسط أكبر) · تصدير (يمين) */}
+        <div className="flex items-center justify-center gap-5 pt-1.5">
+          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+            <Download className="size-4" />
+          </button>
           <div className="flex flex-col items-center gap-1">
             <button
               type="button"
               onClick={() => { setEditing(null); setFormOpen(true); }}
               title="إضافة رخصة"
               aria-label="إضافة رخصة"
-              className="grid size-12 place-items-center rounded-full bg-gradient-to-br from-[rgba(148,175,209,0.4)] to-[rgba(148,175,209,0.1)] text-foreground ring-1 ring-inset ring-foreground/20 shadow-[0_0_22px_-6px_rgba(148,175,209,0.7)] transition hover:scale-105 hover:shadow-[0_0_28px_-2px_rgba(148,175,209,0.95)] active:scale-95"
+              className={cn(ORB, "size-16")}
             >
-              <Plus className="size-5" />
+              <Plus className="size-6" />
             </button>
-            <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">{filtered.length}/{all.length}</span>
+            <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
+              {filtered.length}/{all.length}{selected.size ? ` · محدّد ${selected.size}` : ""}
+            </span>
           </div>
-
-          {/* تصدير + تحديد الكل — تصميم وحجم متطابقان ومتقدّمان */}
-          <button
-            type="button"
-            onClick={onExport}
-            title="تصدير CSV"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 bg-card/70 px-3 text-xs font-medium text-foreground/90 ring-1 ring-inset ring-foreground/5 shadow-[0_0_14px_-6px_rgba(148,175,209,0.5)] transition hover:bg-accent hover:text-foreground"
-          >
-            <Download className="size-3.5" /> تصدير{selected.size ? ` (${selected.size})` : ""}
-          </button>
           <button
             type="button"
             onClick={toggleAll}
-            title="تحديد/إلغاء كل المعروض"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 bg-card/70 px-3 text-xs font-medium text-foreground/90 ring-1 ring-inset ring-foreground/5 shadow-[0_0_14px_-6px_rgba(148,175,209,0.5)] transition hover:bg-accent hover:text-foreground"
+            title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
+            aria-label="تحديد/إلغاء تحديد الكل"
+            className={cn(ORB, "size-12")}
           >
-            <ListChecks className="size-3.5" /> {allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
+            {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
           </button>
         </div>
       </div>
@@ -353,7 +348,9 @@ export function LicensesPanel({
                       <Cell icon={BadgeCheck} label="رقم الرخصة" value={orNA(o.license_number)} />
                       <Cell icon={MapPin} label="القطعة" value={orNA(o.parcel_no)} />
                       <Cell icon={Landmark} label="القضاء" value={orNA(o.district)} />
+                      <Cell icon={MapPinned} label="الناحية" value={orNA(o.subdistrict)} />
                       <Cell icon={Home} label="الحي/المنطقة" value={orNA(o.neighborhood)} />
+                      <Cell icon={Building2} label="المقاطعة" value={orNA(o.muqataa_no)} />
                       <Cell icon={Ruler} label="المساحة الكلية" value={formatArea(o.area_total_m2)} />
                       <Cell icon={User} label="العائدية" value={orNA(o.owner)} />
                     </div>

@@ -138,6 +138,7 @@ export interface License {
   muqataa_no: string | null;
   muqataa_name: string | null;
   district: string | null;
+  subdistrict: string | null;
   neighborhood: string | null;
   area_olk: number | null;
   area_m2: number | null;

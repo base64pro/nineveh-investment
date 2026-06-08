@@ -1,18 +1,67 @@
 "use client";
 
-import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { animate, motion } from "framer-motion";
 import { useTable } from "@/lib/data/use-table";
 import { cn } from "@/lib/utils";
 import type { License } from "@/types/entities";
 
-// دوائر عدّاد عائمة (كعدّاد سرعة) بجانب السايدبار الأيسر — تبرز الدائرة الفعّالة وتكبر.
+// عدّادات حالات الرخص: أقراص ثلاثية الأبعاد بلون واحد بلا حدود، الرقم وسطي يتحرك تصاعدياً عند الفتح.
 const COUNTERS = [
-  { value: "", label: "الكل", grad: "from-foreground/20 to-foreground/5", ring: "ring-foreground/40", text: "text-foreground", glow: "148,175,209" },
-  { value: "in-progress", label: "قيد", grad: "from-state-inprogress/30 to-state-inprogress/5", ring: "ring-state-inprogress/50", text: "text-state-inprogress", glow: "87,117,168" },
-  { value: "completed", label: "منجزة", grad: "from-state-completed/30 to-state-completed/5", ring: "ring-state-completed/50", text: "text-state-completed", glow: "94,151,122" },
-  { value: "withdrawn", label: "مسحوبة", grad: "from-state-withdrawn/30 to-state-withdrawn/5", ring: "ring-state-withdrawn/50", text: "text-state-withdrawn", glow: "181,97,106" },
+  { value: "", label: "الكل" },
+  { value: "in-progress", label: "قيد" },
+  { value: "completed", label: "منجزة" },
+  { value: "withdrawn", label: "مسحوبة" },
 ] as const;
+
+const ORB_BASE =
+  "grid size-16 place-items-center rounded-full text-foreground shadow-[inset_0_1px_2px_rgba(255,255,255,0.3),0_10px_22px_-8px_rgba(0,0,0,0.7)]";
+const ORB_BG = "bg-[radial-gradient(circle_at_50%_28%,#46598a,#27364e)]";
+const ORB_BG_ACTIVE = "bg-[radial-gradient(circle_at_50%_28%,#627ab6,#33466b)]";
+
+/** رقم يتحرّك تصاعدياً من القيمة السابقة إلى الجديدة (موشن سلس). */
+function useCountUp(value: number): number {
+  const [display, setDisplay] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const controls = animate(from.current, value, {
+      duration: 0.9,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    from.current = value;
+    return () => controls.stop();
+  }, [value]);
+  return display;
+}
+
+function CounterOrb({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const display = useCountUp(count);
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      title={label}
+      animate={{ scale: active ? 1.28 : 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+      style={{ transformOrigin: "right center", zIndex: active ? 3 : 1 }}
+      className={cn(ORB_BASE, active ? ORB_BG_ACTIVE : ORB_BG)}
+    >
+      <span className="text-lg font-bold leading-none tabular-nums">{display}</span>
+      <span className="mt-0.5 text-[8px] font-medium text-foreground/70">{label}</span>
+    </motion.button>
+  );
+}
 
 export function LicenseStatusCounters({
   status,
@@ -41,33 +90,15 @@ export function LicenseStatusCounters({
       className="absolute right-[547px] top-24 z-10 flex flex-col gap-3"
       aria-label="عدّادات حالات الرخص"
     >
-      {COUNTERS.map((c) => {
-        const active = status === c.value;
-        return (
-          <motion.button
-            key={c.value}
-            type="button"
-            onClick={() => onSelect(c.value)}
-            title={c.label}
-            animate={{ scale: active ? 1.28 : 1 }}
-            transition={{ type: "spring", stiffness: 320, damping: 22 }}
-            style={{
-              transformOrigin: "right center",
-              zIndex: active ? 3 : 1,
-              boxShadow: `0 0 ${active ? 30 : 15}px ${active ? -2 : -6}px rgba(${c.glow},${active ? 0.95 : 0.55})`,
-            }}
-            className={cn(
-              "grid size-16 place-items-center rounded-full border bg-gradient-to-br ring-1 backdrop-blur transition-colors",
-              c.grad,
-              c.ring,
-              active ? "border-white/25" : "border-white/10",
-            )}
-          >
-            <span className={cn("text-lg font-bold leading-none tabular-nums", c.text)}>{counts[c.value] ?? 0}</span>
-            <span className="mt-0.5 text-[8px] font-medium text-muted-foreground">{c.label}</span>
-          </motion.button>
-        );
-      })}
+      {COUNTERS.map((c) => (
+        <CounterOrb
+          key={c.value}
+          label={c.label}
+          count={counts[c.value] ?? 0}
+          active={status === c.value}
+          onClick={() => onSelect(c.value)}
+        />
+      ))}
     </motion.div>
   );
 }
