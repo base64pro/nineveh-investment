@@ -2,9 +2,10 @@
 
 // الهيدبار (§هـ.1/2) — شريط علوي = داشبورد: عدّادات لحظية **حتمية** قابلة للنقر ← مصدرها. (البحث الفائق في م5.2.)
 
-import { Ruler } from "lucide-react";
+import { Ruler, Search } from "lucide-react";
 import { useDashboardStats } from "@/lib/data/use-dashboard-stats";
 import { formatNumber } from "@/lib/format";
+import { openSearch } from "@/features/search/search-store";
 import { requestOpenSection } from "./shell-store";
 
 function Counter({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
@@ -29,6 +30,16 @@ export function Headbar() {
   return (
     <div className="flex h-12 items-center gap-1 border-b border-[rgba(148,175,209,0.4)] bg-[hsl(220_36%_14%_/_0.92)] px-3 shadow-[0_4px_18px_-8px_rgba(0,0,0,0.6)] backdrop-blur">
       <span className="me-1 shrink-0 text-sm font-bold tracking-tight text-foreground">نينوى · الاستثمار</span>
+      <button
+        type="button"
+        onClick={openSearch}
+        title="بحث فائق (Ctrl K)"
+        className="flex shrink-0 items-center gap-2 rounded-lg border border-border/50 bg-white/5 px-2.5 py-1 text-muted-foreground transition hover:border-border hover:bg-white/10 hover:text-foreground"
+      >
+        <Search className="size-3.5" />
+        <span className="text-[11px]">بحث…</span>
+        <kbd className="hidden rounded bg-black/20 px-1 text-[9px] md:inline">Ctrl K</kbd>
+      </button>
       <div className="scroll-slim flex flex-1 items-center gap-0.5 overflow-x-auto">
         <Counter label="معلَنة" value={z(s?.announced)} color="bg-state-announced" onClick={() => requestOpenSection("opportunities")} />
         <Counter label="قيد" value={z(s?.lic_in_progress)} color="bg-state-inprogress" onClick={() => requestOpenSection("licenses", "in-progress")} />

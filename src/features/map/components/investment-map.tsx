@@ -34,7 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onFlyToCoords, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
@@ -607,6 +607,16 @@ export default function InvestmentMap() {
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
       }
+    });
+  }, []);
+
+  // الانتقال لإحداثيات موقع جغرافي (بحث فائق · §هـ.2.ج): طيران + تنبيه بالاسم
+  useEffect(() => {
+    return onFlyToCoords(({ lng, lat, label }) => {
+      const m = mapRef.current;
+      if (!m) return;
+      m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400 });
+      if (label) toast.info(label);
     });
   }, []);
 

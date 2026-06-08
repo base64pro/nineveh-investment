@@ -27,6 +27,19 @@ export function onFlyTo(listener: Listener): () => void {
   };
 }
 
+// طيران لإحداثيات حرّة (نتيجة بحث جغرافي/geocoding ضمن نينوى) — مستقلّ عن أي قطعة بياناتية.
+export type Coords = { lng: number; lat: number; label?: string };
+const coordsListeners = new Set<(c: Coords) => void>();
+export function requestFlyToCoords(c: Coords): void {
+  for (const l of coordsListeners) l(c);
+}
+export function onFlyToCoords(listener: (c: Coords) => void): () => void {
+  coordsListeners.add(listener);
+  return () => {
+    coordsListeners.delete(listener);
+  };
+}
+
 // فتح نموذج قطعة مفترضة (بعد الرسم أو من الإشارة) — عامّ، مستقلّ عن السايدبار.
 const formListeners = new Set<Listener>();
 export function requestOpenParcelForm(id: string): void {
