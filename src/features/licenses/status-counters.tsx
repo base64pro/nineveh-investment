@@ -23,8 +23,10 @@ function useCountUp(value: number): number {
       duration: 0.9,
       ease: "easeOut",
       onUpdate: (v) => setDisplay(Math.round(v)),
+      onComplete: () => {
+        from.current = value; // يُضبط عند الاكتمال فقط — يصمد أمام Strict Mode (يبقى يتحرّك من 0)
+      },
     });
-    from.current = value;
     return () => controls.stop();
   }, [value]);
   return display;

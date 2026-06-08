@@ -64,9 +64,10 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               type="button"
               onClick={() => setActive(null)}
               aria-label="إغلاق"
-              className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              title="إغلاق"
+              className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
             >
-              <X className="size-4" />
+              <X className="size-5" />
             </button>
           </header>
           <div className="min-h-0 flex-1">
