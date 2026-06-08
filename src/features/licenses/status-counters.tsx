@@ -57,10 +57,12 @@ function CounterOrb({
           : "bg-[radial-gradient(circle_at_50%_28%,#46598a,#27364e)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.3),0_10px_22px_-8px_rgba(0,0,0,0.7)]",
       )}
     >
+      {/* لمعة زجاجية مات (انعكاس علوي ناعم) */}
+      <span className="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(to_bottom,rgba(255,255,255,0.24),transparent_55%)]" />
       {/* الرقم في وسط الدائرة تماماً */}
-      <span className="text-xl font-bold leading-none tabular-nums">{display}</span>
+      <span className="relative z-[1] text-xl font-bold leading-none tabular-nums">{display}</span>
       {/* الكلمة الدلالية صغيرة بيضاء أسفل الرقم */}
-      <span className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[8px] font-medium text-white/85">
+      <span className="pointer-events-none absolute inset-x-0 bottom-2 z-[1] text-center text-[8px] font-medium text-white/85">
         {label}
       </span>
     </motion.button>
@@ -91,7 +93,7 @@ export function LicenseStatusCounters({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 44 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="absolute right-[538px] top-24 z-10 flex flex-col gap-2.5"
+      className="absolute right-[554px] top-16 z-10 flex flex-col gap-2.5"
       aria-label="عدّادات حالات الرخص"
     >
       {COUNTERS.map((c) => (

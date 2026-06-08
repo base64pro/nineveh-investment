@@ -45,10 +45,10 @@ const distinct = (values: (string | null)[]): string[] =>
 
 // التصفيات الأربع (§هـ.1): الكل · قيد · منجزة · مسحوبة — أزرار متساوية بألوان الحالات وتوهّج (العدّادات في دوائر عائمة).
 const STATUS_TABS: { value: string; label: string; active: string }[] = [
-  { value: "", label: "الكل", active: "bg-foreground/10 text-foreground ring-foreground/30 shadow-[0_0_16px_-6px_rgba(148,175,209,0.6)]" },
-  { value: "in-progress", label: "قيد", active: "bg-state-inprogress/20 text-state-inprogress ring-state-inprogress/50 shadow-[0_0_16px_-6px_rgba(87,117,168,0.75)]" },
-  { value: "completed", label: "منجزة", active: "bg-state-completed/20 text-state-completed ring-state-completed/50 shadow-[0_0_16px_-6px_rgba(94,151,122,0.75)]" },
-  { value: "withdrawn", label: "مسحوبة", active: "bg-state-withdrawn/20 text-state-withdrawn ring-state-withdrawn/50 shadow-[0_0_16px_-6px_rgba(181,97,106,0.75)]" },
+  { value: "", label: "الكل", active: "bg-foreground/15 text-foreground ring-foreground/40 shadow-[0_0_18px_-5px_rgba(148,175,209,0.7)]" },
+  { value: "in-progress", label: "قيد", active: "bg-state-inprogress/25 text-state-inprogress ring-state-inprogress/60 shadow-[0_0_18px_-5px_rgba(87,117,168,0.85)]" },
+  { value: "completed", label: "منجزة", active: "bg-state-completed/25 text-state-completed ring-state-completed/60 shadow-[0_0_18px_-5px_rgba(94,151,122,0.85)]" },
+  { value: "withdrawn", label: "مسحوبة", active: "bg-state-withdrawn/25 text-state-withdrawn ring-state-withdrawn/60 shadow-[0_0_18px_-5px_rgba(181,97,106,0.85)]" },
 ];
 
 const STATUS_ACCENT: Record<string, string> = {
@@ -207,8 +207,10 @@ export function LicensesPanel({
                 type="button"
                 onClick={() => setStatus(t.value)}
                 className={cn(
-                  "rounded-lg px-2 py-2 text-xs font-semibold ring-1 ring-inset transition",
-                  isActive ? t.active : "text-muted-foreground ring-border/50 hover:bg-accent hover:text-foreground",
+                  "rounded-lg px-2 py-2.5 text-xs font-bold ring-1 ring-inset transition",
+                  isActive
+                    ? t.active
+                    : "bg-secondary/40 text-muted-foreground ring-border/40 shadow-[0_2px_6px_-3px_rgba(0,0,0,0.5)] hover:bg-accent hover:text-foreground",
                 )}
               >
                 {t.label}
