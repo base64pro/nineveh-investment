@@ -12,6 +12,16 @@ const SECTOR_LABELS: Record<string, string> = {
   tourism: "سياحي",
   services: "خدمي",
   agricultural: "زراعي",
+  // قطاعات إضافية من بيانات الشركات (companies_final.json)
+  construction: "إنشاءات",
+  energy: "طاقة",
+  exchange: "صرافة",
+  financial_investment: "استثمار مالي",
+  logistics_transport: "نقل ولوجستيات",
+  money_transfer: "تحويل مالي",
+  real_estate: "عقاري",
+  telecom: "اتصالات",
+  other: "أخرى",
 };
 
 const SECTOR_CODES: Record<string, string> = Object.fromEntries(
