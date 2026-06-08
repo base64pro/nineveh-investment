@@ -31,7 +31,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo } from "../lib/map-nav-store";
+import { onFlyTo, requestOpenParcelForm } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
@@ -130,9 +130,9 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       stroked: true,
       getLineColor: (f: Feature) => {
         const [r, g, b] = glowRgba(stateOf(f));
-        return [r, g, b, alpha(80, 170, f)];
+        return [r, g, b, alpha(80, 215, f)];
       },
-      getLineWidth: (f: Feature) => (sel(f) ? 10 : 6),
+      getLineWidth: (f: Feature) => (sel(f) ? 13 : 6),
       lineWidthUnits: "pixels",
       lineWidthMinPixels: 3,
       updateTriggers: { getLineColor: selectedId, getLineWidth: selectedId },
@@ -146,8 +146,9 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       autoHighlight: true,
       highlightColor: [255, 255, 255, 38],
       getFillColor: (f: Feature) => {
+        // المحدّد يمتلئ بلون/شدّة الحدّ (≈235) — مع توهّج هولوكرامي من طبقة الهالة.
         const [r, g, b] = fillRgba(stateOf(f));
-        return [r, g, b, alpha(64, 120, f)];
+        return [r, g, b, alpha(64, 232, f)];
       },
       getLineColor: (f: Feature) => {
         const [r, g, b] = lineRgba(stateOf(f));
@@ -420,7 +421,7 @@ export default function InvestmentMap() {
           const subdistrict = inferName(polygon, data.subdistricts);
           void (async () => {
             const supabase = createClient();
-            const { error } = await supabase.rpc("create_assumed_parcel", {
+            const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
               p_geom: polygon.geometry,
               p_district: district,
               p_subdistrict: subdistrict,
@@ -436,6 +437,8 @@ export default function InvestmentMap() {
             void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
             void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
             void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
+            // انبثاق نموذج البيانات للقطعة الجديدة (يملأ الباقي + يمنحها اسماً)
+            if (typeof newId === "string") requestOpenParcelForm(newId);
           })();
         });
         drawRef.current = draw;

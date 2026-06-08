@@ -10,6 +10,7 @@ export interface FieldDef {
 }
 
 export const ASSUMED_FORM_FIELDS: readonly FieldDef[] = [
+  { key: "name", label: "اسم القطعة", type: "text" },
   { key: "parcel_no", label: "رقم القطعة", type: "text" },
   { key: "muqataa_no", label: "رقم المقاطعة", type: "text" },
   { key: "muqataa_name", label: "اسم المقاطعة", type: "text" },
@@ -36,6 +37,7 @@ export const ASSUMED_OPTION_FIELDS: readonly string[] = [
 ];
 
 export const ASSUMED_EXPORT_COLUMNS: readonly CsvColumn[] = [
+  { key: "name", label: "اسم القطعة" },
   { key: "parcel_no", label: "رقم القطعة" },
   { key: "sector", label: "القطاع", format: (v) => (v ? sectorLabel(String(v)) : null) },
   { key: "district", label: "القضاء" },

@@ -41,8 +41,12 @@ export function AssumedForm({
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSaving(true);
     const fd = new FormData(e.currentTarget);
+    if (!String(fd.get("name") ?? "").trim()) {
+      toast.error("اسم القطعة مطلوب");
+      return;
+    }
+    setSaving(true);
     const values: Record<string, unknown> = {};
     for (const f of ASSUMED_FORM_FIELDS) {
       const raw = String(fd.get(f.key) ?? "").trim();
@@ -90,12 +94,16 @@ export function AssumedForm({
             }
             return (
               <div key={f.key} className="space-y-1">
-                <label htmlFor={`as-${f.key}`} className="block text-xs text-muted-foreground">{f.label}</label>
+                <label htmlFor={`as-${f.key}`} className="block text-xs text-muted-foreground">
+                  {f.label}
+                  {f.key === "name" ? <span className="text-destructive"> *</span> : null}
+                </label>
                 <input
                   id={`as-${f.key}`}
                   name={f.key}
                   type={f.type === "number" ? "number" : "text"}
                   step={f.type === "number" ? "any" : undefined}
+                  required={f.key === "name"}
                   defaultValue={initialValue(initial, f.key)}
                   className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />

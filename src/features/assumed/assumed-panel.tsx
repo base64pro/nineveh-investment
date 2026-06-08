@@ -217,7 +217,7 @@ export function AssumedPanel() {
         <ul className="space-y-2.5">
           {filtered.map((o) => {
             const isOpen = expanded.has(o.id);
-            const title = o.parcel_no ? `القطعة ${o.parcel_no}` : "قطعة مفترضة";
+            const title = o.name ?? (o.parcel_no ? `القطعة ${o.parcel_no}` : "قطعة مفترضة");
             return (
               <li
                 key={o.id}
@@ -253,6 +253,15 @@ export function AssumedPanel() {
                       </span>
                     </div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => requestFlyTo(o.id)}
+                    title="الموقع على الخريطة"
+                    aria-label="الموقع على الخريطة"
+                    className="mt-2.5 shrink-0 rounded-md p-1.5 text-state-assumed transition hover:bg-state-assumed/15"
+                  >
+                    <Crosshair className="size-4" />
+                  </button>
                 </div>
 
                 {isOpen ? (
@@ -271,9 +280,6 @@ export function AssumedPanel() {
                     <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5">
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => requestFlyTo(o.id)} title="الموقع على الخريطة">
-                        <Crosshair className="size-3.5" /> موقع
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل

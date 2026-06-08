@@ -289,6 +289,7 @@ export interface MapElement {
 // 9) القطعة المفترضة (§ج.8/9)
 export interface AssumedParcel {
   id: string;
+  name: string | null;
   parcel_no: string | null;
   muqataa_no: string | null;
   muqataa_name: string | null;

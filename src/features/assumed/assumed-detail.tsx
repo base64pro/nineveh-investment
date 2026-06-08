@@ -79,7 +79,7 @@ export function AssumedDetail({
 }) {
   if (!parcel) return null;
   const o = parcel;
-  const title = o.parcel_no ? `القطعة ${o.parcel_no}` : "قطعة مفترضة";
+  const title = o.name ?? (o.parcel_no ? `القطعة ${o.parcel_no}` : "قطعة مفترضة");
 
   return (
     <Dialog open={open} onClose={onClose} title={title} size="xl">
