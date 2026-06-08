@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { addFieldOption } from "@/lib/data/field-options-actions";
+import { Combo } from "@/components/ui/combo";
 
-/** حقل بقائمة منسدلة (datalist) + إمكانية تعريف خيار جديد يُحفظ ويُعاد استخدامه. */
+/** حقل بمنسدلة أنيقة (Combo) + إدخال حرّ + تعريف خيار جديد يُحفظ ويُعاد استخدامه.
+ *  يحمل القيمة عبر input خفيّ باسم الحقل ليلتقطها FormData في النماذج غير المضبوطة. */
 export function OptionField({
   id,
   name,
@@ -14,6 +16,7 @@ export function OptionField({
   defaultValue,
   fieldKey,
   options,
+  disabled = false,
 }: {
   id: string;
   name: string;
@@ -21,11 +24,13 @@ export function OptionField({
   defaultValue: string;
   fieldKey: string;
   options: string[];
+  disabled?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const [value, setValue] = useState(defaultValue);
   const [adding, setAdding] = useState(false);
   const [newOpt, setNewOpt] = useState("");
-  const listId = `dl-${id}`;
+  const comboOptions = useMemo(() => options.map((o) => ({ value: o, label: o })), [options]);
 
   async function save() {
     const v = newOpt.trim();
@@ -34,6 +39,7 @@ export function OptionField({
     if (res.ok) {
       toast.success("أُضيف الخيار");
       void queryClient.invalidateQueries({ queryKey: ["table", "field_options"] });
+      setValue(v);
       setNewOpt("");
       setAdding(false);
     } else {
@@ -47,28 +53,20 @@ export function OptionField({
         <label htmlFor={id} className="block text-xs text-muted-foreground">
           {label}
         </label>
-        <button
-          type="button"
-          onClick={() => setAdding((a) => !a)}
-          className="inline-flex items-center gap-0.5 text-[10px] text-primary transition hover:underline"
-          title="تعريف خيار جديد لهذا الحقل"
-        >
-          <Plus className="size-3" /> خيار
-        </button>
+        {!disabled ? (
+          <button
+            type="button"
+            onClick={() => setAdding((a) => !a)}
+            className="inline-flex items-center gap-0.5 text-[10px] text-primary transition hover:underline"
+            title="تعريف خيار جديد لهذا الحقل"
+          >
+            <Plus className="size-3" /> خيار
+          </button>
+        ) : null}
       </div>
-      <input
-        id={id}
-        name={name}
-        list={listId}
-        defaultValue={defaultValue}
-        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-      />
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-      {adding ? (
+      <input type="hidden" name={name} value={value} />
+      <Combo id={id} value={value} onChange={setValue} options={comboOptions} allowCustom disabled={disabled} ariaLabel={label} placeholder="اختر أو اكتب…" />
+      {adding && !disabled ? (
         <div className="flex gap-1">
           <input
             value={newOpt}

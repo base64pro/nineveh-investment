@@ -10,6 +10,7 @@ import { ArrowLeftRight, Layers, Ruler, Tag, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Combo } from "@/components/ui/combo";
 import { OptionField } from "@/components/ui/option-field";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { ActionsWindow } from "@/features/parcels/actions-window";
@@ -192,7 +193,7 @@ export function ParcelWindow({
     onMoved({ kind: res.kind, id: res.id });
   }
 
-  const compact = cfg.fields.filter((f) => f.type !== "textarea");
+  const compact = cfg.fields.filter((f) => f.type !== "textarea" && f.key !== "status");
   const textareas = cfg.fields.filter((f) => f.type === "textarea");
 
   return createPortal(
@@ -223,22 +224,12 @@ export function ParcelWindow({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StateBadge state={state} />
                 {!readOnly ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-secondary/40 px-2 py-0.5 text-xs ring-1 ring-inset ring-border/60" title="نقل الحالة">
-                    <ArrowLeftRight className="size-3 text-muted-foreground" />
-                    <select
-                      value={state}
-                      disabled={moving}
-                      onChange={(e) => void handleMove(e.target.value as ParcelState)}
-                      aria-label="نقل الحالة"
-                      className="cursor-pointer bg-transparent text-xs font-medium text-foreground outline-none disabled:opacity-50"
-                    >
-                      {STATE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
+                  <div className="flex items-center gap-1.5" title="نقل الحالة بين الأقسام الخمسة">
+                    <ArrowLeftRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    <div className="w-32">
+                      <Combo value={state} onChange={(v) => void handleMove(v as ParcelState)} options={STATE_OPTIONS} ariaLabel="نقل الحالة" disabled={moving} />
+                    </div>
+                  </div>
                 ) : null}
                 <span className="inline-flex items-center gap-1 rounded-full bg-secondary/50 px-2 py-0.5 text-xs text-foreground/80 ring-1 ring-inset ring-border/60">
                   <Tag className="size-3" /> {sectorLabel(entity.sector as string | null)}
@@ -272,27 +263,6 @@ export function ParcelWindow({
               ) : null}
               {compact.map((f) => {
                 const id = `pw-${kind}-${f.key}`;
-                if (f.type === "select" && f.options) {
-                  return (
-                    <div key={f.key} className="space-y-1">
-                      <label htmlFor={id} className="block text-xs text-muted-foreground">
-                        {f.label}
-                      </label>
-                      <select
-                        id={id}
-                        name={f.key}
-                        defaultValue={field(entity, f.key)}
-                        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {f.options.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                }
                 if (cfg.optionFields.has(f.key)) {
                   const isSector = f.key === "sector";
                   const raw = field(entity, f.key);

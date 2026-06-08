@@ -34,6 +34,7 @@ import { governorateLabel } from "@/lib/governorates";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
+import { Combo } from "@/components/ui/combo";
 import { CompanyForm } from "./company-form";
 import { CompanyDetail } from "./company-detail";
 import { deleteCompany } from "./actions";
@@ -194,17 +195,19 @@ export function CompaniesPanel() {
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
           </button>
-          <select
-            value={elig}
-            onChange={(e) => setElig(e.target.value)}
-            title="تصفية الأهلية"
-            className="absolute end-0 top-1/2 -translate-y-1/2 rounded-md border border-input bg-background px-1.5 py-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">كل الأهلية</option>
-            <option value="eligible">مؤهّلة</option>
-            <option value="non_excluded">غير مستثناة</option>
-            <option value="excluded">مستثناة</option>
-          </select>
+          <div className="absolute end-0 top-1/2 w-28 -translate-y-1/2" title="تصفية الأهلية">
+            <Combo
+              value={elig}
+              onChange={setElig}
+              options={[
+                { value: "", label: "كل الأهلية" },
+                { value: "eligible", label: "مؤهّلة" },
+                { value: "non_excluded", label: "غير مستثناة" },
+                { value: "excluded", label: "مستثناة" },
+              ]}
+              ariaLabel="تصفية الأهلية"
+            />
+          </div>
         </div>
       </div>
 

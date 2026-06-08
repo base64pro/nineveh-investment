@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ComboField } from "@/components/ui/combo-field";
 import { asItems, CRITERION_DOMAINS, CRITERION_STATUSES, type CriterionItem } from "./fields";
 import { saveCriterion } from "./actions";
 import type { Criterion } from "@/types/entities";
@@ -85,20 +86,11 @@ export function CriterionForm({
           </div>
           <div className="space-y-1">
             <label htmlFor="cr-domain" className="block text-xs text-muted-foreground">المجال</label>
-            <select id="cr-domain" name="domain" defaultValue={initial?.domain ?? ""} className={INPUT}>
-              <option value="">غير محدّد</option>
-              {CRITERION_DOMAINS.map((d) => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
-            </select>
+            <ComboField id="cr-domain" name="domain" defaultValue={initial?.domain ?? ""} options={[{ value: "", label: "غير محدّد" }, ...CRITERION_DOMAINS]} ariaLabel="المجال" />
           </div>
           <div className="space-y-1">
             <label htmlFor="cr-status" className="block text-xs text-muted-foreground">الحالة</label>
-            <select id="cr-status" name="status" defaultValue={initial?.status ?? "active"} className={INPUT}>
-              {CRITERION_STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
+            <ComboField id="cr-status" name="status" defaultValue={initial?.status ?? "active"} options={[...CRITERION_STATUSES]} ariaLabel="الحالة" />
           </div>
         </div>
 
