@@ -4,6 +4,26 @@
 // صندوق نينوى التقريبي [minLng, minLat, maxLng, maxLat] (تحيّز أوّلي للنتائج).
 const NINEVEH_BBOX: [number, number, number, number] = [41.2, 35.0, 44.4, 37.4];
 
+// نوع تسمية الخريطة ← تسمية عربية واضحة (حي · منطقة · معلم …).
+const TYPE_LABEL: Record<string, string> = {
+  neighbourhood: "حي",
+  suburb: "حي",
+  quarter: "محلة",
+  locality: "منطقة",
+  place: "منطقة",
+  hamlet: "قرية",
+  village: "قرية",
+  town: "بلدة",
+  city: "مدينة",
+  municipality: "بلدة",
+  municipal_district: "ناحية",
+  county: "قضاء",
+  subregion: "قضاء",
+  poi: "معلم",
+  address: "عنوان",
+  street: "شارع",
+};
+
 export interface GeoPlace {
   label: string;
   sublabel: string;
@@ -41,7 +61,7 @@ export async function geocodeNineveh(query: string): Promise<GeoPlace[]> {
   url.searchParams.set("language", "ar");
   url.searchParams.set("country", "iq");
   url.searchParams.set("bbox", NINEVEH_BBOX.join(","));
-  url.searchParams.set("limit", "6");
+  url.searchParams.set("limit", "8");
 
   let data: unknown;
   try {
@@ -71,9 +91,10 @@ export async function geocodeNineveh(query: string): Promise<GeoPlace[]> {
     if (!normAr(`${placeName} ${ctxText}`).includes("نينو")) continue;
 
     const parts = placeName.split(",").map((s) => s.trim()).filter((s) => s && s !== "العراق");
+    const typeLabel = TYPE_LABEL[ft.place_type?.[0] ?? ""] ?? "موقع";
     out.push({
       label: ft.text_ar || ft.text || parts[0] || q,
-      sublabel: parts.slice(-2).join(" · ") || "موقع ضمن نينوى",
+      sublabel: [typeLabel, ...parts.slice(-2)].filter(Boolean).join(" · "),
       lng,
       lat,
       kind: ft.place_type?.[0] ?? "place",

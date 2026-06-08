@@ -96,16 +96,20 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
   const needle = (intent.terms[0] ?? "").trim() || (hasFilters ? "" : q);
   const sCode = intent.sector ? sectorCode(intent.sector) : null;
 
-  // 1) بحث بياناتنا (حتمي)
+  // بحث بياناتنا (حتمي) + تسميات/مواقع الخريطة الأصلية (geocoding) — **معاً دائماً** بالتوازي.
+  // فيعثر المستخدم على القطعة المرسومة وعلى أي تسمية على الخريطة (حي · منطقة · معلم · منشأة).
   const supabase = await createClient();
-  const { data } = await supabase.rpc("super_search", {
-    p_q: needle || null,
-    p_sector: sCode,
-    p_status: intent.status,
-    p_kinds: intent.kinds,
-    p_limit: 12,
-  });
-  const rows = (data ?? []) as Row[];
+  const [dbRes, places] = await Promise.all([
+    supabase.rpc("super_search", {
+      p_q: needle || null,
+      p_sector: sCode,
+      p_status: intent.status,
+      p_kinds: intent.kinds,
+      p_limit: 12,
+    }),
+    geocodeNineveh(intent.place || q),
+  ]);
+  const rows = (dbRes.data ?? []) as Row[];
   const entityResults: SearchResult[] = rows.map((r) => ({
     kind: r.kind,
     label: r.label ?? "—",
@@ -117,22 +121,18 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
     lat: null,
   }));
 
-  // 2) المواقع (geocoding ضمن نينوى) — عند استعلام مكان أو غياب نتائج بياناتية
-  let placeResults: SearchResult[] = [];
-  if (intent.place || entityResults.length === 0) {
-    const places = await geocodeNineveh(intent.place || q);
-    placeResults = places.map((p) => ({
-      kind: "place" as const,
-      label: p.label,
-      sublabel: p.sublabel,
-      parcel_no: null,
-      mapRef: null,
-      hasGeom: false,
-      lng: p.lng,
-      lat: p.lat,
-    }));
-  }
+  // تسميات/مواقع الخريطة (أُحضِرت أعلاه بالتوازي)
+  const placeResults: SearchResult[] = places.map((p) => ({
+    kind: "place" as const,
+    label: p.label,
+    sublabel: p.sublabel,
+    parcel_no: null,
+    mapRef: null,
+    hasGeom: false,
+    lng: p.lng,
+    lat: p.lat,
+  }));
 
-  // 3) دمج: بياناتنا أولاً ثم المواقع (§هـ.4 الأولوية لعناصرنا)
-  return { results: [...entityResults, ...placeResults].slice(0, 16) };
+  // دمج: بياناتنا أولاً ثم تسميات/مواقع الخريطة (§هـ.4 الأولوية لعناصرنا)
+  return { results: [...entityResults, ...placeResults].slice(0, 18) };
 }
