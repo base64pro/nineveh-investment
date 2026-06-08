@@ -668,15 +668,21 @@ export default function InvestmentMap() {
   function toggleDraw(): void {
     const draw = drawRef.current;
     if (!draw) return;
-    if (drawing) {
-      draw.setMode("static");
-      draw.clear();
+    try {
+      if (drawing) {
+        draw.setMode("static");
+        draw.clear();
+        linkTargetRef.current = null;
+        setDrawing(false);
+      } else {
+        linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
+        draw.setMode("polygon");
+        setDrawing(true);
+      }
+    } catch {
+      // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء وأعد الضبط
       linkTargetRef.current = null;
       setDrawing(false);
-    } else {
-      linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
-      draw.setMode("polygon");
-      setDrawing(true);
     }
   }
 
