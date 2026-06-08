@@ -4,7 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 import bbox from "@turf/bbox";
 import mask from "@turf/mask";
-import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
+import centroid from "@turf/centroid";
+import type { GeoJSONSource, Map as GLMap, Popup, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { Maximize2, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,16 +23,18 @@ import {
   type BaseStyle,
 } from "../lib/map-config";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { GeoJsonLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, IconLayer } from "@deck.gl/layers";
+import type { Layer } from "@deck.gl/core";
 import { useMapParcels } from "../lib/use-map-parcels";
 import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
+import { getPinIcons } from "../lib/parcel-markers";
 import { TerraDraw, TerraDrawPolygonMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
@@ -122,7 +125,13 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
   const dim = (f: Feature): boolean => selectedId !== null && refOf(f) !== selectedId;
   // ألفا: المحدّد يبرز · ما حوله يخفت · الباقي طبيعي.
   const alpha = (base: number, boost: number, f: Feature): number => (sel(f) ? boost : dim(f) ? Math.round(base * 0.3) : base);
-  return [
+  const icons = getPinIcons();
+  const markerData = fc.features.map((f) => ({
+    position: centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number],
+    state: stateOf(f) ?? "assumed",
+    ref_id: refOf(f) ?? "",
+  }));
+  const layers: Layer[] = [
     new GeoJsonLayer({
       id: "parcels-glow",
       data: fc,
@@ -160,6 +169,25 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       updateTriggers: { getFillColor: selectedId, getLineColor: selectedId, getLineWidth: selectedId },
     }),
   ];
+  // إشارة لكل قطعة (ساق + قرص بلون الحالة) — ظاهرة من أبعد زوم، قابلة للنقر.
+  if (icons.assumed) {
+    const fallback = icons.assumed;
+    layers.push(
+      new IconLayer({
+        id: "parcel-markers",
+        data: markerData,
+        pickable: true,
+        billboard: true,
+        getPosition: (d: { position: [number, number] }) => d.position,
+        getIcon: (d: { state: string }) => icons[d.state] ?? fallback,
+        getSize: (d: { ref_id: string }) => (selectedId !== null && d.ref_id === selectedId ? 1.32 : 1),
+        sizeUnits: "pixels",
+        sizeScale: 44,
+        updateTriggers: { getSize: selectedId },
+      }),
+    );
+  }
+  return layers;
 }
 
 /** المقاييس الثلاثة (م2.3): عدّ [معلَنة، رخص، مفترضة] حسب اسم القضاء/الناحية (مطابقة الحقل). */
@@ -291,6 +319,7 @@ export default function InvestmentMap() {
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
   const overlayRef = useRef<MapboxOverlay | null>(null);
+  const popupRef = useRef<Popup | null>(null);
   const { fc } = useMapParcels();
   const fcRef = useRef<FeatureCollection>(fc);
   fcRef.current = fc;
@@ -384,13 +413,40 @@ export default function InvestmentMap() {
         const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
-        // نقر قطعة ← تحديدها (توهّج + خفوت ما حولها §هـ.4)؛ نقر فراغ ← إلغاء التحديد
+        // نقر إشارة القطعة ← نافذة منبثقة (موقع/عرض)؛ نقر قطعة ← تحديدها؛ نقر فراغ ← إلغاء
         m.on("click", (e) => {
           const ov = overlayRef.current;
           if (!ov) return;
+          const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
+          const mkObj = mk?.object as { ref_id?: string; position?: [number, number] } | undefined;
+          if (mkObj?.ref_id) {
+            const refId = mkObj.ref_id;
+            popupRef.current?.remove();
+            const el = document.createElement("div");
+            el.className = "flex gap-1.5 rounded-lg bg-card/95 p-1.5 shadow-xl ring-1 ring-border backdrop-blur";
+            const mkBtn = (label: string, fn: () => void): HTMLButtonElement => {
+              const b = document.createElement("button");
+              b.type = "button";
+              b.textContent = label;
+              b.className = "rounded-md bg-secondary/60 px-3 py-1 text-xs font-medium text-foreground transition hover:bg-accent";
+              b.addEventListener("click", () => {
+                fn();
+                popupRef.current?.remove();
+              });
+              return b;
+            };
+            el.appendChild(mkBtn("موقع", () => requestFlyTo(refId)));
+            el.appendChild(mkBtn("عرض", () => requestOpenParcelDetail(refId)));
+            popupRef.current = new maplibregl.Popup({ className: "parcel-popup", closeButton: false, offset: 26, maxWidth: "none" })
+              .setLngLat(mkObj.position ?? e.lngLat)
+              .setDOMContent(el)
+              .addTo(m);
+            return;
+          }
           const info = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 5, layerIds: ["parcels"] });
           const ref = info?.object?.properties?.ref_id;
           setSelectedId(typeof ref === "string" ? ref : null);
+          popupRef.current?.remove();
         });
 
         // أداة الرسم (terra-draw) — قطعة مفترضة + استنتاج مكاني
@@ -460,6 +516,8 @@ export default function InvestmentMap() {
         /* تجاهل */
       }
       drawRef.current = null;
+      popupRef.current?.remove();
+      popupRef.current = null;
       map?.remove();
       mapRef.current = null;
       overlayRef.current = null;

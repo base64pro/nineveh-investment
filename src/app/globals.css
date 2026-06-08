@@ -85,3 +85,14 @@
     background-color: hsl(var(--ring) / 0.6);
   }
 }
+
+/* نافذة إشارة القطعة على الخريطة — محتوى مخصّص (نتجاوز نمط MapLibre الفاتح) */
+.parcel-popup .maplibregl-popup-content {
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.parcel-popup .maplibregl-popup-tip {
+  display: none;
+}
