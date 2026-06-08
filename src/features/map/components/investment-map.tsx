@@ -31,6 +31,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
+import { onFlyTo } from "../lib/map-nav-store";
 
 type MapData = {
   gov: FeatureCollection;
@@ -108,34 +109,49 @@ function overlayLayers(): StyleLayer[] {
   ];
 }
 
-/** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج. */
-function parcelLayers(fc: FeatureCollection) {
-  const stateOf = (f: Feature): string | undefined => {
-    const s = f.properties?.state;
-    return typeof s === "string" ? s : undefined;
-  };
+/** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
+function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
+  const stateOf = (f: Feature): string | undefined => (typeof f.properties?.state === "string" ? f.properties.state : undefined);
+  const refOf = (f: Feature): string | undefined => (typeof f.properties?.ref_id === "string" ? f.properties.ref_id : undefined);
+  const sel = (f: Feature): boolean => selectedId !== null && refOf(f) === selectedId;
+  const dim = (f: Feature): boolean => selectedId !== null && refOf(f) !== selectedId;
+  // ألفا: المحدّد يبرز · ما حوله يخفت · الباقي طبيعي.
+  const alpha = (base: number, boost: number, f: Feature): number => (sel(f) ? boost : dim(f) ? Math.round(base * 0.3) : base);
   return [
     new GeoJsonLayer({
       id: "parcels-glow",
       data: fc,
       filled: false,
       stroked: true,
-      getLineColor: (f: Feature) => glowRgba(stateOf(f)),
-      getLineWidth: 6,
+      getLineColor: (f: Feature) => {
+        const [r, g, b] = glowRgba(stateOf(f));
+        return [r, g, b, alpha(80, 170, f)];
+      },
+      getLineWidth: (f: Feature) => (sel(f) ? 10 : 6),
       lineWidthUnits: "pixels",
       lineWidthMinPixels: 3,
+      updateTriggers: { getLineColor: selectedId, getLineWidth: selectedId },
     }),
     new GeoJsonLayer({
       id: "parcels",
       data: fc,
       filled: true,
       stroked: true,
-      getFillColor: (f: Feature) => fillRgba(stateOf(f)),
-      getLineColor: (f: Feature) => lineRgba(stateOf(f)),
-      getLineWidth: 2,
+      pickable: true,
+      autoHighlight: true,
+      highlightColor: [255, 255, 255, 38],
+      getFillColor: (f: Feature) => {
+        const [r, g, b] = fillRgba(stateOf(f));
+        return [r, g, b, alpha(64, 120, f)];
+      },
+      getLineColor: (f: Feature) => {
+        const [r, g, b] = lineRgba(stateOf(f));
+        return [r, g, b, alpha(235, 255, f)];
+      },
+      getLineWidth: (f: Feature) => (sel(f) ? 4 : 2),
       lineWidthUnits: "pixels",
       lineWidthMinPixels: 1.5,
-      pickable: true,
+      updateTriggers: { getFillColor: selectedId, getLineColor: selectedId, getLineWidth: selectedId },
     }),
   ];
 }
@@ -212,6 +228,9 @@ export default function InvestmentMap() {
   const queryClient = useQueryClient();
   const qcRef = useRef(queryClient);
   qcRef.current = queryClient;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(selectedId);
+  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     let cancelled = false;
@@ -278,9 +297,17 @@ export default function InvestmentMap() {
         const m = mapRef.current;
         if (cancelled || !m) return;
         // طبقة القطع الملوّنة (deck.gl فوق الخريطة)
-        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current) });
+        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
+        // نقر قطعة ← تحديدها (توهّج + خفوت ما حولها §هـ.4)؛ نقر فراغ ← إلغاء التحديد
+        m.on("click", (e) => {
+          const ov = overlayRef.current;
+          if (!ov) return;
+          const info = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 5, layerIds: ["parcels"] });
+          const ref = info?.object?.properties?.ref_id;
+          setSelectedId(typeof ref === "string" ? ref : null);
+        });
 
         // أداة الرسم (terra-draw) — قطعة مفترضة + استنتاج مكاني
         const draw = new TerraDraw({
@@ -349,10 +376,23 @@ export default function InvestmentMap() {
     };
   }, []);
 
-  // تحديث طبقات القطع عند تغيّر البيانات (انعكاس لحظي)
+  // تحديث طبقات القطع عند تغيّر البيانات أو التحديد (انعكاس لحظي)
   useEffect(() => {
-    overlayRef.current?.setProps({ layers: parcelLayers(fc) });
-  }, [fc]);
+    overlayRef.current?.setProps({ layers: parcelLayers(fc, selectedId) });
+  }, [fc, selectedId]);
+
+  // الانتقال لقطعة من السايدبار (§هـ.2 مبدأ التنقّل): flyTo + تحديد
+  useEffect(() => {
+    return onFlyTo((refId) => {
+      const m = mapRef.current;
+      const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === refId);
+      setSelectedId(refId);
+      if (m && f?.geometry) {
+        const b = bbox(f) as [number, number, number, number];
+        m.fitBounds(b, { padding: 80, maxZoom: 16, duration: 1000 });
+      }
+    });
+  }, []);
 
   async function switchBase(next: BaseStyle): Promise<void> {
     const map = mapRef.current;

@@ -8,6 +8,7 @@ import {
   Building2,
   CheckCheck,
   ChevronDown,
+  Crosshair,
   Download,
   Eye,
   Home,
@@ -37,6 +38,7 @@ import { StateBadge } from "@/features/parcels/state-badge";
 import { AssumedForm } from "./assumed-form";
 import { AssumedDetail } from "./assumed-detail";
 import { deleteAssumed } from "./actions";
+import { requestFlyTo } from "@/features/map/lib/map-nav-store";
 import { ASSUMED_EXPORT_COLUMNS } from "./fields";
 import type { AssumedParcel } from "@/types/entities";
 
@@ -269,6 +271,9 @@ export function AssumedPanel() {
                     <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5">
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => requestFlyTo(o.id)} title="الموقع على الخريطة">
+                        <Crosshair className="size-3.5" /> موقع
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
