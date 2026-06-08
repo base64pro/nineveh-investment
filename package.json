@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.3",
+    "@deck.gl/extensions": "^9.3.3",
     "@deck.gl/layers": "^9.3.3",
     "@deck.gl/mapbox": "^9.3.3",
     "@mapbox/mapbox-gl-rtl-text": "^0.2.3",
