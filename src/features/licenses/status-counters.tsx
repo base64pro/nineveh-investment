@@ -93,7 +93,7 @@ export function LicenseStatusCounters({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 44 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="absolute right-[554px] top-16 z-10 flex flex-col gap-2.5"
+      className="absolute right-[547px] top-16 z-10 flex flex-col gap-2.5"
       aria-label="عدّادات حالات الرخص"
     >
       {COUNTERS.map((c) => (
