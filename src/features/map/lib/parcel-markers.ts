@@ -27,8 +27,8 @@ function lighten(hex: string): string {
 }
 
 function makePin(color: string): PinIcon {
-  const W = 44;
-  const H = 58;
+  const W = 46;
+  const H = 60;
   const dpr = 2;
   const canvas = document.createElement("canvas");
   canvas.width = W * dpr;
@@ -37,34 +37,34 @@ function makePin(color: string): PinIcon {
   if (!ctx) return { url: "", width: W, height: H, anchorX: W / 2, anchorY: H, mask: false };
   ctx.scale(dpr, dpr);
   const cx = W / 2;
-  const orbR = 14;
-  const orbCY = orbR + 3;
-  // الساق
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
+  const ring = 3;
+  const orbR = 13;
+  const orbCY = orbR + ring + 2;
+  // الساق الأبيض الواضح (يتّصل بالحلقة)
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 4;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(cx, orbCY + orbR - 3);
-  ctx.lineTo(cx, H - 2);
+  ctx.moveTo(cx, orbCY + orbR);
+  ctx.lineTo(cx, H - 3);
   ctx.stroke();
-  // القرص الكروي (تدرّج شعاعي = ثلاثي الأبعاد) + توهّج
+  // اللبّ بلون النوع (تدرّج كروي ثلاثي الأبعاد) + توهّج
   ctx.save();
   ctx.shadowColor = color;
-  ctx.shadowBlur = 8;
+  ctx.shadowBlur = 9;
   const grad = ctx.createRadialGradient(cx - 4, orbCY - 4, 1.5, cx, orbCY, orbR);
-  grad.addColorStop(0, "#ffffff");
-  grad.addColorStop(0.28, lighten(color));
+  grad.addColorStop(0, lighten(color));
   grad.addColorStop(1, color);
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.arc(cx, orbCY, orbR, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  // حدّ فاتح أنيق
-  ctx.strokeStyle = "rgba(255,255,255,0.75)";
-  ctx.lineWidth = 1.5;
+  // الحلقة البيضاء تحاوط القرص بأناقة
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = ring;
   ctx.beginPath();
-  ctx.arc(cx, orbCY, orbR, 0, Math.PI * 2);
+  ctx.arc(cx, orbCY, orbR + ring / 2, 0, Math.PI * 2);
   ctx.stroke();
   return { url: canvas.toDataURL(), width: W, height: H, anchorX: cx, anchorY: H, mask: false };
 }

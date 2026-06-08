@@ -435,9 +435,17 @@ export default function InvestmentMap() {
               });
               return b;
             };
-            el.appendChild(mkBtn("موقع", () => requestFlyTo(refId)));
+            el.appendChild(mkBtn("الموقع الحي", () => requestFlyTo(refId)));
             el.appendChild(mkBtn("عرض", () => requestOpenParcelDetail(refId)));
-            popupRef.current = new maplibregl.Popup({ className: "parcel-popup", closeButton: false, offset: 26, maxWidth: "none" })
+            // تنبثق بجانب القرص (يمين/يسار حسب الموضع) فلا تتداخل
+            const onRight = e.point.x > m.getContainer().clientWidth / 2;
+            popupRef.current = new maplibregl.Popup({
+              className: "parcel-popup",
+              closeButton: false,
+              anchor: onRight ? "right" : "left",
+              offset: onRight ? [-18, -42] : [18, -42],
+              maxWidth: "none",
+            })
               .setLngLat(mkObj.position ?? e.lngLat)
               .setDOMContent(el)
               .addTo(m);

@@ -8,7 +8,7 @@ import {
   Building2,
   CheckCheck,
   ChevronDown,
-  Crosshair,
+  LocateFixed,
   Download,
   Eye,
   Home,
@@ -256,11 +256,11 @@ export function AssumedPanel() {
                   <button
                     type="button"
                     onClick={() => requestFlyTo(o.id)}
-                    title="الموقع على الخريطة"
-                    aria-label="الموقع على الخريطة"
-                    className="mt-2.5 shrink-0 rounded-md p-1.5 text-state-assumed transition hover:bg-state-assumed/15"
+                    title="الموقع الحي"
+                    aria-label="الموقع الحي"
+                    className="mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white ring-1 ring-inset ring-white/25 transition hover:bg-white/20 hover:ring-white/40"
                   >
-                    <Crosshair className="size-4" />
+                    <LocateFixed className="size-3.5" /> الموقع الحي
                   </button>
                 </div>
 
