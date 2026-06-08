@@ -9,8 +9,10 @@ import {
   Download,
   Eye,
   Home,
+  LocateFixed,
   MapPin,
   Pencil,
+  PenTool,
   Plus,
   Ruler,
   Tag,
@@ -26,6 +28,7 @@ import { sectorLabel } from "@/lib/sectors";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
+import { requestFlyTo, requestStartDraw } from "@/features/map/lib/map-nav-store";
 import { OpportunityForm } from "./opportunity-form";
 import { OpportunityDetail } from "./opportunity-detail";
 import { deleteOpportunity } from "./actions";
@@ -266,6 +269,15 @@ export function OpportunitiesPanel() {
                       <span className="ms-auto text-xs font-medium text-foreground">معلَنة</span>
                     </div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => requestFlyTo(o.parcel_no ?? "")}
+                    title="الموقع الحي"
+                    aria-label="الموقع الحي"
+                    className="mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white ring-1 ring-inset ring-white/25 transition hover:bg-white/20 hover:ring-white/40"
+                  >
+                    <LocateFixed className="size-3.5" /> الموقع الحي
+                  </button>
                 </div>
 
                 {/* جسم البطاقة (عند الفتح فقط) */}
@@ -293,6 +305,11 @@ export function OpportunitiesPanel() {
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
+                      {o.parcel_no ? (
+                        <Button size="sm" variant="outline" onClick={() => { if (o.parcel_no) requestStartDraw({ parcel_no: o.parcel_no, muqataa_no: o.muqataa_no, label: o.title ?? "القطعة" }); }} title="ارسم حدودها واربطها على الخريطة">
+                          <PenTool className="size-3.5" /> ارسم
+                        </Button>
+                      ) : null}
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>

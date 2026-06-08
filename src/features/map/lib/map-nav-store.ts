@@ -1,6 +1,19 @@
 // ناقل بسيط (pub/sub) لطلب الانتقال لقطعة على الخريطة من السايدبار (§هـ.2 مبدأ التنقّل).
 type Listener = (refId: string) => void;
 
+// هدف رسم/ربط هندسة لقطعة بياناتية موجودة (فرصة/رخصة).
+export type DrawTarget = { parcel_no: string; muqataa_no: string | null; label?: string };
+const drawListeners = new Set<(t: DrawTarget) => void>();
+export function requestStartDraw(target: DrawTarget): void {
+  for (const l of drawListeners) l(target);
+}
+export function onStartDraw(listener: (t: DrawTarget) => void): () => void {
+  drawListeners.add(listener);
+  return () => {
+    drawListeners.delete(listener);
+  };
+}
+
 const listeners = new Set<Listener>();
 
 export function requestFlyTo(refId: string): void {

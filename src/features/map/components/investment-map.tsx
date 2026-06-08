@@ -35,7 +35,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onStartDraw, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
@@ -329,6 +330,7 @@ export default function InvestmentMap() {
   const fcRef = useRef<FeatureCollection>(fc);
   fcRef.current = fc;
   const drawRef = useRef<TerraDraw | null>(null);
+  const linkTargetRef = useRef<DrawTarget | null>(null);
   const [drawing, setDrawing] = useState(false);
   const queryClient = useQueryClient();
   const qcRef = useRef(queryClient);
@@ -486,28 +488,46 @@ export default function InvestmentMap() {
           const feat = d.getSnapshot().find((f) => f.id === id);
           if (!feat || feat.geometry?.type !== "Polygon") return;
           const polygon = feat as unknown as Feature<Polygon>;
-          const district = inferName(polygon, data.districts);
-          const subdistrict = inferName(polygon, data.subdistricts);
+          const target = linkTargetRef.current;
+          linkTargetRef.current = null;
           void (async () => {
             const supabase = createClient();
-            const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
-              p_geom: polygon.geometry,
-              p_district: district,
-              p_subdistrict: subdistrict,
-            });
+            let createdId: string | null = null;
+            let failed = false;
+            if (target) {
+              // ربط الهندسة بقطعة موجودة (فرصة/رخصة)
+              const { error } = await supabase.rpc("create_parcel_geometry", {
+                p_geom: polygon.geometry,
+                p_parcel_no: target.parcel_no,
+                p_muqataa_no: target.muqataa_no,
+              });
+              failed = Boolean(error);
+            } else {
+              // قطعة مفترضة جديدة + استنتاج مكاني
+              const district = inferName(polygon, data.districts);
+              const subdistrict = inferName(polygon, data.subdistricts);
+              const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
+                p_geom: polygon.geometry,
+                p_district: district,
+                p_subdistrict: subdistrict,
+              });
+              failed = Boolean(error);
+              if (typeof newId === "string") createdId = newId;
+            }
             d.clear();
             d.setMode("static");
             setDrawing(false);
-            if (error) {
-              toast.error("تعذّر إنشاء القطعة");
+            if (failed) {
+              toast.error("تعذّر حفظ الحدود");
               return;
             }
-            toast.success(district ? `أُنشئت قطعة مفترضة — ${district}` : "أُنشئت قطعة مفترضة");
+            toast.success(target ? `رُبطت الحدود بـ${target.label ?? "القطعة"}` : "أُنشئت قطعة مفترضة");
             void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
             void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+            void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
             void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
-            // انبثاق نموذج البيانات للقطعة الجديدة (يملأ الباقي + يمنحها اسماً)
-            if (typeof newId === "string") requestOpenParcelForm(newId);
+            // قطعة مفترضة جديدة ← انبثاق نموذج بياناتها (اسم + باقي الحقول)
+            if (createdId) requestOpenParcelForm(createdId);
           })();
         });
         drawRef.current = draw;
@@ -552,15 +572,32 @@ export default function InvestmentMap() {
     applyVisibility(mapRef.current, showBoundaries);
   }, [showBoundaries]);
 
-  // الانتقال لقطعة من السايدبار (§هـ.2 مبدأ التنقّل): flyTo + تحديد
+  // الانتقال لقطعة من السايدبار (§هـ.2): flyTo + تحديد — بالمعرّف أو رقم القطعة
   useEffect(() => {
     return onFlyTo((refId) => {
       const m = mapRef.current;
-      const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === refId);
-      setSelectedId(refId);
+      const f = fcRef.current.features.find(
+        (ft) => ft.properties?.ref_id === refId || (refId !== "" && ft.properties?.parcel_no === refId),
+      );
       if (m && f?.geometry) {
+        const ref = f.properties?.ref_id;
+        setSelectedId(typeof ref === "string" ? ref : null);
         const b = bbox(f) as [number, number, number, number];
         m.fitBounds(b, { padding: 80, maxZoom: 16, duration: 1000 });
+      } else {
+        toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
+      }
+    });
+  }, []);
+
+  // بدء رسم وربط هندسة بقطعة موجودة (من بطاقة فرصة/رخصة)
+  useEffect(() => {
+    return onStartDraw((target) => {
+      linkTargetRef.current = target;
+      const d = drawRef.current;
+      if (d) {
+        d.setMode("polygon");
+        setDrawing(true);
       }
     });
   }, []);
@@ -591,8 +628,10 @@ export default function InvestmentMap() {
     if (drawing) {
       draw.setMode("static");
       draw.clear();
+      linkTargetRef.current = null;
       setDrawing(false);
     } else {
+      linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
       draw.setMode("polygon");
       setDrawing(true);
     }
