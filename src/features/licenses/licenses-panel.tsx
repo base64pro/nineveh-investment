@@ -33,6 +33,7 @@ import { sectorLabel } from "@/lib/sectors";
 import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FilterCombo } from "@/components/ui/filter-combo";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { LicenseForm } from "./license-form";
 import { LicenseDetail } from "./license-detail";
@@ -56,10 +57,6 @@ const STATUS_ACCENT: Record<string, string> = {
   completed: "from-state-completed to-state-completed/20",
   withdrawn: "from-state-withdrawn to-state-withdrawn/20",
 };
-
-// حقل تصفية أنيق موحّد (منسدلة + تحرير نصّ).
-const FILTER_INPUT =
-  "w-full rounded-lg border border-input bg-background/60 px-2 py-1.5 outline-none transition focus:ring-2 focus:ring-ring";
 
 // قرص ثلاثي الأبعاد بلون واحد بلا حدود، توهّج خفيف (ظلّ سفلي للطفو) — متسق للأزرار والعدّادات.
 const ORB =
@@ -225,16 +222,12 @@ export function LicensesPanel({
           placeholder="بحث (عنوان/رقم رخصة/مالك/مستثمر/قطعة)…"
           className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        {/* تصفية متقدّمة (٤ حقول متساوية): قطاع · قضاء · ناحية · حي — منسدلة + تحرير نصّ */}
+        {/* تصفية متقدّمة (٤ حقول): قطاع · قضاء · ناحية · حي — combobox أنيق */}
         <div className="grid grid-cols-4 gap-1.5 text-xs">
-          <input list="lic-sector-opts" value={sector} onChange={(e) => setSector(e.target.value)} placeholder="قطاع" className={FILTER_INPUT} />
-          <datalist id="lic-sector-opts">{sectorLabelOptions.map((s) => <option key={s} value={s} />)}</datalist>
-          <input list="lic-district-opts" value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="قضاء" className={FILTER_INPUT} />
-          <datalist id="lic-district-opts">{districtOptions.map((d) => <option key={d} value={d} />)}</datalist>
-          <input list="lic-subdistrict-opts" value={subdistrict} onChange={(e) => setSubdistrict(e.target.value)} placeholder="ناحية" className={FILTER_INPUT} />
-          <datalist id="lic-subdistrict-opts">{subdistrictOptions.map((s) => <option key={s} value={s} />)}</datalist>
-          <input list="lic-neighborhood-opts" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="حي" className={FILTER_INPUT} />
-          <datalist id="lic-neighborhood-opts">{neighborhoods.map((n) => <option key={n} value={n} />)}</datalist>
+          <FilterCombo value={sector} onChange={setSector} options={sectorLabelOptions} placeholder="قطاع" />
+          <FilterCombo value={district} onChange={setDistrict} options={districtOptions} placeholder="قضاء" />
+          <FilterCombo value={subdistrict} onChange={setSubdistrict} options={subdistrictOptions} placeholder="ناحية" />
+          <FilterCombo value={neighborhood} onChange={setNeighborhood} options={neighborhoods} placeholder="حي" />
         </div>
         {/* ثلاث دوائر إجراء متساوية متقاربة بصفّ واحد: تصدير (يمين) · إضافة (وسط) · تحديد الكل (يسار) */}
         <div className="relative flex items-center justify-center gap-3 pt-1">

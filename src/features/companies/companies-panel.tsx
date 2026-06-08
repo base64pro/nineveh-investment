@@ -33,6 +33,7 @@ import { sectorLabel } from "@/lib/sectors";
 import { governorateLabel } from "@/lib/governorates";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FilterCombo } from "@/components/ui/filter-combo";
 import { CompanyForm } from "./company-form";
 import { CompanyDetail } from "./company-detail";
 import { deleteCompany } from "./actions";
@@ -42,8 +43,6 @@ import type { Company } from "@/types/entities";
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
 
-const FILTER_INPUT =
-  "w-full rounded-lg border border-input bg-background/60 px-2 py-1.5 outline-none transition focus:ring-2 focus:ring-ring";
 const ORB =
   "relative grid place-items-center rounded-full text-foreground bg-[radial-gradient(circle_at_50%_28%,#4f6498,#2a3a5c)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.32),0_10px_22px_-8px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_2px_rgba(255,255,255,0.45),0_15px_28px_-8px_rgba(0,0,0,0.85)] active:translate-y-0 active:scale-95";
 
@@ -174,16 +173,12 @@ export function CompaniesPanel() {
           placeholder="بحث (اسم/رقم قيد/مدير/نشاط)…"
           className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        {/* تصفية متقدّمة (٤ حقول): قطاع · نوع · محافظة · نشاط — منسدلة + تحرير نصّ */}
+        {/* تصفية متقدّمة (٤ حقول): قطاع · نوع · محافظة · نشاط — combobox أنيق */}
         <div className="grid grid-cols-4 gap-1.5 text-xs">
-          <input list="co-sector-opts" value={sector} onChange={(e) => setSector(e.target.value)} placeholder="قطاع" className={FILTER_INPUT} />
-          <datalist id="co-sector-opts">{sectorLabelOptions.map((s) => <option key={s} value={s} />)}</datalist>
-          <input list="co-type-opts" value={companyType} onChange={(e) => setCompanyType(e.target.value)} placeholder="نوع" className={FILTER_INPUT} />
-          <datalist id="co-type-opts">{companyTypes.map((t) => <option key={t} value={t} />)}</datalist>
-          <input list="co-gov-opts" value={governorate} onChange={(e) => setGovernorate(e.target.value)} placeholder="محافظة" className={FILTER_INPUT} />
-          <datalist id="co-gov-opts">{govLabelOptions.map((g) => <option key={g} value={g} />)}</datalist>
-          <input list="co-activity-opts" value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="نشاط" className={FILTER_INPUT} />
-          <datalist id="co-activity-opts">{activities.map((a) => <option key={a} value={a} />)}</datalist>
+          <FilterCombo value={sector} onChange={setSector} options={sectorLabelOptions} placeholder="قطاع" />
+          <FilterCombo value={companyType} onChange={setCompanyType} options={companyTypes} placeholder="نوع" />
+          <FilterCombo value={governorate} onChange={setGovernorate} options={govLabelOptions} placeholder="محافظة" />
+          <FilterCombo value={activity} onChange={setActivity} options={activities} placeholder="نشاط" />
         </div>
         {/* صفّ الإجراءات: العدّاد + الأهلية + ثلاث دوائر */}
         <div className="relative flex items-center justify-center gap-3 pt-1">

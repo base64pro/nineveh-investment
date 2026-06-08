@@ -25,6 +25,7 @@ import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FilterCombo } from "@/components/ui/filter-combo";
 import { OpportunityForm } from "./opportunity-form";
 import { OpportunityDetail } from "./opportunity-detail";
 import { deleteOpportunity } from "./actions";
@@ -77,6 +78,7 @@ export function OpportunitiesPanel() {
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
   const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
   const muqataas = useMemo(() => distinct(all.map((o) => o.muqataa_no)), [all]);
   const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
@@ -98,12 +100,17 @@ export function OpportunitiesPanel() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    const secNeedle = sector.trim();
+    const dNeedle = district.trim().toLowerCase();
+    const nNeedle = neighborhood.trim().toLowerCase();
+    const mNeedle = muqataa.trim().toLowerCase();
+    const stNeedle = oppStatus.trim();
     return all.filter((o) => {
-      if (sector && o.sector !== sector) return false;
-      if (district && o.district !== district) return false;
-      if (neighborhood && o.neighborhood !== neighborhood) return false;
-      if (muqataa && o.muqataa_no !== muqataa) return false;
-      if (oppStatus && o.opp_status !== oppStatus) return false;
+      if (secNeedle && !sectorLabel(o.sector).includes(secNeedle)) return false;
+      if (dNeedle && !(o.district ?? "").toLowerCase().includes(dNeedle)) return false;
+      if (nNeedle && !(o.neighborhood ?? "").toLowerCase().includes(nNeedle)) return false;
+      if (mNeedle && !(o.muqataa_no ?? "").toLowerCase().includes(mNeedle)) return false;
+      if (stNeedle && !(o.opp_status ?? "").includes(stNeedle)) return false;
       if (availableOnly && !isAvailable(o)) return false;
       if (needle) {
         const hay = `${o.title ?? ""} ${o.parcel_no ?? ""} ${o.owner ?? ""} ${o.muqataa_name ?? ""} ${o.neighborhood ?? ""}`.toLowerCase();
@@ -159,29 +166,18 @@ export function OpportunitiesPanel() {
           placeholder="بحث (عنوان/قطعة/مالك/مقاطعة)…"
           className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        {/* فلترة متقدّمة (§ب.2.6): قطاع · قضاء · مقاطعة · حالة الإعلان · متاحة */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <select value={sector} onChange={(e) => setSector(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل القطاعات</option>
-            {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
-          </select>
-          <select value={district} onChange={(e) => setDistrict(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل الأقضية</option>
-            {districts.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <select value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل الأحياء</option>
-            {neighborhoods.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <select value={muqataa} onChange={(e) => setMuqataa(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل المقاطعات</option>
-            {muqataas.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <select value={oppStatus} onChange={(e) => setOppStatus(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل حالات الإعلان</option>
-            {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <label className="inline-flex items-center gap-1">
+        {/* فلترة متقدّمة (§ب.2.6): قطاع · قضاء · حي · مقاطعة — combobox أنيق */}
+        <div className="grid grid-cols-4 gap-1.5 text-xs">
+          <FilterCombo value={sector} onChange={setSector} options={sectorLabelOptions} placeholder="قطاع" />
+          <FilterCombo value={district} onChange={setDistrict} options={districts} placeholder="قضاء" />
+          <FilterCombo value={neighborhood} onChange={setNeighborhood} options={neighborhoods} placeholder="حي" />
+          <FilterCombo value={muqataa} onChange={setMuqataa} options={muqataas} placeholder="مقاطعة" />
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-44">
+            <FilterCombo value={oppStatus} onChange={setOppStatus} options={statuses} placeholder="حالة الإعلان" />
+          </div>
+          <label className="inline-flex items-center gap-1 text-muted-foreground">
             <input type="checkbox" checked={availableOnly} onChange={(e) => setAvailableOnly(e.target.checked)} className="size-3.5" />
             المتاحة فقط
           </label>
