@@ -36,9 +36,8 @@ import { FilterCombo } from "@/components/ui/filter-combo";
 import { LiveLocationButton } from "@/components/ui/live-location-button";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { AssumedForm } from "./assumed-form";
-import { AssumedDetail } from "./assumed-detail";
 import { deleteAssumed } from "./actions";
-import { requestFlyTo } from "@/features/map/lib/map-nav-store";
+import { requestFlyTo, requestOpenParcelDetail } from "@/features/map/lib/map-nav-store";
 import { ASSUMED_EXPORT_COLUMNS } from "./fields";
 import type { AssumedParcel } from "@/types/entities";
 
@@ -84,7 +83,6 @@ export function AssumedPanel() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AssumedParcel | null>(null);
-  const [detail, setDetail] = useState<AssumedParcel | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
@@ -272,10 +270,10 @@ export function AssumedPanel() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5">
-                      <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
+                      <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "assumed", id: o.id, readOnly: true })} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
+                      <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "assumed", id: o.id, readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
@@ -291,7 +289,6 @@ export function AssumedPanel() {
       </div>
 
       <AssumedForm open={formOpen} onClose={() => setFormOpen(false)} initial={editing} optionSets={optionSets} />
-      <AssumedDetail open={detail !== null} onClose={() => setDetail(null)} parcel={detail} />
     </div>
   );
 }

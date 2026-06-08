@@ -14,7 +14,7 @@ import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { CompaniesPanel } from "@/features/companies/companies-panel";
 import { CriteriaPanel } from "@/features/criteria/criteria-panel";
 import { AssumedPanel } from "@/features/assumed/assumed-panel";
-import { AssumedModals } from "@/features/assumed/assumed-modals";
+import { ParcelModals } from "@/features/parcels/parcel-modals";
 import { SECTIONS } from "./sections";
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
@@ -128,7 +128,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       </nav>
 
       {/* نوافذ القطعة المفترضة العامّة (تُفتح من الخريطة: بعد الرسم / من الإشارة) */}
-      <AssumedModals />
+      <ParcelModals />
     </>
   );
 }

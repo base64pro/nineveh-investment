@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { OptionField } from "@/components/ui/option-field";
+import { ComboField } from "@/components/ui/combo-field";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { COMPANY_FORM_FIELDS, COMPANY_OPTION_FIELDS } from "./fields";
 import { sectorLabel } from "@/lib/sectors";
@@ -84,18 +85,13 @@ export function CompanyForm({
                   <label htmlFor={`co-${f.key}`} className="block text-xs text-muted-foreground">
                     {f.label}
                   </label>
-                  <select
+                  <ComboField
                     id={`co-${f.key}`}
                     name={f.key}
                     defaultValue={initialValue(initial, f.key) || (f.options?.[0]?.value ?? "")}
-                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {f.options?.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={f.options ?? []}
+                    ariaLabel={f.label}
+                  />
                 </div>
               );
             }

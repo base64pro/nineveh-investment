@@ -39,12 +39,15 @@ export function onOpenParcelForm(listener: Listener): () => void {
   };
 }
 
-// فتح تفاصيل قطعة مفترضة (من إشارة الخريطة).
-const detailListeners = new Set<Listener>();
-export function requestOpenParcelDetail(id: string): void {
-  for (const l of detailListeners) l(id);
+// فتح نافذة القطعة الموحّدة (من إشارة الخريطة أو السايدبار) — للأنواع الثلاثة (م3.1).
+export type ParcelKind = "opportunity" | "license" | "assumed";
+export type ParcelRef = { kind: ParcelKind; id: string; readOnly?: boolean };
+type DetailListener = (ref: ParcelRef) => void;
+const detailListeners = new Set<DetailListener>();
+export function requestOpenParcelDetail(ref: ParcelRef): void {
+  for (const l of detailListeners) l(ref);
 }
-export function onOpenParcelDetail(listener: Listener): () => void {
+export function onOpenParcelDetail(listener: DetailListener): () => void {
   detailListeners.add(listener);
   return () => {
     detailListeners.delete(listener);

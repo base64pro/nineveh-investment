@@ -9,6 +9,7 @@ import {
   Calendar,
   CheckCheck,
   ChevronDown,
+  ClipboardList,
   Download,
   Eye,
   Home,
@@ -34,12 +35,13 @@ import { sectorLabel } from "@/lib/sectors";
 import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog } from "@/components/ui/dialog";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { LiveLocationButton } from "@/components/ui/live-location-button";
-import { requestFlyTo, requestStartDraw } from "@/features/map/lib/map-nav-store";
+import { requestFlyTo, requestOpenParcelDetail, requestStartDraw } from "@/features/map/lib/map-nav-store";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { LicenseForm } from "./license-form";
-import { LicenseDetail } from "./license-detail";
+import { VisitsLog } from "./visits/visits-log";
 import { deleteLicense } from "./actions";
 import { LICENSE_EXPORT_COLUMNS } from "./fields";
 import type { License } from "@/types/entities";
@@ -107,7 +109,7 @@ export function LicensesPanel({
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<License | null>(null);
-  const [detail, setDetail] = useState<License | null>(null);
+  const [visitsFor, setVisitsFor] = useState<License | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
@@ -326,6 +328,18 @@ export function LicensesPanel({
                     <div className="flex w-full items-center gap-2">
                       {o.sector ? <Chip icon={Tag} value={sectorLabel(o.sector)} /> : null}
                       <LiveLocationButton onClick={() => requestFlyTo(o.parcel_no ?? "")} />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVisitsFor(o);
+                        }}
+                        title="سجلّ الزيارات"
+                        aria-label="سجلّ الزيارات"
+                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-white shadow-sm ring-1 ring-inset ring-white/30 transition hover:scale-105 hover:bg-white/25 hover:ring-white/50 active:scale-95"
+                      >
+                        <ClipboardList className="size-3.5" />
+                      </button>
                       <span className="ms-auto">
                         <StateBadge state={o.status} />
                       </span>
@@ -355,7 +369,7 @@ export function LicensesPanel({
                     </div>
 
                     <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5">
-                      <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
+                      <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: true })} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
                       {o.parcel_no ? (
@@ -363,7 +377,7 @@ export function LicensesPanel({
                           <PenTool className="size-3.5" /> ارسم
                         </Button>
                       ) : null}
-                      <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
+                      <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
@@ -379,7 +393,14 @@ export function LicensesPanel({
       </div>
 
       <LicenseForm open={formOpen} onClose={() => setFormOpen(false)} initial={editing} optionSets={optionSets} />
-      <LicenseDetail open={detail !== null} onClose={() => setDetail(null)} license={detail} />
+      <Dialog
+        open={visitsFor !== null}
+        onClose={() => setVisitsFor(null)}
+        title={`سجلّ الزيارات — ${visitsFor?.title ?? visitsFor?.license_number ?? "رخصة"}`}
+        size="lg"
+      >
+        {visitsFor ? <VisitsLog parcelRef={String(visitsFor.record_id)} /> : null}
+      </Dialog>
     </div>
   );
 }

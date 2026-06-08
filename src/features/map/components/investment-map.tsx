@@ -34,7 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onStartDraw, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
@@ -132,6 +132,8 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
     state: stateOf(f) ?? "assumed",
     ref_id: refOf(f) ?? "",
     label: typeof f.properties?.label === "string" ? f.properties.label : "",
+    kind: typeof f.properties?.kind === "string" ? f.properties.kind : "assumed",
+    entity_id: typeof f.properties?.entity_id === "string" ? f.properties.entity_id : "",
   }));
   const layers: Layer[] = [
     new GeoJsonLayer({
@@ -422,31 +424,46 @@ export default function InvestmentMap() {
           const ov = overlayRef.current;
           if (!ov) return;
           const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
-          const mkObj = mk?.object as { ref_id?: string; position?: [number, number]; label?: string } | undefined;
+          const mkObj = mk?.object as
+            | { ref_id?: string; position?: [number, number]; label?: string; kind?: string; entity_id?: string }
+            | undefined;
           if (mkObj?.ref_id) {
             const refId = mkObj.ref_id;
             popupRef.current?.remove();
-            // نافذة عمودية أنيقة: عنوان القطعة أعلى، ثم «عرض» ثم «الموقع»
+            // بطاقة عمودية أنيقة بهوية النظام: العنوان أعلى، ثم «عرض» ثم «الموقع»
             const el = document.createElement("div");
-            el.className = "flex w-44 flex-col gap-1 rounded-xl bg-card/95 p-2 shadow-xl ring-1 ring-border backdrop-blur";
+            el.style.fontFamily = "var(--font-readex), system-ui, sans-serif";
+            el.className =
+              "flex w-48 flex-col gap-2 rounded-2xl border border-border/70 bg-gradient-to-b from-card to-card/90 p-2.5 text-foreground shadow-2xl shadow-primary/25 ring-1 ring-inset ring-foreground/10 backdrop-blur-md";
             const titleEl = document.createElement("div");
-            titleEl.className = "mb-0.5 truncate border-b border-border/60 px-1 pb-1.5 text-center text-xs font-bold text-foreground";
+            titleEl.className = "truncate border-b border-border/60 px-1 pb-2 text-center text-[13px] font-bold tracking-tight text-foreground";
             titleEl.textContent = mkObj.label || "قطعة";
             titleEl.title = mkObj.label ?? "";
             el.appendChild(titleEl);
-            const mkBtn = (text: string, fn: () => void): HTMLButtonElement => {
+            const EYE =
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>';
+            const NAV =
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>';
+            const mkBtn = (text: string, icon: string, cls: string, fn: () => void): HTMLButtonElement => {
               const b = document.createElement("button");
               b.type = "button";
-              b.textContent = text;
-              b.className = "w-full rounded-lg bg-secondary/60 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent";
+              b.className =
+                "flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95 " + cls;
+              b.innerHTML = icon + "<span>" + text + "</span>";
               b.addEventListener("click", () => {
                 fn();
                 popupRef.current?.remove();
               });
               return b;
             };
-            el.appendChild(mkBtn("عرض", () => requestOpenParcelDetail(refId)));
-            el.appendChild(mkBtn("الموقع", () => requestFlyTo(refId)));
+            el.appendChild(
+              mkBtn("عرض", EYE, "bg-primary/15 text-primary ring-1 ring-inset ring-primary/30 hover:bg-primary/25", () =>
+                requestOpenParcelDetail({ kind: (mkObj.kind as ParcelKind) || "assumed", id: mkObj.entity_id || "" }),
+              ),
+            );
+            el.appendChild(
+              mkBtn("الموقع", NAV, "bg-secondary/60 text-foreground ring-1 ring-inset ring-border/50 hover:bg-accent", () => requestFlyTo(refId)),
+            );
             // تنبثق بجانب القرص (يمين/يسار حسب الموضع) فلا تتداخل
             const onRight = e.point.x > m.getContainer().clientWidth / 2;
             popupRef.current = new maplibregl.Popup({
