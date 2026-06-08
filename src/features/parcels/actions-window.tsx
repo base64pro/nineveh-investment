@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { FileText, Lightbulb, ListChecks, Scale, Sparkles, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ControlsTab } from "./legal/controls-tab";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 
 type TabKey = "controls" | "recommendations" | "criteria" | "report";
@@ -40,7 +41,7 @@ function SoonPanel({ icon: Icon, title, desc, action, phase }: { icon: LucideIco
   );
 }
 
-export function ActionsWindow({ onClose }: { kind: ParcelKind; entity: Record<string, unknown>; onClose: () => void }) {
+export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; entity: Record<string, unknown>; onClose: () => void }) {
   const [tab, setTab] = useState<TabKey>("controls");
 
   return createPortal(
@@ -89,15 +90,7 @@ export function ActionsWindow({ onClose }: { kind: ParcelKind; entity: Record<st
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {tab === "controls" ? (
-            <SoonPanel
-              icon={Scale}
-              title="الضوابط والمعايير القانونية (الفحص القانوني)"
-              desc="فحص حتمي يطابق حقول القطعة بالطبقة القانونية ← الضوابط الملزمة باستشهاد واستيفاء، متكيّفة مع الحالات الخمس. القرار بقواعد موثّقة لا بالذكاء."
-              action="عرض الفحص"
-              phase="م3.3"
-            />
-          ) : null}
+          {tab === "controls" ? <ControlsTab kind={kind} entity={entity} /> : null}
           {tab === "recommendations" ? (
             <SoonPanel
               icon={Lightbulb}
