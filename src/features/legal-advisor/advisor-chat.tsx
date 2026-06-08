@@ -3,9 +3,11 @@
 // المستشار — الشق الثاني (أسئلة حرّة): محادثة مستندة للطبقة القانونية باستشهاد (§هـ.5).
 
 import { useEffect, useRef, useState } from "react";
-import { Scale, Send, Sparkles, User } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { BookmarkPlus, Scale, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { askLegalAdvisor } from "./actions";
+import { saveConsultation } from "./consultation-actions";
 import { AdvisorAnswer } from "./advisor-answer";
 import type { ChatMessage } from "@/lib/ai/anthropic";
 
@@ -13,7 +15,24 @@ export function AdvisorChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savingIdx, setSavingIdx] = useState<number | null>(null);
+  const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  async function saveOne(i: number) {
+    const answer = messages[i]?.content ?? "";
+    const question = messages[i - 1]?.content ?? "";
+    if (!question || !answer || savingIdx !== null) return;
+    setSavingIdx(i);
+    const res = await saveConsultation({ question, answer });
+    setSavingIdx(null);
+    if (res.ok) {
+      toast.success("حُفِظت في المكتبة");
+      void queryClient.invalidateQueries({ queryKey: ["table", "consultations"] });
+    } else {
+      toast.error("تعذّر الحفظ");
+    }
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -56,9 +75,20 @@ export function AdvisorChat() {
             </div>
           ) : (
             <div key={i} className="rounded-2xl border border-border/60 bg-background/40 p-3">
-              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-primary/70">
-                <Sparkles className="size-3.5" /> المستشار القانوني
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold text-primary/70">
+                  <Sparkles className="size-3.5" /> المستشار القانوني
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void saveOne(i)}
+                  disabled={savingIdx === i}
+                  title="حفظ في مكتبة الاستشارات"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary disabled:opacity-50"
+                >
+                  <BookmarkPlus className="size-3.5" /> {savingIdx === i ? "…" : "حفظ"}
+                </button>
+              </div>
               <AdvisorAnswer text={m.content} />
             </div>
           ),

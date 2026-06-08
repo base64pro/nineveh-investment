@@ -3,18 +3,20 @@
 // المستشار القانوني للاستثمار (§هـ.5) — شقّان: أسئلة حرّة (محادثة RAG) · استمارة استعلام (ضوابط حتمية).
 
 import { useState } from "react";
-import { ClipboardList, MessageSquare } from "lucide-react";
+import { ClipboardList, Library, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdvisorChat } from "./advisor-chat";
 import { AdvisorInquiryForm } from "./advisor-inquiry-form";
+import { ConsultationsLibrary } from "./consultations-library";
 
 const TABS = [
   { key: "chat", label: "أسئلة حرّة", icon: MessageSquare },
   { key: "form", label: "استمارة استعلام", icon: ClipboardList },
+  { key: "library", label: "المكتبة", icon: Library },
 ] as const;
 
 export function LegalAdvisorPanel() {
-  const [tab, setTab] = useState<"chat" | "form">("chat");
+  const [tab, setTab] = useState<"chat" | "form" | "library">("chat");
 
   return (
     <div className="flex h-full flex-col">
@@ -43,6 +45,9 @@ export function LegalAdvisorPanel() {
         </div>
         <div className={cn("h-full", tab !== "form" && "hidden")}>
           <AdvisorInquiryForm />
+        </div>
+        <div className={cn("h-full", tab !== "library" && "hidden")}>
+          <ConsultationsLibrary />
         </div>
       </div>
     </div>
