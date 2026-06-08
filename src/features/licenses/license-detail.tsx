@@ -33,6 +33,7 @@ const GRID_SECTIONS: { title: string; icon: LucideIcon; fields: { key: string; l
       { key: "muqataa_no", label: "رقم المقاطعة" },
       { key: "muqataa_name", label: "اسم المقاطعة" },
       { key: "district", label: "القضاء" },
+      { key: "neighborhood", label: "الحي/المنطقة" },
       { key: "zoning", label: "التخطيط" },
     ],
   },

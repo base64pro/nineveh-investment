@@ -9,6 +9,9 @@ import {
   ChevronDown,
   Download,
   Eye,
+  Home,
+  Landmark,
+  ListChecks,
   MapPin,
   Pencil,
   Plus,
@@ -24,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { exportCsv } from "@/lib/export-csv";
 import { formatArea, formatDate, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
+import { NINEVEH_DISTRICTS } from "@/lib/nineveh-geo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StateBadge } from "@/features/parcels/state-badge";
@@ -80,6 +84,7 @@ export function LicensesPanel() {
   const [status, setStatus] = useState("");
   const [sector, setSector] = useState("");
   const [district, setDistrict] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
   const [muqataa, setMuqataa] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -92,6 +97,11 @@ export function LicensesPanel() {
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
   const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
   const muqataas = useMemo(() => distinct(all.map((o) => o.muqataa_no)), [all]);
+  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const districtOptions = useMemo(
+    () => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(),
+    [districts],
+  );
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = { "in-progress": 0, completed: 0, withdrawn: 0 };
     for (const l of all) c[l.status] = (c[l.status] ?? 0) + 1;
@@ -102,28 +112,32 @@ export function LicensesPanel() {
     () => ({
       sector: sectors,
       project_type: distinct(all.map((o) => o.project_type)),
-      district: districts,
+      district: districtOptions,
+      neighborhood: neighborhoods,
       muqataa_name: distinct(all.map((o) => o.muqataa_name)),
       land_right: distinct(all.map((o) => o.land_right)),
       investor_nationality: distinct(all.map((o) => o.investor_nationality)),
     }),
-    [all, sectors, districts],
+    [all, sectors, districtOptions, neighborhoods],
   );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    const dNeedle = district.trim().toLowerCase();
+    const nNeedle = neighborhood.trim().toLowerCase();
     return all.filter((o) => {
       if (status && o.status !== status) return false;
       if (sector && o.sector !== sector) return false;
-      if (district && o.district !== district) return false;
+      if (dNeedle && !(o.district ?? "").toLowerCase().includes(dNeedle)) return false;
+      if (nNeedle && !(o.neighborhood ?? "").toLowerCase().includes(nNeedle)) return false;
       if (muqataa && o.muqataa_no !== muqataa) return false;
       if (needle) {
-        const hay = `${o.title ?? ""} ${o.license_number ?? ""} ${o.owner ?? ""} ${o.investor_name ?? ""} ${o.parcel_no ?? ""} ${o.muqataa_name ?? ""}`.toLowerCase();
+        const hay = `${o.title ?? ""} ${o.license_number ?? ""} ${o.owner ?? ""} ${o.investor_name ?? ""} ${o.parcel_no ?? ""} ${o.muqataa_name ?? ""} ${o.neighborhood ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [all, q, status, sector, district, muqataa]);
+  }, [all, q, status, sector, district, neighborhood, muqataa]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((o) => selected.has(o.record_id));
 
@@ -199,29 +213,63 @@ export function LicensesPanel() {
             <option value="">كل القطاعات</option>
             {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
           </select>
-          <select value={district} onChange={(e) => setDistrict(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
-            <option value="">كل الأقضية</option>
-            {districts.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <input
+            list="lic-district-opts"
+            value={district}
+            onChange={(e) => setDistrict(e.target.value)}
+            placeholder="القضاء"
+            className="w-28 rounded-md border border-input bg-background px-2 py-1 outline-none focus:ring-2 focus:ring-ring"
+          />
+          <datalist id="lic-district-opts">
+            {districtOptions.map((d) => <option key={d} value={d} />)}
+          </datalist>
+          <input
+            list="lic-neighborhood-opts"
+            value={neighborhood}
+            onChange={(e) => setNeighborhood(e.target.value)}
+            placeholder="الحي/المنطقة"
+            className="w-28 rounded-md border border-input bg-background px-2 py-1 outline-none focus:ring-2 focus:ring-ring"
+          />
+          <datalist id="lic-neighborhood-opts">
+            {neighborhoods.map((n) => <option key={n} value={n} />)}
+          </datalist>
           <select value={muqataa} onChange={(e) => setMuqataa(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1">
             <option value="">كل المقاطعات</option>
             {muqataas.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} title="إضافة رخصة">
-            <Plus className="size-3.5" /> إضافة
-          </Button>
-          <Button size="sm" variant="outline" onClick={onExport} title="تصدير CSV">
+        <div className="flex items-center gap-3 pt-0.5">
+          {/* زر الإضافة الدائري المبهر + العدّاد (معروض/الكل) */}
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => { setEditing(null); setFormOpen(true); }}
+              title="إضافة رخصة"
+              aria-label="إضافة رخصة"
+              className="grid size-12 place-items-center rounded-full bg-gradient-to-br from-[rgba(148,175,209,0.4)] to-[rgba(148,175,209,0.1)] text-foreground ring-1 ring-inset ring-foreground/20 shadow-[0_0_22px_-6px_rgba(148,175,209,0.7)] transition hover:scale-105 hover:shadow-[0_0_28px_-2px_rgba(148,175,209,0.95)] active:scale-95"
+            >
+              <Plus className="size-5" />
+            </button>
+            <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">{filtered.length}/{all.length}</span>
+          </div>
+
+          {/* تصدير + تحديد الكل — تصميم وحجم متطابقان ومتقدّمان */}
+          <button
+            type="button"
+            onClick={onExport}
+            title="تصدير CSV"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 bg-card/70 px-3 text-xs font-medium text-foreground/90 ring-1 ring-inset ring-foreground/5 shadow-[0_0_14px_-6px_rgba(148,175,209,0.5)] transition hover:bg-accent hover:text-foreground"
+          >
             <Download className="size-3.5" /> تصدير{selected.size ? ` (${selected.size})` : ""}
-          </Button>
-          <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} className="size-3.5" />
-            تحديد الكل
-          </label>
-          <span className="ms-auto text-xs text-muted-foreground">
-            معروض {filtered.length}/{all.length}
-          </span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleAll}
+            title="تحديد/إلغاء كل المعروض"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 bg-card/70 px-3 text-xs font-medium text-foreground/90 ring-1 ring-inset ring-foreground/5 shadow-[0_0_14px_-6px_rgba(148,175,209,0.5)] transition hover:bg-accent hover:text-foreground"
+          >
+            <ListChecks className="size-3.5" /> {allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
+          </button>
         </div>
       </div>
 
@@ -307,6 +355,8 @@ export function LicensesPanel() {
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Cell icon={BadgeCheck} label="رقم الرخصة" value={orNA(o.license_number)} />
                       <Cell icon={MapPin} label="القطعة" value={orNA(o.parcel_no)} />
+                      <Cell icon={Landmark} label="القضاء" value={orNA(o.district)} />
+                      <Cell icon={Home} label="الحي/المنطقة" value={orNA(o.neighborhood)} />
                       <Cell icon={Ruler} label="المساحة الكلية" value={formatArea(o.area_total_m2)} />
                       <Cell icon={User} label="العائدية" value={orNA(o.owner)} />
                     </div>
