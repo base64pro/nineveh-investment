@@ -20,7 +20,7 @@ function parcelState(kind: ParcelKind, e: Record<string, unknown>): ParcelState 
   return (str(e.state) as ParcelState) ?? "assumed";
 }
 
-function toInput(kind: ParcelKind, e: Record<string, unknown>): ControlsInput {
+export function toControlsInput(kind: ParcelKind, e: Record<string, unknown>): ControlsInput {
   const capitalUsd = kind === "license" ? num(e.capital) : kind === "assumed" ? num(e.value) : null;
   return {
     state: parcelState(kind, e),
@@ -81,7 +81,7 @@ function ItemCard({ item }: { item: ControlItem }) {
 }
 
 export function ControlsTab({ kind, entity }: { kind: ParcelKind; entity: Record<string, unknown> }) {
-  const input = toInput(kind, entity);
+  const input = toControlsInput(kind, entity);
   const r = evaluateControls(input);
 
   return (

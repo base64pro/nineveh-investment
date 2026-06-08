@@ -3,7 +3,7 @@
 // نافذة القطعة الموحّدة (§هـ.4) — للأنواع الثلاثة (فرصة/رخصة/مفترضة).
 // رأس ثابت (عنوان + بيانات مفتاحية + إجراءات) · تمرير عمودي · تحرير مباشر لكل حقل · لا كشف تحقّق (§ح).
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, Layers, Ruler, Tag, X } from "lucide-react";
@@ -13,11 +13,13 @@ import { Button } from "@/components/ui/button";
 import { OptionField } from "@/components/ui/option-field";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { ActionsWindow } from "@/features/parcels/actions-window";
+import { CompanyField } from "@/features/parcels/company-field";
 import { useFieldOptions } from "@/lib/data/use-field-options";
+import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
-import type { ParcelState } from "@/types/entities";
+import type { Company, ParcelState } from "@/types/entities";
 import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "@/features/opportunities/fields";
 import { LICENSE_FORM_FIELDS, LICENSE_OPTION_FIELDS } from "@/features/licenses/fields";
 import { ASSUMED_FORM_FIELDS, ASSUMED_OPTION_FIELDS } from "@/features/assumed/fields";
@@ -129,6 +131,9 @@ export function ParcelWindow({
   const [saving, setSaving] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [moving, setMoving] = useState(false);
+  const { data: companiesData } = useTable<Company>("companies");
+  const companyOptions = useMemo(() => (companiesData ?? []).map((c) => ({ id: c.id, name: c.name })), [companiesData]);
+  const [companyRef, setCompanyRef] = useState<string | null>((entity.company_ref as string | null) ?? null);
 
   const state = parcelState(kind, entity);
   const missingHints = HINTS[kind].filter((h) => !field(entity, h.key));
@@ -149,6 +154,7 @@ export function ParcelWindow({
       const raw = String(fd.get(f.key) ?? "").trim();
       values[f.key] = raw === "" ? null : f.type === "number" ? Number(raw) : raw; // فراغ→null (لا تأليف §ح)
     }
+    if (kind !== "opportunity") values.company_ref = companyRef; // الربط بشركة (المعرّف لا يُعرَض §ح)
     const res = await cfg.save(values, entityId(kind, entity));
     setSaving(false);
     if (res.ok) {
@@ -252,6 +258,9 @@ export function ParcelWindow({
                 <div className="rounded-lg border border-state-announced/40 bg-state-announced/10 p-2.5 text-xs text-state-announced sm:col-span-2">
                   أكمل الحقول المطلوبة: {missingHints.map((h) => h.label).join(" · ")}
                 </div>
+              ) : null}
+              {kind !== "opportunity" ? (
+                <CompanyField companies={companyOptions} value={companyRef} onChange={setCompanyRef} />
               ) : null}
               {compact.map((f) => {
                 const id = `pw-${kind}-${f.key}`;

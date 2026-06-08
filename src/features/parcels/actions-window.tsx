@@ -11,6 +11,7 @@ import { FileText, Lightbulb, ListChecks, Scale, Sparkles, X } from "lucide-reac
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ControlsTab } from "./legal/controls-tab";
+import { ReportTab } from "./legal/report-tab";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 
 type TabKey = "controls" | "recommendations" | "criteria" | "report";
@@ -109,15 +110,7 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
               phase="م4 (RAG + ويب)"
             />
           ) : null}
-          {tab === "report" ? (
-            <SoonPanel
-              icon={FileText}
-              title="التقرير"
-              desc="صفحة غنية بكل بيانات القطعة (وفق حالتها) + نتائج التابات، مع تصدير PDF أنيق موحّد الهوية والاستشهادات."
-              action="تصدير PDF"
-              phase="م3.4 (عرض) · م6 (PDF)"
-            />
-          ) : null}
+          {tab === "report" ? <ReportTab kind={kind} entity={entity} /> : null}
         </div>
       </motion.div>
     </div>,
