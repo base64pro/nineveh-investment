@@ -50,17 +50,20 @@ type StyleJson = {
 
 const ARABIC_LABEL = ["coalesce", ["get", "name:ar"], ["get", "name:latin"], ["get", "name"]];
 
-/** طبقاتنا فوق القاعدة (قناع التعتيم ثم الحدود وتسمياتها). */
+/**
+ * طبقاتنا فوق القاعدة: قناع التعتيم ثمّ الحدود وتسمياتها — بطبقة هرمية (م2.3):
+ * كلّما قرّبت تبهت طبقة الأعلى (المحافظة←الأقضية←النواحي) وتبرز الأصغر، والعكس بالإبعاد.
+ */
 function overlayLayers(): StyleLayer[] {
   const C = BOUNDARY_COLORS;
-  const line = (id: string, color: string, width: number, minzoom: number): StyleLayer => ({
+  const line = (id: string, color: string, width: number, minzoom: number, opacity: unknown): StyleLayer => ({
     id: `bnd-${id}-line`,
     type: "line",
     source: `bnd-${id}`,
     minzoom,
-    paint: { "line-color": color, "line-width": width, "line-opacity": 0.9, "line-blur": 0.4 },
+    paint: { "line-color": color, "line-width": width, "line-opacity": opacity, "line-blur": 0.4 },
   });
-  const label = (id: string, minzoom: number, size: number): StyleLayer => ({
+  const label = (id: string, minzoom: number, size: number, opacity: unknown): StyleLayer => ({
     id: `bnd-${id}-label`,
     type: "symbol",
     source: `bnd-${id}`,
@@ -69,21 +72,29 @@ function overlayLayers(): StyleLayer[] {
       "text-field": ["coalesce", ["get", "name_ar"], ["get", "name_en"]],
       "text-font": ["Noto Sans Regular"],
       "text-size": size,
+      "text-max-width": 8,
     },
     paint: {
       "text-color": C.label,
       "text-halo-color": C.labelHalo,
       "text-halo-width": 1.4,
+      "text-opacity": opacity,
     },
   });
+  // تعبيرات التلاشي الهرمي بالزوم.
+  const govLabelFade = ["interpolate", ["linear"], ["zoom"], 6.5, 1, 8, 0];
+  const districtFade = ["interpolate", ["linear"], ["zoom"], 8.5, 0.9, 10.5, 0.12];
+  const districtLabelFade = ["interpolate", ["linear"], ["zoom"], 8.5, 1, 10.5, 0];
+  const subdFade = ["interpolate", ["linear"], ["zoom"], 8, 0, 10, 0.9];
+  const subdLabelFade = ["interpolate", ["linear"], ["zoom"], 9, 0, 10.5, 1];
   return [
     { id: "dim-mask", type: "fill", source: "dim-mask", paint: { "fill-color": DIM_COLOR } },
-    line("governorate", C.governorate.line, C.governorate.width, 0),
-    label("governorate", 0, 18),
-    line("districts", C.districts.line, C.districts.width, 0),
-    label("districts", 7, 14),
-    line("subdistricts", C.subdistricts.line, C.subdistricts.width, 8),
-    label("subdistricts", 9.5, 12),
+    line("governorate", C.governorate.line, C.governorate.width, 0, 0.9),
+    label("governorate", 0, 18, govLabelFade),
+    line("districts", C.districts.line, C.districts.width, 0, districtFade),
+    label("districts", 6, 15, districtLabelFade),
+    line("subdistricts", C.subdistricts.line, C.subdistricts.width, 8, subdFade),
+    label("subdistricts", 9, 12, subdLabelFade),
   ];
 }
 
