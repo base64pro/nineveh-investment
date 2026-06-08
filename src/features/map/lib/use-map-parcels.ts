@@ -11,6 +11,7 @@ interface MapParcelRow {
   parcel_no: string | null;
   state: string | null;
   geometry: Geometry | null;
+  label: string | null;
 }
 
 export interface ParcelProps {
@@ -18,6 +19,7 @@ export interface ParcelProps {
   ref_id: string;
   parcel_no: string | null;
   state: string;
+  label: string;
 }
 
 /** قطع الخريطة الموحّدة (view map_parcels) كـFeatureCollection للعرض الملوّن — م2.4. */
@@ -38,7 +40,7 @@ export function useMapParcels() {
       .map((r) => ({
         type: "Feature",
         geometry: r.geometry,
-        properties: { kind: r.kind, ref_id: r.ref_id, parcel_no: r.parcel_no, state: r.state } satisfies ParcelProps,
+        properties: { kind: r.kind, ref_id: r.ref_id, parcel_no: r.parcel_no, state: r.state, label: r.label ?? "" } satisfies ParcelProps,
       }));
     return { type: "FeatureCollection", features };
   }, [query.data]);

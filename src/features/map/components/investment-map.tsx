@@ -131,6 +131,7 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
     position: centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number],
     state: stateOf(f) ?? "assumed",
     ref_id: refOf(f) ?? "",
+    label: typeof f.properties?.label === "string" ? f.properties.label : "",
   }));
   const layers: Layer[] = [
     new GeoJsonLayer({
@@ -421,25 +422,31 @@ export default function InvestmentMap() {
           const ov = overlayRef.current;
           if (!ov) return;
           const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
-          const mkObj = mk?.object as { ref_id?: string; position?: [number, number] } | undefined;
+          const mkObj = mk?.object as { ref_id?: string; position?: [number, number]; label?: string } | undefined;
           if (mkObj?.ref_id) {
             const refId = mkObj.ref_id;
             popupRef.current?.remove();
+            // نافذة عمودية أنيقة: عنوان القطعة أعلى، ثم «عرض» ثم «الموقع»
             const el = document.createElement("div");
-            el.className = "flex gap-1.5 rounded-lg bg-card/95 p-1.5 shadow-xl ring-1 ring-border backdrop-blur";
-            const mkBtn = (label: string, fn: () => void): HTMLButtonElement => {
+            el.className = "flex w-44 flex-col gap-1 rounded-xl bg-card/95 p-2 shadow-xl ring-1 ring-border backdrop-blur";
+            const titleEl = document.createElement("div");
+            titleEl.className = "mb-0.5 truncate border-b border-border/60 px-1 pb-1.5 text-center text-xs font-bold text-foreground";
+            titleEl.textContent = mkObj.label || "قطعة";
+            titleEl.title = mkObj.label ?? "";
+            el.appendChild(titleEl);
+            const mkBtn = (text: string, fn: () => void): HTMLButtonElement => {
               const b = document.createElement("button");
               b.type = "button";
-              b.textContent = label;
-              b.className = "rounded-md bg-secondary/60 px-3 py-1 text-xs font-medium text-foreground transition hover:bg-accent";
+              b.textContent = text;
+              b.className = "w-full rounded-lg bg-secondary/60 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent";
               b.addEventListener("click", () => {
                 fn();
                 popupRef.current?.remove();
               });
               return b;
             };
-            el.appendChild(mkBtn("الموقع الحي", () => requestFlyTo(refId)));
             el.appendChild(mkBtn("عرض", () => requestOpenParcelDetail(refId)));
+            el.appendChild(mkBtn("الموقع", () => requestFlyTo(refId)));
             // تنبثق بجانب القرص (يمين/يسار حسب الموضع) فلا تتداخل
             const onRight = e.point.x > m.getContainer().clientWidth / 2;
             popupRef.current = new maplibregl.Popup({
