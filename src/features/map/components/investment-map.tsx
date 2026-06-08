@@ -6,7 +6,7 @@ import bbox from "@turf/bbox";
 import mask from "@turf/mask";
 import type { Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -25,6 +25,12 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { GeoJsonLayer } from "@deck.gl/layers";
 import { useMapParcels } from "../lib/use-map-parcels";
 import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
+import { TerraDraw, TerraDrawPolygonMode } from "terra-draw";
+import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
+import { inferName } from "../lib/spatial-inference";
 
 type MapData = {
   gov: FeatureCollection;
@@ -201,6 +207,11 @@ export default function InvestmentMap() {
   const { fc } = useMapParcels();
   const fcRef = useRef<FeatureCollection>(fc);
   fcRef.current = fc;
+  const drawRef = useRef<TerraDraw | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const queryClient = useQueryClient();
+  const qcRef = useRef(queryClient);
+  qcRef.current = queryClient;
 
   useEffect(() => {
     let cancelled = false;
@@ -270,6 +281,55 @@ export default function InvestmentMap() {
         const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
+
+        // أداة الرسم (terra-draw) — قطعة مفترضة + استنتاج مكاني
+        const draw = new TerraDraw({
+          adapter: new TerraDrawMapLibreGLAdapter({ map: m }),
+          modes: [
+            new TerraDrawPolygonMode({
+              styles: {
+                fillColor: "#8B6FB0",
+                fillOpacity: 0.25,
+                outlineColor: "#8B6FB0",
+                outlineWidth: 2,
+                closingPointColor: "#C7A24E",
+                closingPointWidth: 5,
+              },
+            }),
+          ],
+        });
+        draw.start();
+        draw.on("finish", (id) => {
+          const d = drawRef.current;
+          const data = dataRef.current;
+          if (!d || !data) return;
+          const feat = d.getSnapshot().find((f) => f.id === id);
+          if (!feat || feat.geometry?.type !== "Polygon") return;
+          const polygon = feat as unknown as Feature<Polygon>;
+          const district = inferName(polygon, data.districts);
+          const subdistrict = inferName(polygon, data.subdistricts);
+          void (async () => {
+            const supabase = createClient();
+            const { error } = await supabase.rpc("create_assumed_parcel", {
+              p_geom: polygon.geometry,
+              p_district: district,
+              p_subdistrict: subdistrict,
+            });
+            d.clear();
+            d.setMode("static");
+            setDrawing(false);
+            if (error) {
+              toast.error("تعذّر إنشاء القطعة");
+              return;
+            }
+            toast.success(district ? `أُنشئت قطعة مفترضة — ${district}` : "أُنشئت قطعة مفترضة");
+            void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
+            void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+            void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
+          })();
+        });
+        drawRef.current = draw;
+
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
       });
@@ -277,6 +337,12 @@ export default function InvestmentMap() {
 
     return () => {
       cancelled = true;
+      try {
+        drawRef.current?.stop();
+      } catch {
+        /* تجاهل */
+      }
+      drawRef.current = null;
       map?.remove();
       mapRef.current = null;
       overlayRef.current = null;
@@ -302,6 +368,19 @@ export default function InvestmentMap() {
     const data = dataRef.current;
     if (!map || !data) return;
     map.fitBounds(data.bounds, { padding: 48, duration: 1200 });
+  }
+
+  function toggleDraw(): void {
+    const draw = drawRef.current;
+    if (!draw) return;
+    if (drawing) {
+      draw.setMode("static");
+      draw.clear();
+      setDrawing(false);
+    } else {
+      draw.setMode("polygon");
+      setDrawing(true);
+    }
   }
 
   return (
@@ -334,6 +413,21 @@ export default function InvestmentMap() {
       >
         <Maximize2 className="size-3.5 text-primary/70" aria-hidden />
         كامل نينوى
+      </button>
+
+      {/* أداة الرسم (م2.4) — قطعة مفترضة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
+      <button
+        type="button"
+        onClick={toggleDraw}
+        title={drawing ? "إلغاء الرسم" : "رسم قطعة مفترضة"}
+        className={cn(
+          "absolute end-3 top-40 z-10 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium backdrop-blur transition",
+          drawing
+            ? "border-state-assumed/60 bg-state-assumed/20 text-state-assumed shadow-[0_0_18px_-6px_rgba(139,111,176,0.8)]"
+            : "border-border/70 bg-card/85 text-foreground/90 ring-1 ring-inset ring-foreground/5 hover:bg-accent hover:text-foreground",
+        )}
+      >
+        <PenTool className="size-3.5" aria-hidden /> {drawing ? "إلغاء الرسم" : "رسم قطعة"}
       </button>
     </div>
   );
