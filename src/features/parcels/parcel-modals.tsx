@@ -5,7 +5,6 @@
 // • نموذج القطعة المفترضة بعد الرسم — حدث onOpenParcelForm.
 
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { useTable } from "@/lib/data/use-table";
 import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
 import { onOpenParcelDetail, onOpenParcelForm, type ParcelRef } from "@/features/map/lib/map-nav-store";
@@ -62,12 +61,7 @@ export function ParcelModals() {
         optionSets={optionSets}
       />
       {detail && detailEntity ? (
-        <ParcelWindow
-          kind={detail.kind}
-          entity={detailEntity}
-          onClose={() => setDetail(null)}
-          onOpenActions={() => toast("نافذة الإجراءات — قيد البناء (م3.2)")}
-        />
+        <ParcelWindow kind={detail.kind} entity={detailEntity} onClose={() => setDetail(null)} />
       ) : null}
     </>
   );

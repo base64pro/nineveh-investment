@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { OptionField } from "@/components/ui/option-field";
 import { StateBadge } from "@/features/parcels/state-badge";
+import { ActionsWindow } from "@/features/parcels/actions-window";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
@@ -94,17 +95,16 @@ export function ParcelWindow({
   kind,
   entity,
   onClose,
-  onOpenActions,
 }: {
   kind: ParcelKind;
   entity: AnyEntity;
   onClose: () => void;
-  onOpenActions: () => void;
 }) {
   const cfg = KINDS[kind];
   const queryClient = useQueryClient();
   const { data: custom } = useFieldOptions();
   const [saving, setSaving] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const state = parcelState(kind, entity);
   const title = orNA(entity[cfg.titleKey] ?? entity.parcel_no);
@@ -140,6 +140,7 @@ export function ParcelWindow({
   const textareas = cfg.fields.filter((f) => f.type === "textarea");
 
   return createPortal(
+    <>
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
         <motion.div
           className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -174,7 +175,7 @@ export function ParcelWindow({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button type="button" size="sm" onClick={onOpenActions} className="gap-1.5">
+              <Button type="button" size="sm" onClick={() => setActionsOpen(true)} className="gap-1.5">
                 <Layers className="size-4" /> إجراءات
               </Button>
               <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 transition hover:bg-accent">
@@ -267,7 +268,9 @@ export function ParcelWindow({
             </footer>
           </form>
         </motion.div>
-    </div>,
+    </div>
+    {actionsOpen ? <ActionsWindow kind={kind} entity={entity} onClose={() => setActionsOpen(false)} /> : null}
+    </>,
     document.body,
   );
 }
