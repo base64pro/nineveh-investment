@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogOut, X } from "lucide-react";
 import { signOut } from "@/app/actions";
@@ -16,6 +16,7 @@ import { CriteriaPanel } from "@/features/criteria/criteria-panel";
 import { AssumedPanel } from "@/features/assumed/assumed-panel";
 import { LegalAdvisorPanel } from "@/features/legal-advisor/legal-advisor-panel";
 import { ParcelModals } from "@/features/parcels/parcel-modals";
+import { onOpenSection } from "./shell-store";
 import { SECTIONS } from "./sections";
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
@@ -23,6 +24,16 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   const { data: counts } = useCounts();
   const [active, setActive] = useState<string | null>(null);
   const [licenseStatus, setLicenseStatus] = useState("");
+
+  // فتح قسم من الهيدبار/البحث (§هـ.1 · النقر على مؤشّر ← مصدره)
+  useEffect(
+    () =>
+      onOpenSection((id, status) => {
+        setActive(id);
+        if (id === "licenses" && status) setLicenseStatus(status);
+      }),
+    [],
+  );
 
   const activeSection = SECTIONS.find((s) => s.id === active) ?? null;
   const ActiveIcon = activeSection?.icon;
@@ -38,7 +49,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
-            className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[92vw] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
+            className="absolute bottom-0 right-20 top-12 z-20 flex w-[480px] max-w-[92vw] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
           >
           <header className="flex items-center justify-between gap-2 border-b border-border bg-card p-3">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -91,7 +102,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       </AnimatePresence>
 
       {/* الشريط — يمين الشاشة (§هـ.1) */}
-      <nav className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-card/90 py-3 shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55)] backdrop-blur">
+      <nav className="absolute bottom-0 right-0 top-12 z-30 flex w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-card/90 py-3 shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55)] backdrop-blur">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;

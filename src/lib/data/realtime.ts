@@ -32,6 +32,7 @@ export function useRealtimeSync(): void {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
         void queryClient.invalidateQueries({ queryKey: ["table", table] });
         void queryClient.invalidateQueries({ queryKey: ["counts"] });
+        void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
         if (PARCEL_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       });
     }

@@ -1,6 +1,7 @@
-// الرئيسية = الخريطة (الأرضية §هـ.1) + السايدبار اليمين (§هـ.1). محميّة بـmiddleware.
+// الرئيسية = الهيدبار (داشبورد §هـ.1) + الخريطة (الأرضية) + السايدبار اليمين. محميّة بـmiddleware.
 import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/features/shell/app-sidebar";
+import { Headbar } from "@/features/shell/headbar";
 import InvestmentMap from "@/features/map/components/investment-map";
 
 export default async function Home() {
@@ -11,19 +12,17 @@ export default async function Home() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden">
-      {/* الخريطة تملأ المساحة وتترك شريطاً (56px) يميناً للسايدبار — دون لمس مكوّن م1 */}
-      <div className="absolute inset-y-0 left-0 right-20">
+      {/* الهيدبار — شريط علوي كامل = داشبورد، والمحتوى تحته */}
+      <div className="absolute inset-x-0 top-0 z-40">
+        <Headbar />
+      </div>
+
+      {/* الخريطة تملأ ما تحت الهيدبار وتترك شريطاً (80px) يميناً للسايدبار — دون لمس مكوّن م1 */}
+      <div className="absolute bottom-0 left-0 right-20 top-12">
         <InvestmentMap />
       </div>
 
       <AppSidebar userEmail={user?.email ?? null} />
-
-      {/* عنوان النظام (تراكب علوي خفيف؛ الهيدبار الفعلي في م5) */}
-      <div className="absolute left-3 top-3 z-10">
-        <span className="rounded-md border border-border bg-card/80 px-3 py-1.5 text-sm font-medium backdrop-blur">
-          نظام إدارة الاستثمار في نينوى
-        </span>
-      </div>
     </main>
   );
 }
