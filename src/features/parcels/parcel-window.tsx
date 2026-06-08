@@ -14,6 +14,7 @@ import { OptionField } from "@/components/ui/option-field";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { ActionsWindow } from "@/features/parcels/actions-window";
 import { CompanyField } from "@/features/parcels/company-field";
+import { TransferLogView, type TransferEntry } from "@/features/parcels/transfer-log-view";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
@@ -330,6 +331,7 @@ export function ParcelWindow({
                   })}
                 </div>
               ) : null}
+              <TransferLogView log={Array.isArray(entity.transfer_log) ? (entity.transfer_log as TransferEntry[]) : []} />
             </div>
 
             {/* ذيل ثابت: حفظ التحرير المباشر */}

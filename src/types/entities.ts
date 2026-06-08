@@ -109,6 +109,7 @@ export interface Opportunity {
   notes: string | null;
   announcement_count: number | null;
   announcement_history: AnnouncementHistoryItem[];
+  transfer_log: Json[];
   created_at: string;
 }
 
@@ -164,6 +165,7 @@ export interface License {
   verification: string | null;
   review_reasons: string[];
   notes: string | null;
+  transfer_log: Json[];
   created_at: string;
 }
 
@@ -307,6 +309,7 @@ export interface AssumedParcel {
   legal_status: string | null;
   company_ref: string | null;
   notes: string | null;
+  transfer_log: Json[];
   created_at: string;
   updated_at: string;
 }
