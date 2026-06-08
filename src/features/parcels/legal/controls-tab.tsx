@@ -3,13 +3,17 @@
 // التاب 1 — الضوابط والمعايير القانونية (الفحص القانوني). يعرض مخرجات المحرّك الحتمي (§ج.9)
 // بالقالب: رأس + قسمان (ضوابط/معايير) + ذيل خلاصة الأهلية. كل بند باستشهاد · لا كشف تحقّق (§ح).
 
-import { AlertTriangle, CheckCircle2, CircleSlash, FileEdit, Scale, ShieldAlert, XCircle } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, CheckCircle2, CircleSlash, FileEdit, Scale, ShieldAlert, Sparkles, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/features/parcels/state-badge";
+import { AdvisorAnswer } from "@/features/legal-advisor/advisor-answer";
 import { sectorLabel } from "@/lib/sectors";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 import type { ParcelState } from "@/types/entities";
 import { evaluateControls, type ControlItem, type ControlsInput, type Eligibility, type Fulfillment } from "./controls-engine";
+import { explainControls } from "./explain-actions";
 
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v : null);
@@ -83,6 +87,24 @@ function ItemCard({ item }: { item: ControlItem }) {
 export function ControlsTab({ kind, entity }: { kind: ParcelKind; entity: Record<string, unknown> }) {
   const input = toControlsInput(kind, entity);
   const r = evaluateControls(input);
+  const [explaining, setExplaining] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+
+  async function explain() {
+    if (explaining) return;
+    setExplaining(true);
+    const toItems = (arr: ControlItem[]) =>
+      arr.map((it) => ({ number: it.number, title: it.title, citation: it.citation, fulfillment: FULFILL[it.fulfillment].label, note: it.note }));
+    const res = await explainControls({
+      state: input.state,
+      eligibility: r.eligibilityLabel,
+      project: toItems(r.projectControls),
+      investor: toItems(r.investorCriteria),
+      gaps: r.gaps,
+    });
+    setExplaining(false);
+    setExplanation(res.ok ? res.text : "تعذّرت الصياغة. (تحقّق من إعداد الذكاء.)");
+  }
 
   return (
     <div className="space-y-4">
@@ -130,6 +152,20 @@ export function ControlsTab({ kind, entity }: { kind: ParcelKind; entity: Record
         <p className="text-sm font-bold">خلاصة الأهلية: {r.eligibilityLabel}</p>
         {r.gaps.length ? <p className="mt-1 text-[11px] opacity-90">أبرز النواقص: {r.gaps.join(" · ")}</p> : null}
       </section>
+
+      {/* صياغة الذكاء — شرح لا قرار (م4.4) */}
+      {!explanation ? (
+        <Button type="button" size="sm" variant="outline" onClick={() => void explain()} disabled={explaining} className="w-full gap-1.5">
+          <Sparkles className="size-4" /> {explaining ? "… يصوغ الشرح" : "اشرح بالذكاء"}
+        </Button>
+      ) : (
+        <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-primary/70">
+            <Sparkles className="size-3.5" /> شرح الذكاء (لا يغيّر النتيجة الحتمية)
+          </p>
+          <AdvisorAnswer text={explanation} />
+        </div>
+      )}
     </div>
   );
 }

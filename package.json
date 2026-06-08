@@ -19,7 +19,8 @@
     "verify:db": "tsx scripts/verify-counts.ts",
     "verify:rls": "tsx scripts/verify-rls.ts",
     "verify:user": "tsx scripts/verify-user.ts",
-    "verify:maptiler": "tsx scripts/verify-maptiler.ts"
+    "verify:maptiler": "tsx scripts/verify-maptiler.ts",
+    "embed:legal": "tsx scripts/embed-legal.ts"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.3",

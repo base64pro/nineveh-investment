@@ -4,7 +4,7 @@
  */
 import { NOT_AVAILABLE } from "./format";
 
-const SECTOR_LABELS: Record<string, string> = {
+export const SECTOR_LABELS: Record<string, string> = {
   commercial: "تجاري",
   health: "صحي",
   industrial: "صناعي",
