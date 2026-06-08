@@ -34,7 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onStartDraw, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
@@ -132,6 +132,8 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
     state: stateOf(f) ?? "assumed",
     ref_id: refOf(f) ?? "",
     label: typeof f.properties?.label === "string" ? f.properties.label : "",
+    kind: typeof f.properties?.kind === "string" ? f.properties.kind : "assumed",
+    entity_id: typeof f.properties?.entity_id === "string" ? f.properties.entity_id : "",
   }));
   const layers: Layer[] = [
     new GeoJsonLayer({
@@ -422,7 +424,9 @@ export default function InvestmentMap() {
           const ov = overlayRef.current;
           if (!ov) return;
           const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
-          const mkObj = mk?.object as { ref_id?: string; position?: [number, number]; label?: string } | undefined;
+          const mkObj = mk?.object as
+            | { ref_id?: string; position?: [number, number]; label?: string; kind?: string; entity_id?: string }
+            | undefined;
           if (mkObj?.ref_id) {
             const refId = mkObj.ref_id;
             popupRef.current?.remove();
@@ -445,7 +449,11 @@ export default function InvestmentMap() {
               });
               return b;
             };
-            el.appendChild(mkBtn("عرض", () => requestOpenParcelDetail(refId)));
+            el.appendChild(
+              mkBtn("عرض", () =>
+                requestOpenParcelDetail({ kind: (mkObj.kind as ParcelKind) || "assumed", id: mkObj.entity_id || "" }),
+              ),
+            );
             el.appendChild(mkBtn("الموقع", () => requestFlyTo(refId)));
             // تنبثق بجانب القرص (يمين/يسار حسب الموضع) فلا تتداخل
             const onRight = e.point.x > m.getContainer().clientWidth / 2;

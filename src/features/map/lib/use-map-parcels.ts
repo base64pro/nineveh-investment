@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 interface MapParcelRow {
   kind: string;
   ref_id: string;
+  entity_id: string | null;
   parcel_no: string | null;
   state: string | null;
   geometry: Geometry | null;
@@ -17,6 +18,7 @@ interface MapParcelRow {
 export interface ParcelProps {
   kind: string;
   ref_id: string;
+  entity_id: string;
   parcel_no: string | null;
   state: string;
   label: string;
@@ -40,7 +42,14 @@ export function useMapParcels() {
       .map((r) => ({
         type: "Feature",
         geometry: r.geometry,
-        properties: { kind: r.kind, ref_id: r.ref_id, parcel_no: r.parcel_no, state: r.state, label: r.label ?? "" } satisfies ParcelProps,
+        properties: {
+          kind: r.kind,
+          ref_id: r.ref_id,
+          entity_id: r.entity_id ?? "",
+          parcel_no: r.parcel_no,
+          state: r.state,
+          label: r.label ?? "",
+        } satisfies ParcelProps,
       }));
     return { type: "FeatureCollection", features };
   }, [query.data]);
