@@ -35,17 +35,18 @@ function DirectorAvatar() {
       {ok ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src="/director.png"
+          src="/director.jpeg"
           alt="المدير العام"
           onError={() => setOk(false)}
-          className="size-full object-cover [filter:grayscale(0.35)_contrast(1.05)]"
+          className="size-full object-cover [filter:grayscale(1)_contrast(1.08)_brightness(1.04)]"
         />
       ) : (
         <span className="grid size-full place-items-center bg-[rgba(148,175,209,0.14)] text-muted-foreground">
           <User className="size-5" />
         </span>
       )}
-      <span className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-t from-primary/30 to-transparent" />
+      {ok ? <span className="pointer-events-none absolute inset-0 rounded-full bg-primary/40 mix-blend-color" /> : null}
+      <span className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-t from-primary/40 to-transparent" />
     </div>
   );
 }
