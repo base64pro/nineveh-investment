@@ -22,11 +22,16 @@
     "verify:maptiler": "tsx scripts/verify-maptiler.ts"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.3.3",
+    "@deck.gl/layers": "^9.3.3",
+    "@deck.gl/mapbox": "^9.3.3",
     "@mapbox/mapbox-gl-rtl-text": "^0.2.3",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.47.10",
     "@tanstack/react-query": "^5.62.7",
     "@turf/bbox": "^7.3.5",
+    "@turf/boolean-point-in-polygon": "^7.3.5",
+    "@turf/centroid": "^7.3.5",
     "@turf/mask": "^7.3.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

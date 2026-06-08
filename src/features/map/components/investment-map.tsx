@@ -21,6 +21,10 @@ import {
   styleUrl,
   type BaseStyle,
 } from "../lib/map-config";
+import { MapboxOverlay } from "@deck.gl/mapbox";
+import { GeoJsonLayer } from "@deck.gl/layers";
+import { useMapParcels } from "../lib/use-map-parcels";
+import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
 
 type MapData = {
   gov: FeatureCollection;
@@ -98,6 +102,38 @@ function overlayLayers(): StyleLayer[] {
   ];
 }
 
+/** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج. */
+function parcelLayers(fc: FeatureCollection) {
+  const stateOf = (f: Feature): string | undefined => {
+    const s = f.properties?.state;
+    return typeof s === "string" ? s : undefined;
+  };
+  return [
+    new GeoJsonLayer({
+      id: "parcels-glow",
+      data: fc,
+      filled: false,
+      stroked: true,
+      getLineColor: (f: Feature) => glowRgba(stateOf(f)),
+      getLineWidth: 6,
+      lineWidthUnits: "pixels",
+      lineWidthMinPixels: 3,
+    }),
+    new GeoJsonLayer({
+      id: "parcels",
+      data: fc,
+      filled: true,
+      stroked: true,
+      getFillColor: (f: Feature) => fillRgba(stateOf(f)),
+      getLineColor: (f: Feature) => lineRgba(stateOf(f)),
+      getLineWidth: 2,
+      lineWidthUnits: "pixels",
+      lineWidthMinPixels: 1.5,
+      pickable: true,
+    }),
+  ];
+}
+
 /**
  * يبني كائن النمط كاملاً: قاعدة MapTiler (عبر الوسيط، بلا تخزين، عناوين مطلقة)
  * + تعريب + ضبط كحلي + طبقاتنا (الحدود والقناع) — فتظهر من أوّل إطار وعند كل تبديل.
@@ -161,6 +197,10 @@ export default function InvestmentMap() {
   const dataRef = useRef<MapData | null>(null);
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
+  const overlayRef = useRef<MapboxOverlay | null>(null);
+  const { fc } = useMapParcels();
+  const fcRef = useRef<FeatureCollection>(fc);
+  fcRef.current = fc;
 
   useEffect(() => {
     let cancelled = false;
@@ -226,6 +266,10 @@ export default function InvestmentMap() {
       map.on("load", () => {
         const m = mapRef.current;
         if (cancelled || !m) return;
+        // طبقة القطع الملوّنة (deck.gl فوق الخريطة)
+        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current) });
+        m.addControl(overlay);
+        overlayRef.current = overlay;
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
       });
@@ -235,8 +279,14 @@ export default function InvestmentMap() {
       cancelled = true;
       map?.remove();
       mapRef.current = null;
+      overlayRef.current = null;
     };
   }, []);
+
+  // تحديث طبقات القطع عند تغيّر البيانات (انعكاس لحظي)
+  useEffect(() => {
+    overlayRef.current?.setProps({ layers: parcelLayers(fc) });
+  }, [fc]);
 
   async function switchBase(next: BaseStyle): Promise<void> {
     const map = mapRef.current;

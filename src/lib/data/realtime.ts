@@ -18,6 +18,9 @@ const TABLES = [
   "field_options",
 ] as const;
 
+// جداول تؤثّر في طبقة قطع الخريطة (view map_parcels) ← إبطالها أيضاً.
+const PARCEL_TABLES = new Set<string>(["opportunities", "licenses", "assumed_parcels", "parcel_geometry"]);
+
 export function useRealtimeSync(): void {
   const queryClient = useQueryClient();
 
@@ -29,6 +32,7 @@ export function useRealtimeSync(): void {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
         void queryClient.invalidateQueries({ queryKey: ["table", table] });
         void queryClient.invalidateQueries({ queryKey: ["counts"] });
+        if (PARCEL_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       });
     }
     channel.subscribe();
