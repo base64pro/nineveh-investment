@@ -234,25 +234,23 @@ export function LicensesPanel({
           <input list="lic-neighborhood-opts" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="حي" className={FILTER_INPUT} />
           <datalist id="lic-neighborhood-opts">{neighborhoods.map((n) => <option key={n} value={n} />)}</datalist>
         </div>
-        {/* ثلاث دوائر إجراء ثلاثية الأبعاد: تحديد الكل (يسار) · إضافة (وسط أكبر) · تصدير (يمين) */}
-        <div className="flex items-center justify-center gap-5 pt-1.5">
+        {/* ثلاث دوائر إجراء متساوية متقاربة بصفّ واحد: تصدير (يمين) · إضافة (وسط) · تحديد الكل (يسار) */}
+        <div className="relative flex items-center justify-center gap-3 pt-1">
+          <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
+            {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
+          </span>
           <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={() => { setEditing(null); setFormOpen(true); }}
-              title="إضافة رخصة"
-              aria-label="إضافة رخصة"
-              className={cn(ORB, "size-16")}
-            >
-              <Plus className="size-6" />
-            </button>
-            <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
-              {filtered.length}/{all.length}{selected.size ? ` · محدّد ${selected.size}` : ""}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => { setEditing(null); setFormOpen(true); }}
+            title="إضافة رخصة"
+            aria-label="إضافة رخصة"
+            className={cn(ORB, "size-12")}
+          >
+            <Plus className="size-5" />
+          </button>
           <button
             type="button"
             onClick={toggleAll}

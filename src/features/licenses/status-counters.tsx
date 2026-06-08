@@ -6,7 +6,7 @@ import { useTable } from "@/lib/data/use-table";
 import { cn } from "@/lib/utils";
 import type { License } from "@/types/entities";
 
-// عدّادات حالات الرخص: أقراص ثلاثية الأبعاد بلون واحد بلا حدود، الرقم وسطي يتحرك تصاعدياً عند الفتح.
+// عدّادات حالات الرخص: أقراص ثلاثية الأبعاد بلون واحد بلا حدود، تبدو منبثقة من حافّة السايدبار.
 const COUNTERS = [
   { value: "", label: "الكل" },
   { value: "in-progress", label: "قيد" },
@@ -14,12 +14,7 @@ const COUNTERS = [
   { value: "withdrawn", label: "مسحوبة" },
 ] as const;
 
-const ORB_BASE =
-  "grid size-16 place-items-center rounded-full text-foreground shadow-[inset_0_1px_2px_rgba(255,255,255,0.3),0_10px_22px_-8px_rgba(0,0,0,0.7)]";
-const ORB_BG = "bg-[radial-gradient(circle_at_50%_28%,#46598a,#27364e)]";
-const ORB_BG_ACTIVE = "bg-[radial-gradient(circle_at_50%_28%,#627ab6,#33466b)]";
-
-/** رقم يتحرّك تصاعدياً من القيمة السابقة إلى الجديدة (موشن سلس). */
+/** رقم يتحرّك تصاعدياً من القيمة السابقة إلى الجديدة (موشن سلس) عند الفتح. */
 function useCountUp(value: number): number {
   const [display, setDisplay] = useState(0);
   const from = useRef(0);
@@ -52,13 +47,22 @@ function CounterOrb({
       type="button"
       onClick={onClick}
       title={label}
-      animate={{ scale: active ? 1.28 : 1 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+      animate={{ scale: active ? 1.12 : 1, x: active ? -6 : 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
       style={{ transformOrigin: "right center", zIndex: active ? 3 : 1 }}
-      className={cn(ORB_BASE, active ? ORB_BG_ACTIVE : ORB_BG)}
+      className={cn(
+        "relative grid size-16 place-items-center rounded-full text-white",
+        active
+          ? "bg-[radial-gradient(circle_at_50%_28%,#6982bd,#35496f)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.45),0_14px_28px_-8px_rgba(0,0,0,0.85)]"
+          : "bg-[radial-gradient(circle_at_50%_28%,#46598a,#27364e)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.3),0_10px_22px_-8px_rgba(0,0,0,0.7)]",
+      )}
     >
-      <span className="text-lg font-bold leading-none tabular-nums">{display}</span>
-      <span className="mt-0.5 text-[8px] font-medium text-foreground/70">{label}</span>
+      {/* الرقم في وسط الدائرة تماماً */}
+      <span className="text-xl font-bold leading-none tabular-nums">{display}</span>
+      {/* الكلمة الدلالية صغيرة بيضاء أسفل الرقم */}
+      <span className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[8px] font-medium text-white/85">
+        {label}
+      </span>
     </motion.button>
   );
 }
@@ -83,11 +87,11 @@ export function LicenseStatusCounters({
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 36 }}
+      initial={{ opacity: 0, x: 44 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 36 }}
-      transition={{ duration: 0.28, ease: "easeOut" }}
-      className="absolute right-[547px] top-24 z-10 flex flex-col gap-3"
+      exit={{ opacity: 0, x: 44 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="absolute right-[538px] top-24 z-10 flex flex-col gap-2.5"
       aria-label="عدّادات حالات الرخص"
     >
       {COUNTERS.map((c) => (
