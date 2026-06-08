@@ -5,7 +5,7 @@ let loaded = false;
 /** يحمّل أسرار .env.local مرّة واحدة (لا تُلتزَم القيم أبداً). */
 export function loadEnv(): void {
   if (loaded) return;
-  config({ path: ".env.local" });
+  config({ path: ".env.local", override: true }); // .env.local هو مصدر الحقيقة (يتجاوز أي قيمة محقونة فارغة)
   loaded = true;
 }
 

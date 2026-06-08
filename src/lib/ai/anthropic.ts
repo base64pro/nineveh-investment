@@ -14,8 +14,9 @@ export async function anthropicChat(opts: {
   maxTokens?: number;
   model?: string;
 }): Promise<string> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("ANTHROPIC_API_KEY غير مضبوط");
+  // APP_ANTHROPIC_KEY: اسم مميّز يتفادى حقن بيئة التطوير لـANTHROPIC_API_KEY (فارغاً)؛ مع إبقاء الاسم القياسي بديلاً للإنتاج.
+  const key = process.env.APP_ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("APP_ANTHROPIC_KEY غير مضبوط");
   const model = opts.model || process.env.ANTHROPIC_MODEL;
   if (!model) throw new Error("ANTHROPIC_MODEL غير مضبوط");
 

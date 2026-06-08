@@ -14,6 +14,7 @@ import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { CompaniesPanel } from "@/features/companies/companies-panel";
 import { CriteriaPanel } from "@/features/criteria/criteria-panel";
 import { AssumedPanel } from "@/features/assumed/assumed-panel";
+import { LegalAdvisorPanel } from "@/features/legal-advisor/legal-advisor-panel";
 import { ParcelModals } from "@/features/parcels/parcel-modals";
 import { SECTIONS } from "./sections";
 
@@ -58,7 +59,9 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
             </button>
           </header>
           <div className="min-h-0 flex-1">
-            {activeSection.id === "opportunities" ? (
+            {activeSection.id === "legal-advisor" ? (
+              <LegalAdvisorPanel />
+            ) : activeSection.id === "opportunities" ? (
               <OpportunitiesPanel />
             ) : activeSection.id === "licenses" ? (
               <LicensesPanel status={licenseStatus} setStatus={setLicenseStatus} />
