@@ -317,6 +317,15 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   return style as unknown as StyleSpecification;
 }
 
+// مربّعات إظهار القطع حسب الحالة (§هـ.4): قيمة الحالة ← {تسمية · لون accent}.
+const STATE_TOGGLES = [
+  { value: "announced", label: "معلَنة", accent: "accent-state-announced" },
+  { value: "in-progress", label: "قيد الإنجاز", accent: "accent-state-inprogress" },
+  { value: "completed", label: "منجزة", accent: "accent-state-completed" },
+  { value: "withdrawn", label: "مسحوبة", accent: "accent-state-withdrawn" },
+  { value: "assumed", label: "مفترضة", accent: "accent-state-assumed" },
+] as const;
+
 export default function InvestmentMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GLMap | null>(null);
@@ -339,6 +348,7 @@ export default function InvestmentMap() {
   selectedIdRef.current = selectedId;
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
+  const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
   const showBoundariesRef = useRef(showBoundaries);
   showBoundariesRef.current = showBoundaries;
   const opps = useTable<Opportunity>("opportunities");
@@ -577,10 +587,13 @@ export default function InvestmentMap() {
     };
   }, []);
 
-  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار (انعكاس لحظي)
+  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار/الحالات (انعكاس لحظي)
   useEffect(() => {
-    overlayRef.current?.setProps({ layers: showParcels ? parcelLayers(fc, selectedId) : [] });
-  }, [fc, selectedId, showParcels]);
+    const vis = showParcels
+      ? { ...fc, features: fc.features.filter((f) => !hiddenStates.has(String(f.properties?.state ?? ""))) }
+      : null;
+    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
+  }, [fc, selectedId, showParcels, hiddenStates]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {
@@ -721,9 +734,31 @@ export default function InvestmentMap() {
           الحدود
         </label>
         <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-state-assumed" />
+          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-primary" />
           القطع
         </label>
+        {showParcels ? (
+          <div className="mt-0.5 flex flex-col gap-1 border-t border-border/50 ps-1 pt-1.5">
+            {STATE_TOGGLES.map((st) => (
+              <label key={st.value} className="inline-flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={!hiddenStates.has(st.value)}
+                  onChange={() =>
+                    setHiddenStates((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(st.value)) next.delete(st.value);
+                      else next.add(st.value);
+                      return next;
+                    })
+                  }
+                  className={`size-3.5 ${st.accent}`}
+                />
+                {st.label}
+              </label>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
