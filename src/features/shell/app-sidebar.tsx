@@ -12,6 +12,7 @@ import { OpportunitiesPanel } from "@/features/opportunities/opportunities-panel
 import { LicensesPanel } from "@/features/licenses/licenses-panel";
 import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { CompaniesPanel } from "@/features/companies/companies-panel";
+import { CriteriaPanel } from "@/features/criteria/criteria-panel";
 import { SECTIONS } from "./sections";
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
@@ -61,6 +62,8 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               <LicensesPanel status={licenseStatus} setStatus={setLicenseStatus} />
             ) : activeSection.id === "companies" ? (
               <CompaniesPanel />
+            ) : activeSection.id === "criteria" ? (
+              <CriteriaPanel />
             ) : (
               <div className="space-y-3 p-4 text-sm">
                 {activeSection.table && counts ? (
