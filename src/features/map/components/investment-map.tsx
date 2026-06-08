@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 import bbox from "@turf/bbox";
 import mask from "@turf/mask";
-import type { Map as GLMap, StyleSpecification } from "maplibre-gl";
+import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { Maximize2, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,8 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
 import { onFlyTo } from "../lib/map-nav-store";
+import { useTable } from "@/lib/data/use-table";
+import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
 type MapData = {
   gov: FeatureCollection;
@@ -74,16 +76,19 @@ function overlayLayers(): StyleLayer[] {
     minzoom,
     paint: { "line-color": color, "line-width": width, "line-opacity": opacity, "line-blur": 0.4 },
   });
-  const label = (id: string, minzoom: number, size: number, opacity: unknown): StyleLayer => ({
+  const label = (id: string, minzoom: number, size: number, opacity: unknown, withStats = false): StyleLayer => ({
     id: `bnd-${id}-label`,
     type: "symbol",
     source: `bnd-${id}`,
     minzoom,
     layout: {
-      "text-field": ["coalesce", ["get", "name_ar"], ["get", "name_en"]],
+      // الاسم + أرقام المقاييس (م2.3) أسفله بخطّ أصغر — للأقضية/النواحي عند توفّر قطع منسوبة.
+      "text-field": withStats
+        ? ["format", ["coalesce", ["get", "name_ar"], ["get", "name_en"]], {}, ["coalesce", ["get", "stats_nl"], ""], { "font-scale": 0.8 }]
+        : ["coalesce", ["get", "name_ar"], ["get", "name_en"]],
       "text-font": ["Noto Sans Regular"],
       "text-size": size,
-      "text-max-width": 8,
+      "text-max-width": 9,
     },
     paint: {
       "text-color": C.label,
@@ -103,9 +108,9 @@ function overlayLayers(): StyleLayer[] {
     line("governorate", C.governorate.line, C.governorate.width, 0, 0.9),
     label("governorate", 0, 18, govLabelFade),
     line("districts", C.districts.line, C.districts.width, 0, districtFade),
-    label("districts", 6, 15, districtLabelFade),
+    label("districts", 6, 15, districtLabelFade, true),
     line("subdistricts", C.subdistricts.line, C.subdistricts.width, 8, subdFade),
-    label("subdistricts", 9, 12, subdLabelFade),
+    label("subdistricts", 9, 12, subdLabelFade, true),
   ];
 }
 
@@ -154,6 +159,71 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       updateTriggers: { getFillColor: selectedId, getLineColor: selectedId, getLineWidth: selectedId },
     }),
   ];
+}
+
+/** المقاييس الثلاثة (م2.3): عدّ [معلَنة، رخص، مفترضة] حسب اسم القضاء/الناحية (مطابقة الحقل). */
+function bumpCount(map: Map<string, number[]>, name: string | null, i: number): void {
+  if (!name) return;
+  const e = map.get(name) ?? [0, 0, 0];
+  e[i] = (e[i] ?? 0) + 1;
+  map.set(name, e);
+}
+function formatStats(t: number[]): string {
+  const parts: string[] = [];
+  if (t[0]) parts.push(`معلَنة ${t[0]}`);
+  if (t[1]) parts.push(`رخص ${t[1]}`);
+  if (t[2]) parts.push(`مفترضة ${t[2]}`);
+  return parts.length ? `\n${parts.join(" · ")}` : "";
+}
+/** يضيف خاصّية stats_nl (سطر الأرقام) لكل ميزة حدود وفق اسمها. */
+function augmentStats(fc: FeatureCollection, counts: Map<string, number[]>): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: fc.features.map((f) => {
+      const name = typeof f.properties?.name_ar === "string" ? f.properties.name_ar : "";
+      const t = counts.get(name);
+      return { ...f, properties: { ...f.properties, stats_nl: t ? formatStats(t) : "" } };
+    }),
+  };
+}
+
+const BND_LAYER_IDS = [
+  "bnd-governorate-line",
+  "bnd-governorate-label",
+  "bnd-districts-line",
+  "bnd-districts-label",
+  "bnd-subdistricts-line",
+  "bnd-subdistricts-label",
+];
+
+/** يحقن أرقام المقاييس في مصادر الحدود (يُستدعى بعد التحميل وعند تغيّر القطع وتبديل القاعدة). */
+function applyStats(
+  m: GLMap | null,
+  data: MapData | null,
+  oppsData: Opportunity[],
+  licsData: License[],
+  assumedData: AssumedParcel[],
+): void {
+  if (!m || !data) return;
+  const dSrc = m.getSource("bnd-districts") as GeoJSONSource | undefined;
+  const sSrc = m.getSource("bnd-subdistricts") as GeoJSONSource | undefined;
+  if (!dSrc || !sSrc) return;
+  const dCounts = new Map<string, number[]>();
+  for (const o of oppsData) bumpCount(dCounts, o.district, 0);
+  for (const l of licsData) bumpCount(dCounts, l.district, 1);
+  for (const a of assumedData) bumpCount(dCounts, a.district, 2);
+  const sCounts = new Map<string, number[]>();
+  for (const l of licsData) bumpCount(sCounts, l.subdistrict, 1);
+  for (const a of assumedData) bumpCount(sCounts, a.subdistrict, 2);
+  dSrc.setData(augmentStats(data.districts, dCounts));
+  sSrc.setData(augmentStats(data.subdistricts, sCounts));
+}
+
+/** إظهار/إخفاء طبقة الحدود. */
+function applyVisibility(m: GLMap | null, show: boolean): void {
+  if (!m || !m.getLayer("bnd-districts-line")) return;
+  const vis = show ? "visible" : "none";
+  for (const id of BND_LAYER_IDS) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", vis);
 }
 
 /**
@@ -231,6 +301,19 @@ export default function InvestmentMap() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
   selectedIdRef.current = selectedId;
+  const [showBoundaries, setShowBoundaries] = useState(true);
+  const [showParcels, setShowParcels] = useState(true);
+  const showBoundariesRef = useRef(showBoundaries);
+  showBoundariesRef.current = showBoundaries;
+  const opps = useTable<Opportunity>("opportunities");
+  const lics = useTable<License>("licenses");
+  const assumed = useTable<AssumedParcel>("assumed_parcels");
+  const oppsRef = useRef<Opportunity[]>([]);
+  oppsRef.current = opps.data ?? [];
+  const licsRef = useRef<License[]>([]);
+  licsRef.current = lics.data ?? [];
+  const assumedRef = useRef<AssumedParcel[]>([]);
+  assumedRef.current = assumed.data ?? [];
 
   useEffect(() => {
     let cancelled = false;
@@ -357,6 +440,10 @@ export default function InvestmentMap() {
         });
         drawRef.current = draw;
 
+        // مقاييس م2.3 + إظهار الحدود (بعد جهوز المصادر)
+        applyStats(m, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
+        applyVisibility(m, showBoundariesRef.current);
+
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
       });
@@ -376,10 +463,20 @@ export default function InvestmentMap() {
     };
   }, []);
 
-  // تحديث طبقات القطع عند تغيّر البيانات أو التحديد (انعكاس لحظي)
+  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار (انعكاس لحظي)
   useEffect(() => {
-    overlayRef.current?.setProps({ layers: parcelLayers(fc, selectedId) });
-  }, [fc, selectedId]);
+    overlayRef.current?.setProps({ layers: showParcels ? parcelLayers(fc, selectedId) : [] });
+  }, [fc, selectedId, showParcels]);
+
+  // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
+  useEffect(() => {
+    applyStats(mapRef.current, dataRef.current, opps.data ?? [], lics.data ?? [], assumed.data ?? []);
+  }, [opps.data, lics.data, assumed.data]);
+
+  // إظهار/إخفاء طبقة الحدود
+  useEffect(() => {
+    applyVisibility(mapRef.current, showBoundaries);
+  }, [showBoundaries]);
 
   // الانتقال لقطعة من السايدبار (§هـ.2 مبدأ التنقّل): flyTo + تحديد
   useEffect(() => {
@@ -401,6 +498,10 @@ export default function InvestmentMap() {
     baseRef.current = next;
     setBase(next);
     map.setStyle(await buildStyle(next, data)); // النمط الجديد يحوي طبقاتنا → فوري
+    map.once("idle", () => {
+      applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
+      applyVisibility(mapRef.current, showBoundariesRef.current);
+    });
   }
 
   function resetView(): void {
@@ -469,6 +570,18 @@ export default function InvestmentMap() {
       >
         <PenTool className="size-3.5" aria-hidden /> {drawing ? "إلغاء الرسم" : "رسم قطعة"}
       </button>
+
+      {/* تبديل الطبقات (م2.4) */}
+      <div className="absolute end-3 top-52 z-10 flex flex-col gap-1 rounded-lg border border-border/70 bg-card/85 p-2 text-xs text-foreground/90 backdrop-blur">
+        <label className="inline-flex cursor-pointer items-center gap-1.5">
+          <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-3.5 accent-primary" />
+          الحدود
+        </label>
+        <label className="inline-flex cursor-pointer items-center gap-1.5">
+          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-state-assumed" />
+          القطع
+        </label>
+      </div>
     </div>
   );
 }
