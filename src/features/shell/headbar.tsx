@@ -38,15 +38,15 @@ function DirectorAvatar() {
           src="/director.jpeg"
           alt="المدير العام"
           onError={() => setOk(false)}
-          className="size-full object-cover [filter:grayscale(1)_contrast(1.08)_brightness(1.04)]"
+          className="size-full object-cover"
         />
       ) : (
         <span className="grid size-full place-items-center bg-[rgba(148,175,209,0.14)] text-muted-foreground">
           <User className="size-5" />
         </span>
       )}
-      {ok ? <span className="pointer-events-none absolute inset-0 rounded-full bg-primary/40 mix-blend-color" /> : null}
-      <span className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-t from-primary/40 to-transparent" />
+      {/* حلقة داخلية خفيفة للإطار الهولوكرامي — لا تُغيّر ألوان الصورة الطبيعية */}
+      <span className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
     </div>
   );
 }
