@@ -6,7 +6,7 @@
 import { type FormEvent, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { Layers, Ruler, Tag, X } from "lucide-react";
+import { ArrowLeftRight, Layers, Ruler, Tag, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { ASSUMED_FORM_FIELDS, ASSUMED_OPTION_FIELDS } from "@/features/assumed/f
 import { saveOpportunity } from "@/features/opportunities/actions";
 import { saveLicense } from "@/features/licenses/actions";
 import { saveAssumed } from "@/features/assumed/actions";
+import { moveParcel } from "@/features/parcels/transition-actions";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type WinFieldType = "text" | "number" | "date" | "textarea" | "select";
@@ -73,6 +74,26 @@ const KINDS: Record<ParcelKind, KindConfig> = {
 
 const LARGE_TEXTAREAS = new Set(["description", "raw_details", "annexation_plan"]);
 
+// الحالات الخمس لمنسدلة النقل (§هـ.4 · م3.5).
+const STATE_OPTIONS: { value: ParcelState; label: string }[] = [
+  { value: "announced", label: "معلَنة" },
+  { value: "in-progress", label: "قيد الإنجاز" },
+  { value: "completed", label: "منجزة" },
+  { value: "withdrawn", label: "مسحوبة" },
+  { value: "assumed", label: "مفترضة" },
+];
+
+// حقول يُؤشَّر لإكمالها بعد النقل (لا مانعة — تُملأ لاحقاً).
+const HINTS: Record<ParcelKind, { key: string; label: string }[]> = {
+  opportunity: [{ key: "title", label: "العنوان" }],
+  license: [
+    { key: "license_number", label: "رقم الرخصة" },
+    { key: "investor_name", label: "المستثمر" },
+    { key: "capital", label: "رأس المال" },
+  ],
+  assumed: [{ key: "name", label: "اسم القطعة" }],
+};
+
 function field(e: AnyEntity, key: string): string {
   const v = e[key];
   if (v === null || v === undefined) return "";
@@ -95,18 +116,22 @@ export function ParcelWindow({
   kind,
   entity,
   onClose,
+  onMoved,
 }: {
   kind: ParcelKind;
   entity: AnyEntity;
   onClose: () => void;
+  onMoved: (ref: { kind: ParcelKind; id: string }) => void;
 }) {
   const cfg = KINDS[kind];
   const queryClient = useQueryClient();
   const { data: custom } = useFieldOptions();
   const [saving, setSaving] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const state = parcelState(kind, entity);
+  const missingHints = HINTS[kind].filter((h) => !field(entity, h.key));
   const title = orNA(entity[cfg.titleKey] ?? entity.parcel_no);
   const subParts = [entity.parcel_no ? `قطعة ${entity.parcel_no}` : null, entity.muqataa_no ? `مقاطعة ${entity.muqataa_no}` : null].filter(
     Boolean,
@@ -134,6 +159,26 @@ export function ParcelWindow({
     } else {
       toast.error("تعذّر الحفظ — حاول مجدداً");
     }
+  }
+
+  async function handleMove(target: ParcelState) {
+    if (target === state || moving) return;
+    setMoving(true);
+    const res = await moveParcel(kind, String(entityId(kind, entity) ?? ""), target);
+    setMoving(false);
+    if (!res.ok) {
+      toast.error("تعذّر نقل الحالة — حاول مجدداً");
+      return;
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["table", "opportunities"] }),
+      queryClient.invalidateQueries({ queryKey: ["table", "licenses"] }),
+      queryClient.invalidateQueries({ queryKey: ["table", "assumed_parcels"] }),
+      queryClient.invalidateQueries({ queryKey: ["map_parcels"] }),
+      queryClient.invalidateQueries({ queryKey: ["counts"] }),
+    ]);
+    toast.success("نُقلت القطعة — أكمل الحقول المطلوبة إن لزم");
+    onMoved({ kind: res.kind, id: res.id });
   }
 
   const compact = cfg.fields.filter((f) => f.type !== "textarea");
@@ -166,6 +211,22 @@ export function ParcelWindow({
               {subParts.length ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{subParts.join(" · ")}</p> : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StateBadge state={state} />
+                <span className="inline-flex items-center gap-1 rounded-full bg-secondary/40 px-2 py-0.5 text-xs ring-1 ring-inset ring-border/60" title="نقل الحالة">
+                  <ArrowLeftRight className="size-3 text-muted-foreground" />
+                  <select
+                    value={state}
+                    disabled={moving}
+                    onChange={(e) => void handleMove(e.target.value as ParcelState)}
+                    aria-label="نقل الحالة"
+                    className="cursor-pointer bg-transparent text-xs font-medium text-foreground outline-none disabled:opacity-50"
+                  >
+                    {STATE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-secondary/50 px-2 py-0.5 text-xs text-foreground/80 ring-1 ring-inset ring-border/60">
                   <Tag className="size-3" /> {sectorLabel(entity.sector as string | null)}
                 </span>
@@ -187,6 +248,11 @@ export function ParcelWindow({
           {/* جسم التحرير المباشر */}
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-5 sm:grid-cols-2">
+              {missingHints.length ? (
+                <div className="rounded-lg border border-state-announced/40 bg-state-announced/10 p-2.5 text-xs text-state-announced sm:col-span-2">
+                  أكمل الحقول المطلوبة: {missingHints.map((h) => h.label).join(" · ")}
+                </div>
+              ) : null}
               {compact.map((f) => {
                 const id = `pw-${kind}-${f.key}`;
                 if (f.type === "select" && f.options) {

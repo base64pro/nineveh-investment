@@ -61,7 +61,13 @@ export function ParcelModals() {
         optionSets={optionSets}
       />
       {detail && detailEntity ? (
-        <ParcelWindow kind={detail.kind} entity={detailEntity} onClose={() => setDetail(null)} />
+        <ParcelWindow
+          key={`${detail.kind}-${detail.id}`}
+          kind={detail.kind}
+          entity={detailEntity}
+          onClose={() => setDetail(null)}
+          onMoved={(ref) => setDetail(ref)}
+        />
       ) : null}
     </>
   );
