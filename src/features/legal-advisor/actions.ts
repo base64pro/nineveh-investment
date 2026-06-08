@@ -82,7 +82,7 @@ export async function askLegalAdvisor(question: string, history: ChatMessage[] =
       ...history.slice(-6),
       { role: "user", content: `المواد القانونية المتاحة (مصدرك الوحيد):\n\n${context}\n\n────────\nسؤال المستخدم: ${q}` },
     ];
-    const answer = await anthropicChat({ system: SYSTEM, messages, maxTokens: 2048 });
+    const answer = await anthropicChat({ system: SYSTEM, messages, maxTokens: 4096 });
     return { ok: true, answer: answer || "تعذّرت الصياغة." };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "خطأ غير متوقّع" };
