@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Scale, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { askLegalAdvisor } from "./actions";
+import { AdvisorAnswer } from "./advisor-answer";
 import type { ChatMessage } from "@/lib/ai/anthropic";
 
 export function LegalAdvisorPanel() {
@@ -64,7 +65,7 @@ export function LegalAdvisorPanel() {
               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-primary/70">
                 <Sparkles className="size-3.5" /> المستشار القانوني
               </p>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{m.content}</div>
+              <AdvisorAnswer text={m.content} />
             </div>
           ),
         )}
