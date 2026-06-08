@@ -203,7 +203,7 @@ export function OpportunitiesPanel() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-3">
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}

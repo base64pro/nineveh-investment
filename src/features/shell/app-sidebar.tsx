@@ -20,6 +20,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   const [licenseStatus, setLicenseStatus] = useState("");
 
   const activeSection = SECTIONS.find((s) => s.id === active) ?? null;
+  const ActiveIcon = activeSection?.icon;
 
   return (
     <>
@@ -32,15 +33,22 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
-            className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[92vw] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-card/95 shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
+            className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[92vw] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
           >
-          <header className="flex items-center justify-between border-b border-border p-3">
-            <h2 className="text-sm font-bold">{activeSection.label}</h2>
+          <header className="flex items-center justify-between gap-2 border-b border-border bg-card p-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              {ActiveIcon ? (
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[rgba(148,175,209,0.16)] text-foreground ring-1 ring-inset ring-foreground/15">
+                  <ActiveIcon className="size-4" />
+                </span>
+              ) : null}
+              <h2 className="truncate text-base font-bold tracking-tight">{activeSection.label}</h2>
+            </div>
             <button
               type="button"
               onClick={() => setActive(null)}
               aria-label="إغلاق"
-              className="rounded p-1 transition hover:bg-accent"
+              className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <X className="size-4" />
             </button>
