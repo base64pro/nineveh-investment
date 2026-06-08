@@ -40,12 +40,12 @@ import type { License } from "@/types/entities";
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
 
-// التصفيات الأربع (§هـ.1): الكل · قيد · منجزة · مسحوبة — بألوان الحالات.
+// التصفيات الأربع (§هـ.1): الكل · قيد · منجزة · مسحوبة — أزرار متساوية بألوان الحالات وتوهّج (العدّادات في دوائر عائمة).
 const STATUS_TABS: { value: string; label: string; active: string }[] = [
-  { value: "", label: "الكل", active: "bg-primary/15 text-foreground ring-1 ring-border" },
-  { value: "in-progress", label: "قيد", active: "bg-state-inprogress/20 text-state-inprogress ring-1 ring-state-inprogress/40" },
-  { value: "completed", label: "منجزة", active: "bg-state-completed/20 text-state-completed ring-1 ring-state-completed/40" },
-  { value: "withdrawn", label: "مسحوبة", active: "bg-state-withdrawn/20 text-state-withdrawn ring-1 ring-state-withdrawn/40" },
+  { value: "", label: "الكل", active: "bg-foreground/10 text-foreground ring-foreground/30 shadow-[0_0_16px_-6px_rgba(148,175,209,0.6)]" },
+  { value: "in-progress", label: "قيد", active: "bg-state-inprogress/20 text-state-inprogress ring-state-inprogress/50 shadow-[0_0_16px_-6px_rgba(87,117,168,0.75)]" },
+  { value: "completed", label: "منجزة", active: "bg-state-completed/20 text-state-completed ring-state-completed/50 shadow-[0_0_16px_-6px_rgba(94,151,122,0.75)]" },
+  { value: "withdrawn", label: "مسحوبة", active: "bg-state-withdrawn/20 text-state-withdrawn ring-state-withdrawn/50 shadow-[0_0_16px_-6px_rgba(181,97,106,0.75)]" },
 ];
 
 const STATUS_ACCENT: Record<string, string> = {
@@ -76,12 +76,17 @@ function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
   );
 }
 
-export function LicensesPanel() {
+export function LicensesPanel({
+  status,
+  setStatus,
+}: {
+  status: string;
+  setStatus: (s: string) => void;
+}) {
   const { data, isLoading, isError, refetch } = useTable<License>("licenses");
   const queryClient = useQueryClient();
 
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("");
   const [sector, setSector] = useState("");
   const [district, setDistrict] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
@@ -102,12 +107,6 @@ export function LicensesPanel() {
     () => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(),
     [districts],
   );
-  const statusCounts = useMemo(() => {
-    const c: Record<string, number> = { "in-progress": 0, completed: 0, withdrawn: 0 };
-    for (const l of all) c[l.status] = (c[l.status] ?? 0) + 1;
-    return c;
-  }, [all]);
-
   const optionSets = useMemo(
     () => ({
       sector: sectors,
@@ -179,23 +178,21 @@ export function LicensesPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-2 border-b border-border p-3">
-        {/* التصفيات الأربع (§هـ.1) */}
-        <div className="flex gap-1">
+        {/* التصفيات الأربع (§هـ.1) — متساوية ومبهرة؛ العدّادات في دوائر عائمة بجانب السايدبار */}
+        <div className="grid grid-cols-4 gap-1.5">
           {STATUS_TABS.map((t) => {
             const isActive = status === t.value;
-            const count = t.value === "" ? all.length : statusCounts[t.value] ?? 0;
             return (
               <button
                 key={t.value}
                 type="button"
                 onClick={() => setStatus(t.value)}
                 className={cn(
-                  "flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition",
-                  isActive ? t.active : "text-muted-foreground hover:bg-accent",
+                  "rounded-lg px-2 py-2 text-xs font-semibold ring-1 ring-inset transition",
+                  isActive ? t.active : "text-muted-foreground ring-border/50 hover:bg-accent hover:text-foreground",
                 )}
               >
                 {t.label}
-                <span className="opacity-70">{count}</span>
               </button>
             );
           })}

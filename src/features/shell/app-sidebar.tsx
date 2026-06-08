@@ -10,12 +10,14 @@ import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { OpportunitiesPanel } from "@/features/opportunities/opportunities-panel";
 import { LicensesPanel } from "@/features/licenses/licenses-panel";
+import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { SECTIONS } from "./sections";
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   useRealtimeSync(); // المصدر الواحد: انعكاس فوري لأي تغيير
   const { data: counts } = useCounts();
   const [active, setActive] = useState<string | null>(null);
+  const [licenseStatus, setLicenseStatus] = useState("");
 
   const activeSection = SECTIONS.find((s) => s.id === active) ?? null;
 
@@ -47,7 +49,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
             {activeSection.id === "opportunities" ? (
               <OpportunitiesPanel />
             ) : activeSection.id === "licenses" ? (
-              <LicensesPanel />
+              <LicensesPanel status={licenseStatus} setStatus={setLicenseStatus} />
             ) : (
               <div className="space-y-3 p-4 text-sm">
                 {activeSection.table && counts ? (
@@ -61,6 +63,9 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
             )}
           </div>
           </motion.aside>
+        ) : null}
+        {activeSection?.id === "licenses" ? (
+          <LicenseStatusCounters key="lic-counters" status={licenseStatus} onSelect={setLicenseStatus} />
         ) : null}
       </AnimatePresence>
 
