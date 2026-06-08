@@ -81,6 +81,7 @@ export interface Opportunity {
   muqataa_no: string | null;
   muqataa_name: string | null;
   district: string | null;
+  neighborhood: string | null;
   area_olk: number | null;
   area_m2: number | null;
   area_total_m2: number | null;
@@ -137,6 +138,8 @@ export interface License {
   muqataa_no: string | null;
   muqataa_name: string | null;
   district: string | null;
+  subdistrict: string | null;
+  neighborhood: string | null;
   area_olk: number | null;
   area_m2: number | null;
   area_total_m2: number | null;
@@ -286,6 +289,7 @@ export interface MapElement {
 // 9) القطعة المفترضة (§ج.8/9)
 export interface AssumedParcel {
   id: string;
+  name: string | null;
   parcel_no: string | null;
   muqataa_no: string | null;
   muqataa_name: string | null;

@@ -1,8 +1,14 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseEnv } from "./env";
 
-/** عميل المتصفّح (مكوّنات العميل). الجلسة بالكوكيز. */
-export function createClient() {
-  const { url, anonKey } = supabaseEnv();
-  return createBrowserClient(url, anonKey);
+// عميل متصفّح مفرد (يُشارَك بين الاستعلامات والاشتراك اللحظي). الجلسة بالكوكيز.
+let client: SupabaseClient | undefined;
+
+export function createClient(): SupabaseClient {
+  if (!client) {
+    const { url, anonKey } = supabaseEnv();
+    client = createBrowserClient(url, anonKey);
+  }
+  return client;
 }
