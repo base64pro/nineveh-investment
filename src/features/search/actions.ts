@@ -83,6 +83,8 @@ interface Row {
   district: string | null;
   status: string | null;
   parcel_no: string | null;
+  map_ref: string | null;
+  has_geom: boolean;
 }
 
 export async function superSearch(query: string): Promise<{ results: SearchResult[] }> {
@@ -109,6 +111,8 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
     label: r.label ?? "—",
     sublabel: buildSublabel(r.kind, r.sector, r.district, r.status),
     parcel_no: r.parcel_no,
+    mapRef: r.map_ref,
+    hasGeom: r.has_geom,
     lng: null,
     lat: null,
   }));
@@ -122,6 +126,8 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
       label: p.label,
       sublabel: p.sublabel,
       parcel_no: null,
+      mapRef: null,
+      hasGeom: false,
       lng: p.lng,
       lat: p.lat,
     }));

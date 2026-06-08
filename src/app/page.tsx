@@ -19,7 +19,7 @@ export default async function Home() {
       </div>
 
       {/* الخريطة تملأ ما تحت الهيدبار وتترك شريطاً (80px) يميناً للسايدبار — دون لمس مكوّن م1 */}
-      <div className="absolute bottom-0 left-0 right-20 top-12">
+      <div className="absolute bottom-0 left-0 right-20 top-14">
         <InvestmentMap />
       </div>
 

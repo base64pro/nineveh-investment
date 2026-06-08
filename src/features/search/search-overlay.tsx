@@ -91,10 +91,10 @@ export function SearchOverlay() {
   function go(r: SearchResult): void {
     if (r.kind === "place" && r.lng !== null && r.lat !== null) {
       requestFlyToCoords({ lng: r.lng, lat: r.lat, label: r.label });
-    } else if (r.parcel_no) {
-      requestFlyTo(r.parcel_no);
+    } else if (r.hasGeom && r.mapRef) {
+      requestFlyTo(r.mapRef); // مرسوم ← طيران للخريطة
     } else {
-      const section = KIND_META[r.kind].section;
+      const section = KIND_META[r.kind].section; // غير مرسوم ← فتح سجلّه في قسمه
       if (section) requestOpenSection(section);
     }
     setOpen(false);
@@ -122,7 +122,7 @@ export function SearchOverlay() {
 
   const q = query.trim();
   const navHint = (r: SearchResult): string =>
-    r.kind === "place" ? "↵ الموقع على الخريطة" : r.parcel_no ? "↵ القطعة على الخريطة" : "↵ فتح القسم";
+    r.kind === "place" ? "↵ الموقع على الخريطة" : r.hasGeom ? "↵ القطعة على الخريطة" : "↵ فتح السجلّ";
 
   return (
     <AnimatePresence>
