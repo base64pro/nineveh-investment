@@ -8,7 +8,6 @@ import {
   Building2,
   CheckCheck,
   ChevronDown,
-  LocateFixed,
   Download,
   Eye,
   Home,
@@ -34,6 +33,7 @@ import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
+import { LiveLocationButton } from "@/components/ui/live-location-button";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { AssumedForm } from "./assumed-form";
 import { AssumedDetail } from "./assumed-detail";
@@ -234,16 +234,19 @@ export function AssumedPanel() {
                     className="mt-3 size-4 shrink-0 cursor-pointer accent-state-assumed"
                     aria-label="تحديد"
                   />
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggleExpand(o.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(o.id); } }}
                     aria-expanded={isOpen}
-                    className="flex min-w-0 flex-1 flex-col gap-1.5 py-2.5 text-start"
+                    className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1.5 py-2.5 text-start"
                   >
                     <div className="flex w-full items-start gap-2">
                       <h4 className={cn("min-w-0 flex-1 text-[15px] font-semibold leading-snug", isOpen ? "line-clamp-2" : "truncate")}>
                         {title}
                       </h4>
+                      <LiveLocationButton onClick={() => requestFlyTo(o.id)} />
                       <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} aria-hidden />
                     </div>
                     <div className="flex w-full items-center gap-2">
@@ -252,16 +255,7 @@ export function AssumedPanel() {
                         <StateBadge state="assumed" />
                       </span>
                     </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => requestFlyTo(o.id)}
-                    title="الموقع الحي"
-                    aria-label="الموقع الحي"
-                    className="mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white ring-1 ring-inset ring-white/25 transition hover:bg-white/20 hover:ring-white/40"
-                  >
-                    <LocateFixed className="size-3.5" /> الموقع الحي
-                  </button>
+                  </div>
                 </div>
 
                 {isOpen ? (

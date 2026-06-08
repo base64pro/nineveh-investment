@@ -24,7 +24,6 @@ import {
 } from "../lib/map-config";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { GeoJsonLayer, IconLayer } from "@deck.gl/layers";
-import { CollisionFilterExtension } from "@deck.gl/extensions";
 import type { Layer } from "@deck.gl/core";
 import { useMapParcels } from "../lib/use-map-parcels";
 import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
@@ -185,11 +184,8 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
         getSize: (d: { ref_id: string }) => (selectedId !== null && d.ref_id === selectedId ? 1.32 : 1),
         sizeUnits: "pixels",
         sizeScale: 44,
-        // إزالة التداخل (collision): تظهر الإشارات غير المتداخلة فقط، المحدّدة دائماً؛ البقية تنكشف بالتقريب.
-        extensions: [new CollisionFilterExtension()],
-        collisionEnabled: true,
-        getCollisionPriority: (d: { ref_id: string }) => (selectedId !== null && d.ref_id === selectedId ? 1000 : 0),
-        updateTriggers: { getSize: selectedId, getCollisionPriority: selectedId },
+        // كل الإشارات ظاهرة دائماً (لا إخفاء/تذبذب شفافية).
+        updateTriggers: { getSize: selectedId },
       }),
     );
   }
