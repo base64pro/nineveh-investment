@@ -56,7 +56,7 @@ export async function deleteApiKey(provider: string): Promise<Result> {
 }
 
 export async function changePassword(password: string): Promise<Result> {
-  if (password.length < 6) return { ok: false, error: "كلمة المرور قصيرة (٦ أحرف على الأقل)" };
+  if (password.length < 6) return { ok: false, error: "كلمة المرور قصيرة (6 أحرف على الأقل)" };
   const sb = await createClient();
   const { error } = await sb.auth.updateUser({ password });
   return error ? { ok: false, error: error.message } : { ok: true };

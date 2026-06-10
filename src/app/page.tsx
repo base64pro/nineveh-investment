@@ -4,6 +4,7 @@ import { AppSidebar } from "@/features/shell/app-sidebar";
 import { Headbar } from "@/features/shell/headbar";
 import { SearchOverlay } from "@/features/search/search-overlay";
 import { SettingsApplier } from "@/features/settings/settings-applier";
+import { ConnectivityBanner } from "@/components/connectivity-banner";
 import InvestmentMap from "@/features/map/components/investment-map";
 
 export default async function Home() {
@@ -27,6 +28,7 @@ export default async function Home() {
         <AppSidebar userEmail={user?.email ?? null} />
         <SearchOverlay />
         <SettingsApplier />
+        <ConnectivityBanner />
       </div>
     </main>
   );

@@ -146,7 +146,7 @@ export function SettingsPanel() {
             <Field label="البريد/المستخدم">
               <div className="rounded-md border border-border/60 bg-secondary/30 px-2.5 py-1.5 text-sm text-foreground/80">{data?.email ?? "غير متوفّر"}</div>
             </Field>
-            <Field label="تغيير كلمة المرور" hint="٦ أحرف على الأقل">
+            <Field label="تغيير كلمة المرور" hint="6 أحرف على الأقل">
               <div className="flex gap-2">
                 <input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="كلمة مرور جديدة" className={INPUT} autoComplete="new-password" />
                 <Button type="button" size="sm" disabled={busy || pwd.length < 6} onClick={() => void onChangePwd()}>حفظ</Button>

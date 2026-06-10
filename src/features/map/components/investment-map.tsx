@@ -401,6 +401,17 @@ export default function InvestmentMap() {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
+      // §ز.5 · فشل الخريطة (الشبكة): تنبيه مخفَّف (مرّة/60 ثانية) — البيانات والأقسام تبقى متاحة من السايدبار
+      let lastMapErrorAt = 0;
+      map.on("error", (e) => {
+        const msg = e?.error?.message ?? "";
+        if (!/fetch|network|HTTP|upstream/i.test(msg)) return; // أخطاء الشبكة فقط (لا ضجيج بلاطات حميد)
+        const now = Date.now();
+        if (now - lastMapErrorAt < 60_000 || !navigator.onLine) return; // لافتة الانقطاع تغطّي حالة الأوفلاين
+        lastMapErrorAt = now;
+        toast.error("تعذّر تحميل بعض طبقات الخريطة — تُعاد المحاولة تلقائياً");
+      });
+
       // صورة شفّافة بديلة لأي صورة مفقودة (تمنع المربّعات السوداء وتُسكت التحذيرات)
       map.on("styleimagemissing", (e) => {
         const m = mapRef.current;
