@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/features/shell/app-sidebar";
 import { Headbar } from "@/features/shell/headbar";
 import { SearchOverlay } from "@/features/search/search-overlay";
+import { SettingsApplier } from "@/features/settings/settings-applier";
 import InvestmentMap from "@/features/map/components/investment-map";
 
 export default async function Home() {
@@ -25,6 +26,7 @@ export default async function Home() {
         </div>
         <AppSidebar userEmail={user?.email ?? null} />
         <SearchOverlay />
+        <SettingsApplier />
       </div>
     </main>
   );

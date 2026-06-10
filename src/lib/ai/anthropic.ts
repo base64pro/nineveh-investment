@@ -1,5 +1,6 @@
-// مُساعد Anthropic — **خادمي فقط** (يُستدعى من Server Actions). المفتاح من env ولا يصل العميل أبداً (§قاعدة 6).
-// النموذج من env كافتراضي؛ يُتجاوَز بإعدادات المستخدم في م5 (تمرير model).
+// مُساعد Anthropic — **خادمي فقط** (يُستدعى من Server Actions). المفتاح لا يصل العميل أبداً (§قاعدة 6).
+// النموذج والمفتاح من **إعدادات المستخدم** (القاعدة) ثم env بديلاً (§قاعدة 9).
+import { getAiModel, getProviderKey } from "./ai-config";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -14,11 +15,11 @@ export async function anthropicChat(opts: {
   maxTokens?: number;
   model?: string;
 }): Promise<string> {
-  // APP_ANTHROPIC_KEY: اسم مميّز يتفادى حقن بيئة التطوير لـANTHROPIC_API_KEY (فارغاً)؛ مع إبقاء الاسم القياسي بديلاً للإنتاج.
-  const key = process.env.APP_ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("APP_ANTHROPIC_KEY غير مضبوط");
-  const model = opts.model || process.env.ANTHROPIC_MODEL;
-  if (!model) throw new Error("ANTHROPIC_MODEL غير مضبوط");
+  // الإعدادات أولاً ثم env. APP_ANTHROPIC_KEY اسم مميّز يتفادى حقن بيئة التطوير لـANTHROPIC_API_KEY فارغاً.
+  const key = await getProviderKey("anthropic", process.env.APP_ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY);
+  if (!key) throw new Error("مفتاح Anthropic غير مضبوط (الإعدادات أو APP_ANTHROPIC_KEY)");
+  const model = opts.model || (await getAiModel(process.env.ANTHROPIC_MODEL));
+  if (!model) throw new Error("نموذج الذكاء غير مضبوط (الإعدادات أو ANTHROPIC_MODEL)");
 
   const res = await fetch(ANTHROPIC_URL, {
     method: "POST",

@@ -1,11 +1,12 @@
-// مُساعد تضمينات Voyage AI — **خادمي/سكربتي فقط**. المفتاح من env ولا يصل العميل.
+// مُساعد تضمينات Voyage AI — **خادمي/سكربتي فقط**. المفتاح من الإعدادات ثم env؛ لا يصل العميل.
 // input_type: "document" للفهرسة · "query" للاستعلام (Voyage يحسّن التطابق بهذا التمييز).
+import { getProviderKey } from "./ai-config";
 
 const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
 
 export async function voyageEmbed(texts: string[], inputType: "document" | "query"): Promise<number[][]> {
-  const key = process.env.VOYAGE_API_KEY;
-  if (!key) throw new Error("VOYAGE_API_KEY غير مضبوط");
+  const key = await getProviderKey("voyage", process.env.VOYAGE_API_KEY);
+  if (!key) throw new Error("مفتاح Voyage غير مضبوط (الإعدادات أو VOYAGE_API_KEY)");
   const model = process.env.VOYAGE_MODEL || "voyage-3";
 
   const res = await fetch(VOYAGE_URL, {
