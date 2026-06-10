@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { FileText, Lightbulb, ListChecks, Scale, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useEscClose } from "@/components/ui/use-esc-close";
 import { ControlsTab } from "./legal/controls-tab";
 import { ReportTab } from "./legal/report-tab";
 import { RecommendationsTab } from "./insights/recommendations-tab";
@@ -24,6 +25,7 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
 
 export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; entity: Record<string, unknown>; onClose: () => void }) {
   const [tab, setTab] = useState<TabKey>("controls");
+  useEscClose(true, onClose);
 
   return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true">
@@ -53,8 +55,8 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
           </button>
         </header>
 
-        {/* شريط التابات الأفقي */}
-        <div className="flex shrink-0 gap-1 border-b border-border/60 px-3 pt-2">
+        {/* شريط التابات الأفقي — يتمرّر أفقياً على الشاشات الضيقة بدل الانضغاط */}
+        <div className="scroll-slim flex shrink-0 gap-1 overflow-x-auto border-b border-border/60 px-3 pt-2">
           {TABS.map((t) => {
             const Icon = t.icon;
             const active = tab === t.key;
@@ -64,7 +66,7 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
                 type="button"
                 onClick={() => setTab(t.key)}
                 className={
-                  "flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-xs font-medium transition " +
+                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-lg px-3 py-2 text-xs font-medium transition " +
                   (active
                     ? "bg-background text-primary ring-1 ring-inset ring-border/60 ring-b-0"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground")

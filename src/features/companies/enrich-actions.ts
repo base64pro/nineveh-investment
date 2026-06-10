@@ -103,7 +103,10 @@ export async function applyEnrichment(id: string, items: { field: string; value:
   const patch: Record<string, unknown> = {};
   for (const it of valid) {
     if (NUMERIC_FIELDS.has(it.field)) {
-      const n = Number(it.value.replace(/[^\d.]/g, ""));
+      // رقم صرف فقط (بعد إزالة الفواصل) — «1.5 مليون» ونحوها تُرفض لا تُخمَّن (صفر تأليف)
+      const clean = it.value.replace(/[,٬\s]/g, "");
+      if (!/^\d+(\.\d+)?$/.test(clean)) continue;
+      const n = Number(clean);
       if (!Number.isFinite(n) || n <= 0) continue;
       patch[it.field] = n;
     } else {

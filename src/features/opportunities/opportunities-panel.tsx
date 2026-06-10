@@ -264,7 +264,7 @@ export function OpportunitiesPanel() {
             return (
               <li
                 key={o.record_id}
-                className="group relative overflow-hidden rounded-xl border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-state-announced/60 hover:ring-state-announced/25 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
+                className="group relative overflow-hidden rounded-xl [content-visibility:auto] [contain-intrinsic-size:auto_120px] border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-state-announced/60 hover:ring-state-announced/25 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
               >
                 {/* شريط الحالة الجانبي (معلَنة) */}
                 <span

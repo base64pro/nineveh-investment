@@ -120,7 +120,10 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               type="button"
               title={s.label}
               aria-label={s.label}
-              onClick={() => setActive(isActive ? null : s.id)}
+              onClick={() => {
+                if (s.id === "licenses" && !isActive) setLicenseStatus(""); // فتح جديد من الشريط ← فلتر نظيف (لا فلتر عالق)
+                setActive(isActive ? null : s.id);
+              }}
               className={cn(
                 "relative flex size-14 items-center justify-center rounded-lg transition",
                 isActive ? "bg-primary text-primary-foreground" : "hover:bg-accent",

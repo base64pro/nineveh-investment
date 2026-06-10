@@ -21,6 +21,9 @@ const TABLES = [
 
 // جداول تؤثّر في طبقة قطع الخريطة (view map_parcels) ← إبطالها أيضاً.
 const PARCEL_TABLES = new Set<string>(["opportunities", "licenses", "assumed_parcels", "parcel_geometry"]);
+// إبطال مضيَّق: العدّادات لجداولها المعدودة فقط · إحصاءات الهيدبار لجداولها الأربعة فقط (لا ضجيج).
+const COUNTED_TABLES = new Set<string>(["opportunities", "licenses", "companies", "criteria", "consultations", "assumed_parcels"]);
+const STATS_TABLES = new Set<string>(["opportunities", "licenses", "companies", "assumed_parcels"]);
 
 export function useRealtimeSync(): void {
   const queryClient = useQueryClient();
@@ -32,8 +35,8 @@ export function useRealtimeSync(): void {
     for (const table of TABLES) {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
         void queryClient.invalidateQueries({ queryKey: ["table", table] });
-        void queryClient.invalidateQueries({ queryKey: ["counts"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+        if (COUNTED_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["counts"] });
+        if (STATS_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
         if (table === "parcel_insights") void queryClient.invalidateQueries({ queryKey: ["insights"] });
         if (PARCEL_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       });

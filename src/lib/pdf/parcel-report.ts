@@ -1,9 +1,9 @@
 // م6.1 · باني محتوى تقرير القطعة (HTML) — خادمي/نقي. بيانات القطعة وفق حالتها + الفحص القانوني **باستشهاد**.
 // §ح: أرقام لاتينية · «غير متوفّر» للناقص · **لا معرّف داخلي** · لا كشف تحقّق.
-import { evaluateControls, type ControlItem, type ControlsInput, type Fulfillment } from "@/features/parcels/legal/controls-engine";
+import { evaluateControls, type ControlItem, type Fulfillment } from "@/features/parcels/legal/controls-engine";
+import { parcelStateOf, toControlsInput } from "@/features/parcels/legal/parcel-input";
 import { domainLabel } from "@/features/criteria/fields";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
-import type { ParcelState } from "@/types/entities";
 import { formatArea, formatDate, NOT_AVAILABLE, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
@@ -29,24 +29,7 @@ const STATE_COLOR: Record<string, string> = { announced: "#C7A24E", "in-progress
 const STATE_LABEL: Record<string, string> = { announced: "معلَنة", "in-progress": "قيد الإنجاز", completed: "منجزة", withdrawn: "مسحوبة", assumed: "مفترضة" };
 const FLABEL: Record<Fulfillment, string> = { met: "مستوفٍ", not_met: "غير مستوفٍ", needs_action: "يتطلّب إجراء", needs_input: "مُدخل مطلوب", not_applicable: "غير منطبق" };
 
-function parcelState(kind: ParcelKind, e: Record<string, unknown>): ParcelState {
-  if (kind === "opportunity") return "announced";
-  if (kind === "license") return (str(e.status) as ParcelState | null) ?? "in-progress";
-  return (str(e.state) as ParcelState | null) ?? "assumed";
-}
-function toInput(kind: ParcelKind, e: Record<string, unknown>): ControlsInput {
-  const capitalUsd = kind === "license" ? num(e.capital) : kind === "assumed" ? num(e.value) : null;
-  return {
-    state: parcelState(kind, e),
-    sector: str(e.sector),
-    capitalUsd,
-    projectValueUsd: capitalUsd,
-    landRight: str(e.land_right),
-    nationality: str(e.investor_nationality),
-    owner: str(e.owner),
-    withdrawalReason: str(e.withdrawal_reason),
-  };
-}
+// مدخل المحرّك وحالة القطعة من الوحدة الموحَّدة parcel-input (لا نسخ محلية).
 
 const NUMERIC = new Set(["capital", "value", "area_m2", "area_total_m2", "area_olk", "lease_rate", "term_years", "doc_fee"]);
 const DATEK = new Set(["publish_date", "deadline", "issue_date", "completion_date", "withdrawal_date", "renewal_date"]);
@@ -148,7 +131,7 @@ export function parcelReportBody(
   opts?: { scope?: ReportScope; insights?: PinnedInsights },
 ): { title: string; html: string } {
   const scope: ReportScope = opts?.scope ?? "full";
-  const state = parcelState(kind, entity);
+  const state = parcelStateOf(kind, entity);
   const name = orNA(entity[kind === "assumed" ? "name" : "title"] ?? entity.parcel_no);
   const areaKey = kind === "assumed" ? "area_m2" : "area_total_m2";
 
@@ -160,7 +143,7 @@ export function parcelReportBody(
     if (entity.notes) parts.push(`<section><h2>ملاحظات</h2><div style="white-space:pre-wrap;font-size:11px">${esc(orNA(entity.notes))}</div></section>`);
   }
   if (scope === "controls" || scope === "full") {
-    const r = evaluateControls(toInput(kind, entity));
+    const r = evaluateControls(toControlsInput(kind, entity));
     parts.push(
       `<section><h2>خلاصة الفحص القانوني (§ج.9)</h2><p style="font-weight:600;margin:0">خلاصة الأهلية: ${esc(r.eligibilityLabel)}</p>${r.gaps.length ? `<div class="gaps">أبرز النواقص: ${esc(r.gaps.join(" · "))}</div>` : ""}</section>`,
       `<section><h2>أولاً — ضوابط المشروع/الأرض</h2>${controlsHtml(r.projectControls)}</section>`,

@@ -7,10 +7,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { anthropicChat } from "@/lib/ai/anthropic";
 import { getWebSearchEnabled } from "@/lib/ai/ai-config";
-import { evaluateControls, type ControlsInput } from "@/features/parcels/legal/controls-engine";
+import { evaluateControls } from "@/features/parcels/legal/controls-engine";
+import { parcelStateOf, toControlsInput } from "@/features/parcels/legal/parcel-input";
 import { sectorLabel } from "@/lib/sectors";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
-import type { Company, ParcelState } from "@/types/entities";
+import type { Company } from "@/types/entities";
 
 export interface ParcelInsights {
   recommendations: string | null;
@@ -44,12 +45,6 @@ const STATE_LABEL: Record<string, string> = {
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-function parcelState(kind: ParcelKind, e: Record<string, unknown>): ParcelState {
-  if (kind === "opportunity") return "announced";
-  if (kind === "license") return (str(e.status) as ParcelState | null) ?? "in-progress";
-  return (str(e.state) as ParcelState | null) ?? "assumed";
-}
-
 async function fetchEntity(kind: ParcelKind, id: string): Promise<Record<string, unknown> | null> {
   const cfg = TABLE[kind];
   const sb = await createClient();
@@ -63,7 +58,7 @@ async function fetchEntity(kind: ParcelKind, id: string): Promise<Record<string,
 
 /** ملخّص القطعة للذكاء — الحقول المتوفّرة فقط (لا تأليف، لا معرّفات داخلية §ح). */
 function entitySummary(kind: ParcelKind, e: Record<string, unknown>): string {
-  const state = parcelState(kind, e);
+  const state = parcelStateOf(kind, e);
   const pairs: [string, string | null][] = [
     ["العنوان", str(e[kind === "assumed" ? "name" : "title"])],
     ["الحالة", STATE_LABEL[state] ?? state],
@@ -85,18 +80,7 @@ function entitySummary(kind: ParcelKind, e: Record<string, unknown>): string {
 
 /** خلاصة الفحص الحتمي §ج.9 (الذكاء يستند إليها ولا يقرّر بدلها). */
 function controlsSummary(kind: ParcelKind, e: Record<string, unknown>): string {
-  const capitalUsd = kind === "license" ? num(e.capital) : kind === "assumed" ? num(e.value) : null;
-  const input: ControlsInput = {
-    state: parcelState(kind, e),
-    sector: str(e.sector),
-    capitalUsd,
-    projectValueUsd: capitalUsd,
-    landRight: str(e.land_right),
-    nationality: str(e.investor_nationality),
-    owner: str(e.owner),
-    withdrawalReason: str(e.withdrawal_reason),
-  };
-  const r = evaluateControls(input);
+  const r = evaluateControls(toControlsInput(kind, e));
   const gaps = r.gaps.length ? `\n- أبرز النواقص: ${r.gaps.join(" · ")}` : "";
   return `- خلاصة الأهلية (محرّك §ج.9 الحتمي): ${r.eligibilityLabel}${gaps}`;
 }
@@ -136,8 +120,10 @@ async function chatWithOptionalWeb(system: string, content: string, maxTokens: n
   if (webOn) {
     try {
       return await anthropicChat({ system, messages: [{ role: "user", content }], maxTokens, tools: WEB_TOOL });
-    } catch {
-      // أداة الويب غير متاحة/فشلت — نكمل ببياناتنا فقط
+    } catch (e) {
+      // التراجع بلا ويب لتعذّر الأداة فقط — فشل المفتاح/النموذج يُرفَع كما هو (لا نداء مزدوج مكلف §ز.4)
+      const msg = e instanceof Error ? e.message : "";
+      if (!/tool|web_search/i.test(msg)) throw e;
     }
   }
   return anthropicChat({ system, messages: [{ role: "user", content }], maxTokens });

@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combo } from "@/components/ui/combo";
+import { useEscClose } from "@/components/ui/use-esc-close";
 import { OptionField } from "@/components/ui/option-field";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { ActionsWindow } from "@/features/parcels/actions-window";
@@ -145,6 +146,7 @@ export function ParcelWindow({
   const [saving, setSaving] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [moving, setMoving] = useState(false);
+  useEscClose(!actionsOpen, onClose); // نافذة الإجراءات فوقها تستهلك Esc حين تكون مفتوحة
   const { data: companiesData } = useTable<Company>("companies");
   const companyOptions = useMemo(() => (companiesData ?? []).map((c) => ({ id: c.id, name: c.name })), [companiesData]);
   const [companyRef, setCompanyRef] = useState<string | null>((entity.company_ref as string | null) ?? null);
