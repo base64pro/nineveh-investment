@@ -1,11 +1,23 @@
 // م6.1 · باني محتوى تقرير القطعة (HTML) — خادمي/نقي. بيانات القطعة وفق حالتها + الفحص القانوني **باستشهاد**.
 // §ح: أرقام لاتينية · «غير متوفّر» للناقص · **لا معرّف داخلي** · لا كشف تحقّق.
 import { evaluateControls, type ControlItem, type ControlsInput, type Fulfillment } from "@/features/parcels/legal/controls-engine";
+import { domainLabel } from "@/features/criteria/fields";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 import type { ParcelState } from "@/types/entities";
 import { formatArea, formatDate, NOT_AVAILABLE, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
+import { answerToHtml } from "./consultation-report";
+
+// نطاقات التقرير (§هـ.4): قطعة / تاب بعينه / شامل.
+export type ReportScope = "parcel" | "controls" | "recommendations" | "criteria" | "full";
+
+export interface PinnedInsights {
+  recommendations: string | null;
+  recommendations_at: string | null;
+  criteria: { name: string; domain: string; purpose: string; items: { description: string; basis: string; weight: string; support_indicator: string }[] } | null;
+  criteria_at: string | null;
+}
 
 function esc(s: unknown): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -98,19 +110,65 @@ function controlsHtml(items: ControlItem[]): string {
     .join("");
 }
 
-/** يبني محتوى تقرير القطعة (عنوان + بيانات + فحص قانوني). */
-export function parcelReportBody(kind: ParcelKind, entity: Record<string, unknown>): { title: string; html: string } {
+const IJTIHAD = `<div style="border:1px solid #9dbf9d;background:#f0f6f0;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:10.5px;font-weight:600;color:#3f7a5c">🟩 محتوى مولّد بالذكاء — رأي استنتاجي غير مُلزِم؛ الضوابط الإلزامية في قسم الفحص القانوني.</div>`;
+
+function recommendationsHtml(ins: PinnedInsights | undefined): string {
+  if (!ins?.recommendations) {
+    return `<section><h2>التوصيات الذكية 🟩</h2><p style="margin:0;font-size:11px;color:#6b7a99">${NOT_AVAILABLE} — لم تُولَّد توصيات لهذه القطعة بعد.</p></section>`;
+  }
+  return `<section class="qa-a"><h2>التوصيات الذكية 🟩</h2>${IJTIHAD}<div style="font-size:10px;color:#6b7a99;margin-bottom:6px">ثُبِّتت بتاريخ ${esc(formatDate(ins.recommendations_at))}</div>${answerToHtml(ins.recommendations)}</section>`;
+}
+
+function criteriaHtml(ins: PinnedInsights | undefined): string {
+  const d = ins?.criteria;
+  if (!d) {
+    return `<section><h2>المعايير المولّدة 🟩</h2><p style="margin:0;font-size:11px;color:#6b7a99">${NOT_AVAILABLE} — لم تُولَّد معايير لهذه القطعة بعد.</p></section>`;
+  }
+  const items = d.items
+    .map(
+      (it, i) =>
+        `<div class="ctrl"><div class="top"><span class="t">${i + 1}. ${esc(it.description)}</span>${it.weight ? `<span class="tag encouraged">الوزن: ${esc(it.weight)}</span>` : ""}</div>${it.basis ? `<div class="note">الأساس: ${esc(it.basis)}</div>` : ""}${it.support_indicator ? `<div class="note">مؤشّر الدعم: ${esc(it.support_indicator)}</div>` : ""}</div>`,
+    )
+    .join("");
+  return `<section><h2>المعايير المولّدة 🟩 — ${esc(d.name)} (${esc(domainLabel(d.domain) || d.domain)})</h2>${IJTIHAD}${d.purpose ? `<div style="font-size:10.5px;color:#51607a;margin-bottom:6px">${esc(d.purpose)}</div>` : ""}<div style="font-size:10px;color:#6b7a99;margin-bottom:6px">ثُبِّتت بتاريخ ${esc(formatDate(ins?.criteria_at ?? null))}</div>${items}</section>`;
+}
+
+const SCOPE_TITLE: Record<ReportScope, string> = {
+  parcel: "تقرير قطعة",
+  controls: "الضوابط والمعايير القانونية",
+  recommendations: "التوصيات الذكية",
+  criteria: "المعايير المولّدة",
+  full: "تقرير شامل",
+};
+
+/** يبني محتوى تقرير القطعة وفق النطاق (§هـ.4: قطعة / تاب / شامل) — الناقص «غير متوفّر» لا يُختلَق. */
+export function parcelReportBody(
+  kind: ParcelKind,
+  entity: Record<string, unknown>,
+  opts?: { scope?: ReportScope; insights?: PinnedInsights },
+): { title: string; html: string } {
+  const scope: ReportScope = opts?.scope ?? "full";
   const state = parcelState(kind, entity);
   const name = orNA(entity[kind === "assumed" ? "name" : "title"] ?? entity.parcel_no);
   const areaKey = kind === "assumed" ? "area_m2" : "area_total_m2";
-  const r = evaluateControls(toInput(kind, entity));
 
-  const head = `<div class="title"><h1>${esc(name)}</h1><div class="meta"><span class="badge" style="background:${STATE_COLOR[state]}">${STATE_LABEL[state]}</span><span>${esc(sectorLabel(str(entity.sector)))}</span><span>${esc(formatArea(num(entity[areaKey])))}</span></div></div>`;
-  const summary = `<section><h2>خلاصة الفحص القانوني (§ج.9)</h2><p style="font-weight:600;margin:0">خلاصة الأهلية: ${esc(r.eligibilityLabel)}</p>${r.gaps.length ? `<div class="gaps">أبرز النواقص: ${esc(r.gaps.join(" · "))}</div>` : ""}</section>`;
-  const project = `<section><h2>أولاً — ضوابط المشروع/الأرض</h2>${controlsHtml(r.projectControls)}</section>`;
-  const investor = `<section><h2>ثانياً — معايير المستثمر/الشركة</h2>${controlsHtml(r.investorCriteria)}</section>`;
-  const notes = entity.notes ? `<section><h2>ملاحظات</h2><div style="white-space:pre-wrap;font-size:11px">${esc(orNA(entity.notes))}</div></section>` : "";
+  const head = `<div class="title"><h1>${esc(`${SCOPE_TITLE[scope]} — ${name}`)}</h1><div class="meta"><span class="badge" style="background:${STATE_COLOR[state]}">${STATE_LABEL[state]}</span><span>${esc(sectorLabel(str(entity.sector)))}</span><span>${esc(formatArea(num(entity[areaKey])))}</span></div></div>`;
 
-  const html = head + sectionHtml("الهوية والموقع", LOCATION, entity) + sectionHtml("التصنيف", CLASSIFICATION, entity) + sectionHtml("تفاصيل النوع", TYPE_FIELDS[kind], entity) + summary + project + investor + notes;
-  return { title: `تقرير قطعة — ${name}`, html };
+  const parts: string[] = [head];
+  if (scope === "parcel" || scope === "full") {
+    parts.push(sectionHtml("الهوية والموقع", LOCATION, entity), sectionHtml("التصنيف", CLASSIFICATION, entity), sectionHtml("تفاصيل النوع", TYPE_FIELDS[kind], entity));
+    if (entity.notes) parts.push(`<section><h2>ملاحظات</h2><div style="white-space:pre-wrap;font-size:11px">${esc(orNA(entity.notes))}</div></section>`);
+  }
+  if (scope === "controls" || scope === "full") {
+    const r = evaluateControls(toInput(kind, entity));
+    parts.push(
+      `<section><h2>خلاصة الفحص القانوني (§ج.9)</h2><p style="font-weight:600;margin:0">خلاصة الأهلية: ${esc(r.eligibilityLabel)}</p>${r.gaps.length ? `<div class="gaps">أبرز النواقص: ${esc(r.gaps.join(" · "))}</div>` : ""}</section>`,
+      `<section><h2>أولاً — ضوابط المشروع/الأرض</h2>${controlsHtml(r.projectControls)}</section>`,
+      `<section><h2>ثانياً — معايير المستثمر/الشركة</h2>${controlsHtml(r.investorCriteria)}</section>`,
+    );
+  }
+  if (scope === "recommendations" || scope === "full") parts.push(recommendationsHtml(opts?.insights));
+  if (scope === "criteria" || scope === "full") parts.push(criteriaHtml(opts?.insights));
+
+  return { title: `${SCOPE_TITLE[scope]} — ${name}`, html: parts.join("") };
 }

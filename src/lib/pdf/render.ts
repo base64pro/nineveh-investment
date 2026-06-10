@@ -1,5 +1,40 @@
 // م6.1 · مصيّر PDF خادمي (Puppeteer) — يصيّر HTML عربي/RTL بخطّ Readex إلى PDF براندد. خادمي فقط.
-import puppeteer from "puppeteer";
+// متصفّح مشترك (singleton) — لا إطلاق Chromium لكل تصدير؛ وخطّ محلي مضمّن — لا اعتماد على Google وقت التصيير.
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import puppeteer, { type Browser } from "puppeteer";
+
+let browserPromise: Promise<Browser> | null = null;
+async function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    browserPromise = puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    browserPromise.catch(() => {
+      browserPromise = null;
+    });
+  }
+  const b = await browserPromise;
+  if (!b.connected) {
+    browserPromise = null;
+    return getBrowser();
+  }
+  return b;
+}
+
+let fontCss: string | null = null;
+/** خطّ Readex من public/fonts/readex مضمَّناً base64 — وعند غيابه تراجُع لاستيراد Google (يتطلّب إنترنت). */
+function getFontCss(): string {
+  if (fontCss !== null) return fontCss;
+  try {
+    const dir = path.join(process.cwd(), "public", "fonts", "readex");
+    fontCss = readFileSync(path.join(dir, "readex.css"), "utf8").replace(/url\(([^)]+\.woff2)\)/g, (_, f: string) => {
+      const b64 = readFileSync(path.join(dir, f.trim())).toString("base64");
+      return `url(data:font/woff2;base64,${b64})`;
+    });
+  } catch {
+    fontCss = "@import url('https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;600;700&display=swap');";
+  }
+  return fontCss;
+}
 
 export interface Branding {
   org?: string | null;
@@ -12,7 +47,6 @@ export function esc(s: unknown): string {
 }
 
 const STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap');
 * { box-sizing: border-box; }
 body { font-family: 'Readex Pro', system-ui, sans-serif; color: #1b2740; margin: 0; font-size: 11.5px; line-height: 1.65; }
 .title { border-bottom: 2px solid #233355; padding-bottom: 8px; margin-bottom: 14px; }
@@ -51,11 +85,11 @@ table.rpt tr:nth-child(even) td { background: #f4f6fa; }
 
 export async function renderPdf(opts: { title: string; bodyHtml: string; branding: Branding }): Promise<Uint8Array<ArrayBuffer>> {
   const { title, bodyHtml, branding } = opts;
-  const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${STYLES}</style></head><body>${bodyHtml}</body></html>`;
+  const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${getFontCss()}${STYLES}</style></head><body>${bodyHtml}</body></html>`;
 
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await getBrowser();
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     await page.evaluateHandle("document.fonts.ready");
     const out = await page.pdf({
@@ -68,6 +102,6 @@ export async function renderPdf(opts: { title: string; bodyHtml: string; brandin
     });
     return Uint8Array.from(out); // مخزن ArrayBuffer صرف (يقبله Blob/BodyInit)
   } finally {
-    await browser.close();
+    await page.close(); // الصفحة فقط — المتصفّح المشترك يبقى للتصديرات التالية
   }
 }

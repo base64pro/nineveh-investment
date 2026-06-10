@@ -3,8 +3,10 @@ import { hasSession } from "@/lib/supabase/require-session";
 import { createClient } from "@/lib/supabase/server";
 import { getBranding } from "@/lib/pdf/branding";
 import { renderPdf } from "@/lib/pdf/render";
-import { parcelReportBody } from "@/lib/pdf/parcel-report";
+import { parcelReportBody, type PinnedInsights, type ReportScope } from "@/lib/pdf/parcel-report";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
+
+const SCOPES = new Set<ReportScope>(["parcel", "controls", "recommendations", "criteria", "full"]);
 
 export const runtime = "nodejs"; // Puppeteer يتطلّب بيئة Node
 export const maxDuration = 60;
@@ -22,6 +24,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const url = new URL(req.url);
   const kind = url.searchParams.get("kind") ?? "";
   const id = url.searchParams.get("id") ?? "";
+  const rawScope = url.searchParams.get("scope") ?? "full";
+  const scope: ReportScope = SCOPES.has(rawScope as ReportScope) ? (rawScope as ReportScope) : "full";
   const cfg = TABLE[kind];
   if (!cfg || !id) return new NextResponse("طلب غير صالح", { status: 400 });
 
@@ -29,7 +33,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data: entity } = await sb.from(cfg.table).select("*").eq(cfg.idcol, cfg.numeric ? Number(id) : id).maybeSingle();
   if (!entity) return new NextResponse("القطعة غير موجودة", { status: 404 });
 
-  const { title, html } = parcelReportBody(kind as ParcelKind, entity as Record<string, unknown>);
+  // النتائج المثبّتة (توصيات/معايير §هـ.4) — تدخل تقارير التوصيات/المعايير/الشامل
+  let insights: PinnedInsights | undefined;
+  if (scope === "full" || scope === "recommendations" || scope === "criteria") {
+    const { data: ins } = await sb
+      .from("parcel_insights")
+      .select("recommendations, recommendations_at, criteria, criteria_at")
+      .eq("kind", kind)
+      .eq("ref_id", id)
+      .maybeSingle<PinnedInsights>();
+    insights = ins ?? undefined;
+  }
+
+  const { title, html } = parcelReportBody(kind as ParcelKind, entity as Record<string, unknown>, { scope, insights });
   const pdf = await renderPdf({ title, bodyHtml: html, branding: await getBranding() });
 
   return new NextResponse(new Blob([pdf], { type: "application/pdf" }), {
