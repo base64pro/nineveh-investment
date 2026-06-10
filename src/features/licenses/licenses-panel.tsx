@@ -29,8 +29,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
 import { formatArea, formatDate, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
@@ -187,9 +188,12 @@ export function LicensesPanel({
     setNeighborhood("");
     setStatus("");
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.record_id)) : filtered;
-    exportCsv("licenses.csv", rows as unknown as Record<string, unknown>[], [...LICENSE_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "licenses.csv", "تقرير الرخص الاستثمارية", rows as unknown as Record<string, unknown>[], [...LICENSE_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   async function onDelete(o: License) {
     if (!window.confirm(`حذف الرخصة «${o.title ?? o.license_number ?? "بلا عنوان"}»؟`)) return;
@@ -246,7 +250,7 @@ export function LicensesPanel({
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
           <button

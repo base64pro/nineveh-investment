@@ -25,8 +25,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
 import { formatArea, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
@@ -154,9 +155,12 @@ export function AssumedPanel() {
     setSubdistrict("");
     setNeighborhood("");
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
-    exportCsv("assumed_parcels.csv", rows as unknown as Record<string, unknown>[], [...ASSUMED_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "assumed_parcels.csv", "تقرير الفرص المفترضة", rows as unknown as Record<string, unknown>[], [...ASSUMED_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   async function onDelete(o: AssumedParcel) {
     if (!window.confirm(`حذف القطعة المفترضة «${o.parcel_no ?? "بلا رقم"}»؟`)) return;
@@ -191,7 +195,7 @@ export function AssumedPanel() {
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="قطعة مفترضة جديدة" aria-label="قطعة مفترضة جديدة" className={cn(ORB, "size-12")}>

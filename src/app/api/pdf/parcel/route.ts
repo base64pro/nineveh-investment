@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { hasSession } from "@/lib/supabase/require-session";
 import { createClient } from "@/lib/supabase/server";
-import { type Branding, renderPdf } from "@/lib/pdf/render";
+import { getBranding } from "@/lib/pdf/branding";
+import { renderPdf } from "@/lib/pdf/render";
 import { parcelReportBody } from "@/lib/pdf/parcel-report";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 
@@ -28,11 +29,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data: entity } = await sb.from(cfg.table).select("*").eq(cfg.idcol, cfg.numeric ? Number(id) : id).maybeSingle();
   if (!entity) return new NextResponse("القطعة غير موجودة", { status: 404 });
 
-  const { data: settings } = await sb.from("settings").select("pdf_org_name, pdf_header, pdf_footer").eq("id", 1).maybeSingle<{ pdf_org_name: string | null; pdf_header: string | null; pdf_footer: string | null }>();
-  const branding: Branding = { org: settings?.pdf_org_name, header: settings?.pdf_header, footer: settings?.pdf_footer };
-
   const { title, html } = parcelReportBody(kind as ParcelKind, entity as Record<string, unknown>);
-  const pdf = await renderPdf({ title, bodyHtml: html, branding });
+  const pdf = await renderPdf({ title, bodyHtml: html, branding: await getBranding() });
 
   return new NextResponse(new Blob([pdf], { type: "application/pdf" }), {
     status: 200,

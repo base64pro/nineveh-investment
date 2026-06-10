@@ -4,12 +4,14 @@
 // لوحات KPI + رسوم Recharts + فلاتر متقدّمة تنعكس لحظياً + تصدير + النقر ينتقل للمصدر.
 
 import { useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { BarChart3, Building2, Coins, Download, FilterX, Layers, Ruler } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import { formatNumber } from "@/lib/format";
 import { formatArea } from "@/lib/display";
 import { sectorCode, sectorLabel } from "@/lib/sectors";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
 import { Combo } from "@/components/ui/combo";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { ORB } from "@/components/ui/orb";
@@ -113,6 +115,12 @@ export function ReportsPanel() {
   const hasFilters = Boolean(filters.state || filters.sector || filters.district || filters.yearFrom || filters.yearTo);
   const set = (p: Partial<ReportFilters>) => setFilters((f) => ({ ...f, ...p }));
 
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function doExport(csvName: string, title: string, rows: Record<string, unknown>[], keys: string[]): Promise<void> {
+    const ok = await exportTable(exportFormat, csvName, title, rows, cols(keys));
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
+  }
   function exportParcels() {
     const rows = recs.map((r) => ({
       النوع: r.kind === "opportunity" ? "فرصة" : r.kind === "license" ? "رخصة" : "مفترضة",
@@ -123,15 +131,15 @@ export function ReportsPanel() {
       السنة: r.year ?? "غير متوفّر",
       القيمة: r.value,
     }));
-    exportCsv("تقرير-القطع.csv", rows, cols(["النوع", "الحالة", "القطاع", "القضاء", "المساحة م²", "السنة", "القيمة"]));
+    void doExport("تقرير-القطع.csv", "تقرير القطع", rows, ["النوع", "الحالة", "القطاع", "القضاء", "المساحة م²", "السنة", "القيمة"]);
   }
   function exportSectoral() {
     const rows = bySector(recs).map((g) => ({ القطاع: sectorLabel(g.key), العدد: g.count, "المساحة م²": Math.round(g.area) }));
-    exportCsv("تقرير-قطاعي.csv", rows, cols(["القطاع", "العدد", "المساحة م²"]));
+    void doExport("تقرير-قطاعي.csv", "التقرير القطاعي", rows, ["القطاع", "العدد", "المساحة م²"]);
   }
   function exportSpatial() {
     const rows = byDistrict(recs).map((g) => ({ القضاء: g.key, العدد: g.count, "المساحة م²": Math.round(g.area) }));
-    exportCsv("تقرير-مكاني.csv", rows, cols(["القضاء", "العدد", "المساحة م²"]));
+    void doExport("تقرير-مكاني.csv", "التقرير المكاني", rows, ["القضاء", "العدد", "المساحة م²"]);
   }
 
   return (

@@ -37,6 +37,16 @@ section h2 { font-size: 12px; color: #2a3a5c; margin: 0 0 7px; border-right: 3px
 .met { color: #3f7a5c; } .not_met { color: #a8454f; } .needs_action { color: #9a7b2e; }
 .needs_input { color: #3f5c8a; } .not_applicable { color: #8b94a6; }
 .gaps { color: #51607a; font-size: 10.5px; margin-top: 6px; }
+.subtitle { color: #6b7a99; font-size: 10.5px; margin: -8px 0 10px; }
+table.rpt { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+table.rpt th { background: #233355; color: #fff; padding: 4px 6px; text-align: right; font-weight: 600; }
+table.rpt td { border-bottom: 1px solid #e3e8f0; padding: 3px 6px; vertical-align: top; }
+table.rpt tr:nth-child(even) td { background: #f4f6fa; }
+.qa-q { background: #eef2f9; border-right: 3px solid #5775A8; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; }
+.qa-q .lbl { font-size: 10px; font-weight: 700; color: #33518a; margin-bottom: 3px; }
+.qa-a p { margin: 0 0 6px; }
+.qa-a ul { margin: 0 0 6px; padding-right: 18px; }
+.qa-a h3 { font-size: 12.5px; color: #2a3a5c; margin: 8px 0 4px; }
 `;
 
 export async function renderPdf(opts: { title: string; bodyHtml: string; branding: Branding }): Promise<Uint8Array<ArrayBuffer>> {
