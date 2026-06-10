@@ -14,6 +14,7 @@ import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { CompaniesPanel } from "@/features/companies/companies-panel";
 import { CriteriaPanel } from "@/features/criteria/criteria-panel";
 import { AssumedPanel } from "@/features/assumed/assumed-panel";
+import { ReportsPanel } from "@/features/reports/reports-panel";
 import { LegalAdvisorPanel } from "@/features/legal-advisor/legal-advisor-panel";
 import { ParcelModals } from "@/features/parcels/parcel-modals";
 import { onOpenSection } from "./shell-store";
@@ -83,6 +84,8 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               <CriteriaPanel />
             ) : activeSection.id === "opportunity-design" ? (
               <AssumedPanel />
+            ) : activeSection.id === "reports" ? (
+              <ReportsPanel />
             ) : (
               <div className="space-y-3 p-4 text-sm">
                 {activeSection.table && counts ? (
