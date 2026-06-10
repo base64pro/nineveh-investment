@@ -95,7 +95,9 @@ export function LicenseStatusCounters({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 44 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="absolute right-[547px] top-3 z-10 flex flex-col gap-2.5"
+      // تموضع نسبي لحافة اللوحة (480px أو 92vw الأصغر + شريط 80px) — وتُخفى دون md (التبويبات داخل اللوحة تغني عنها لمساً)
+      className="absolute top-3 z-10 hidden flex-col gap-2.5 md:flex"
+      style={{ right: "calc(min(480px, 92vw) + 67px)" }}
       aria-label="عدّادات حالات الرخص"
     >
       {COUNTERS.map((c) => (

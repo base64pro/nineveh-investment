@@ -198,8 +198,7 @@ export function ParcelWindow({
       queryClient.invalidateQueries({ queryKey: ["map_parcels"] }),
       queryClient.invalidateQueries({ queryKey: ["counts"] }),
     ]);
-    const pn = String(entity.parcel_no ?? "");
-    if (pn) requestFlyTo(pn); // طيران + إبراز القطعة في موضعها الجديد (يظهر عند إغلاق النافذة)
+    requestFlyTo(res.id); // طيران بمعرّف الكيان الجديد — يشمل المرسومة بلا رقم (مطابقة entity_id)
     const d = MOVE_DEST[target];
     toast.success(d ? `نُقلت إلى ${d.section} — تجدها ${d.color} على الخريطة` : "نُقلت القطعة");
     onMoved({ kind: res.kind, id: res.id });

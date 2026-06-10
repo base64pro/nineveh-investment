@@ -405,7 +405,7 @@ export default function InvestmentMap() {
       let lastMapErrorAt = 0;
       map.on("error", (e) => {
         const msg = e?.error?.message ?? "";
-        if (!/fetch|network|HTTP|upstream/i.test(msg)) return; // أخطاء الشبكة فقط (لا ضجيج بلاطات حميد)
+        if (!/fetch|network|http|upstream|tile|source|style|failed/i.test(msg)) return; // أخطاء الشبكة/المصادر (لا ضجيج حميد)
         const now = Date.now();
         if (now - lastMapErrorAt < 60_000 || !navigator.onLine) return; // لافتة الانقطاع تغطّي حالة الأوفلاين
         lastMapErrorAt = now;
@@ -616,12 +616,14 @@ export default function InvestmentMap() {
     applyVisibility(mapRef.current, showBoundaries);
   }, [showBoundaries]);
 
-  // الانتقال لقطعة من السايدبار (§هـ.2): flyTo + تحديد — بالمعرّف أو رقم القطعة
+  // الانتقال لقطعة من السايدبار (§هـ.2): flyTo + تحديد — بمعرّف المعلم أو معرّف الكيان أو رقم القطعة
   useEffect(() => {
     return onFlyTo((refId) => {
       const m = mapRef.current;
       const f = fcRef.current.features.find(
-        (ft) => ft.properties?.ref_id === refId || (refId !== "" && ft.properties?.parcel_no === refId),
+        (ft) =>
+          ft.properties?.ref_id === refId ||
+          (refId !== "" && (ft.properties?.entity_id === refId || ft.properties?.parcel_no === refId)),
       );
       if (m && f?.geometry) {
         const ref = f.properties?.ref_id;
@@ -666,6 +668,19 @@ export default function InvestmentMap() {
     map.once("idle", () => {
       applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
       applyVisibility(mapRef.current, showBoundariesRef.current);
+      // إعادة تسجيل طبقات أداة الرسم — setStyle يمسح مصادرها (جذر أخطاء setData المتدفّقة)
+      const d = drawRef.current;
+      if (d) {
+        try {
+          d.stop();
+          d.start();
+          d.setMode("static");
+        } catch {
+          // تعذّرت إعادة التسجيل — الزرّ محميّ بـtry/catch ويُعاد عند التحميل
+        }
+      }
+      linkTargetRef.current = null;
+      setDrawing(false);
     });
   }
 
