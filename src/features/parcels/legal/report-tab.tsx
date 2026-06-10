@@ -3,7 +3,9 @@
 // التاب 4 — التقرير (عرض داخلي غنيّ §هـ.4). يعرض بيانات القطعة (وفق حالتها) + ملخّص الفحص القانوني.
 // تصدير PDF أنيق موحّد الهوية = م6 (طبقة المخرجات §ح). لا كشف تحقّق داخلي.
 
+import { useState } from "react";
 import { FileDown, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { formatArea, formatDate, NOT_AVAILABLE, orNA } from "@/lib/display";
@@ -111,6 +113,27 @@ export function ReportTab({ kind, entity }: { kind: ParcelKind; entity: Record<s
     .map((f) => ({ f, n: all.filter((it) => it.fulfillment === f).length }))
     .filter((x) => x.n > 0);
 
+  const [exporting, setExporting] = useState(false);
+  const entityId = String(entity[kind === "assumed" ? "id" : "record_id"] ?? "");
+  async function exportPdf(): Promise<void> {
+    if (exporting || !entityId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/pdf/parcel?kind=${kind}&id=${encodeURIComponent(entityId)}`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${title}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* رأس التقرير */}
@@ -121,8 +144,8 @@ export function ReportTab({ kind, entity }: { kind: ParcelKind; entity: Record<s
         <span className="text-xs text-muted-foreground">
           {sectorLabel(entity.sector as string | null)} · {formatArea(entity[areaKey] as number | null)}
         </span>
-        <Button type="button" size="sm" variant="outline" disabled className="ms-auto gap-1.5 opacity-60">
-          <FileDown className="size-4" /> تصدير PDF (م6)
+        <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={() => void exportPdf()} className="ms-auto gap-1.5">
+          <FileDown className="size-4" /> {exporting ? "جارٍ التصدير…" : "تصدير PDF"}
         </Button>
       </div>
 
