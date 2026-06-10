@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FilterX,
   Home,
   Landmark,
   ListChecks,
@@ -145,6 +146,14 @@ export function AssumedPanel() {
   function toggleAll() {
     setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((o) => o.id)));
   }
+  const hasFilters = Boolean(q || sector || district || subdistrict || neighborhood);
+  function clearFilters() {
+    setQ("");
+    setSector("");
+    setDistrict("");
+    setSubdistrict("");
+    setNeighborhood("");
+  }
   function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
     exportCsv("assumed_parcels.csv", rows as unknown as Record<string, unknown>[], [...ASSUMED_EXPORT_COLUMNS]);
@@ -190,6 +199,9 @@ export function AssumedPanel() {
           </button>
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
+          </button>
+          <button type="button" onClick={clearFilters} disabled={!hasFilters} title="مسح التصفية (عودة للكل)" aria-label="مسح التصفية" className={cn(ORB, "size-12", !hasFilters && "opacity-40")}>
+            <FilterX className="size-4" />
           </button>
         </div>
       </div>

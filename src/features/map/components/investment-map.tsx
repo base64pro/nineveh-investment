@@ -34,7 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onFlyToCoords, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
@@ -317,6 +317,15 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   return style as unknown as StyleSpecification;
 }
 
+// مربّعات إظهار القطع حسب الحالة (§هـ.4): قيمة الحالة ← {تسمية · لون accent}.
+const STATE_TOGGLES = [
+  { value: "announced", label: "معلَنة", accent: "accent-state-announced" },
+  { value: "in-progress", label: "قيد الإنجاز", accent: "accent-state-inprogress" },
+  { value: "completed", label: "منجزة", accent: "accent-state-completed" },
+  { value: "withdrawn", label: "مسحوبة", accent: "accent-state-withdrawn" },
+  { value: "assumed", label: "مفترضة", accent: "accent-state-assumed" },
+] as const;
+
 export default function InvestmentMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GLMap | null>(null);
@@ -339,6 +348,7 @@ export default function InvestmentMap() {
   selectedIdRef.current = selectedId;
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
+  const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
   const showBoundariesRef = useRef(showBoundaries);
   showBoundariesRef.current = showBoundaries;
   const opps = useTable<Opportunity>("opportunities");
@@ -577,10 +587,13 @@ export default function InvestmentMap() {
     };
   }, []);
 
-  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار (انعكاس لحظي)
+  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار/الحالات (انعكاس لحظي)
   useEffect(() => {
-    overlayRef.current?.setProps({ layers: showParcels ? parcelLayers(fc, selectedId) : [] });
-  }, [fc, selectedId, showParcels]);
+    const vis = showParcels
+      ? { ...fc, features: fc.features.filter((f) => !hiddenStates.has(String(f.properties?.state ?? ""))) }
+      : null;
+    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
+  }, [fc, selectedId, showParcels, hiddenStates]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {
@@ -607,6 +620,16 @@ export default function InvestmentMap() {
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
       }
+    });
+  }, []);
+
+  // الانتقال لإحداثيات موقع جغرافي (بحث فائق · §هـ.2.ج): طيران + تنبيه بالاسم
+  useEffect(() => {
+    return onFlyToCoords(({ lng, lat, label }) => {
+      const m = mapRef.current;
+      if (!m) return;
+      m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400 });
+      if (label) toast.info(label);
     });
   }, []);
 
@@ -645,15 +668,21 @@ export default function InvestmentMap() {
   function toggleDraw(): void {
     const draw = drawRef.current;
     if (!draw) return;
-    if (drawing) {
-      draw.setMode("static");
-      draw.clear();
+    try {
+      if (drawing) {
+        draw.setMode("static");
+        draw.clear();
+        linkTargetRef.current = null;
+        setDrawing(false);
+      } else {
+        linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
+        draw.setMode("polygon");
+        setDrawing(true);
+      }
+    } catch {
+      // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء وأعد الضبط
       linkTargetRef.current = null;
       setDrawing(false);
-    } else {
-      linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
-      draw.setMode("polygon");
-      setDrawing(true);
     }
   }
 
@@ -711,9 +740,31 @@ export default function InvestmentMap() {
           الحدود
         </label>
         <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-state-assumed" />
+          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-primary" />
           القطع
         </label>
+        {showParcels ? (
+          <div className="mt-0.5 flex flex-col gap-1 border-t border-border/50 ps-1 pt-1.5">
+            {STATE_TOGGLES.map((st) => (
+              <label key={st.value} className="inline-flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={!hiddenStates.has(st.value)}
+                  onChange={() =>
+                    setHiddenStates((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(st.value)) next.delete(st.value);
+                      else next.add(st.value);
+                      return next;
+                    })
+                  }
+                  className={`size-3.5 ${st.accent}`}
+                />
+                {st.label}
+              </label>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

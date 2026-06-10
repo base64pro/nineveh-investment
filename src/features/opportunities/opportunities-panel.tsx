@@ -5,10 +5,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Building2,
+  CheckCheck,
   ChevronDown,
   Download,
   Eye,
+  FilterX,
   Home,
+  ListChecks,
   MapPin,
   Pencil,
   PenTool,
@@ -28,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { LiveLocationButton } from "@/components/ui/live-location-button";
+import { ORB } from "@/components/ui/orb";
 import { requestFlyTo, requestOpenParcelDetail, requestStartDraw } from "@/features/map/lib/map-nav-store";
 import { OpportunityForm } from "./opportunity-form";
 import { deleteOpportunity } from "./actions";
@@ -142,6 +146,16 @@ export function OpportunitiesPanel() {
   function toggleAll() {
     setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((o) => o.record_id)));
   }
+  const hasFilters = Boolean(q || sector || district || neighborhood || muqataa || oppStatus || availableOnly);
+  function clearFilters() {
+    setQ("");
+    setSector("");
+    setDistrict("");
+    setNeighborhood("");
+    setMuqataa("");
+    setOppStatus("");
+    setAvailableOnly(false);
+  }
   function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.record_id)) : filtered;
     exportCsv("opportunities.csv", rows as unknown as Record<string, unknown>[], [...OPPORTUNITY_EXPORT_COLUMNS]);
@@ -183,20 +197,42 @@ export function OpportunitiesPanel() {
             المتاحة فقط
           </label>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} title="إضافة فرصة">
-            <Plus className="size-3.5" /> إضافة
-          </Button>
-          <Button size="sm" variant="outline" onClick={onExport} title="تصدير CSV">
-            <Download className="size-3.5" /> تصدير{selected.size ? ` (${selected.size})` : ""}
-          </Button>
-          <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} className="size-3.5" />
-            تحديد الكل
-          </label>
-          <span className="ms-auto text-xs text-muted-foreground">
-            متاحة {availableCount} · معروض {filtered.length}/{all.length}
+        {/* أقراص الإجراء (موحّدة مع قسم الرخص): تصدير · إضافة · تحديد الكل · مسح التصفية */}
+        <div className="relative flex items-center justify-center gap-3 pt-1">
+          <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
+            متاحة {availableCount} · {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
+          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+            <Download className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => { setEditing(null); setFormOpen(true); }}
+            title="إضافة فرصة"
+            aria-label="إضافة فرصة"
+            className={cn(ORB, "size-12")}
+          >
+            <Plus className="size-5" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleAll}
+            title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
+            aria-label="تحديد/إلغاء تحديد الكل"
+            className={cn(ORB, "size-12")}
+          >
+            {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasFilters}
+            title="مسح التصفية (عودة للكل)"
+            aria-label="مسح التصفية"
+            className={cn(ORB, "size-12", !hasFilters && "opacity-40")}
+          >
+            <FilterX className="size-4" />
+          </button>
         </div>
       </div>
 

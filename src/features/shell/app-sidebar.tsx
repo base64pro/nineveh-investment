@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogOut, X } from "lucide-react";
 import { signOut } from "@/app/actions";
@@ -14,8 +14,11 @@ import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { CompaniesPanel } from "@/features/companies/companies-panel";
 import { CriteriaPanel } from "@/features/criteria/criteria-panel";
 import { AssumedPanel } from "@/features/assumed/assumed-panel";
+import { ReportsPanel } from "@/features/reports/reports-panel";
+import { SettingsPanel } from "@/features/settings/settings-panel";
 import { LegalAdvisorPanel } from "@/features/legal-advisor/legal-advisor-panel";
 import { ParcelModals } from "@/features/parcels/parcel-modals";
+import { onOpenSection } from "./shell-store";
 import { SECTIONS } from "./sections";
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
@@ -23,6 +26,16 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   const { data: counts } = useCounts();
   const [active, setActive] = useState<string | null>(null);
   const [licenseStatus, setLicenseStatus] = useState("");
+
+  // فتح قسم من الهيدبار/البحث (§هـ.1 · النقر على مؤشّر ← مصدره)
+  useEffect(
+    () =>
+      onOpenSection((id, status) => {
+        setActive(id);
+        if (id === "licenses" && status) setLicenseStatus(status);
+      }),
+    [],
+  );
 
   const activeSection = SECTIONS.find((s) => s.id === active) ?? null;
   const ActiveIcon = activeSection?.icon;
@@ -53,9 +66,10 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               type="button"
               onClick={() => setActive(null)}
               aria-label="إغلاق"
-              className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              title="إغلاق"
+              className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
             >
-              <X className="size-4" />
+              <X className="size-5" />
             </button>
           </header>
           <div className="min-h-0 flex-1">
@@ -71,6 +85,10 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               <CriteriaPanel />
             ) : activeSection.id === "opportunity-design" ? (
               <AssumedPanel />
+            ) : activeSection.id === "reports" ? (
+              <ReportsPanel />
+            ) : activeSection.id === "settings" ? (
+              <SettingsPanel />
             ) : (
               <div className="space-y-3 p-4 text-sm">
                 {activeSection.table && counts ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CalendarDays, ClipboardList, Pencil, Plus, Trash2, Users } from "lucide-react";
@@ -19,6 +19,7 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
   const [editing, setEditing] = useState<Visit | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null); // بديل <form> لتجنّب تداخل النماذج (نافذة القطعة فيها <form>)
 
   const visits = useMemo(
     () =>
@@ -32,10 +33,12 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
     void queryClient.invalidateQueries({ queryKey: ["table", "visits"] });
   }
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const visit_date = String(fd.get("visit_date") ?? "").trim();
+  async function onSubmit() {
+    const root = formRef.current;
+    if (!root) return;
+    const val = (n: string): string =>
+      ((root.querySelector(`[name="${n}"]`) as HTMLInputElement | HTMLTextAreaElement | null)?.value ?? "").trim();
+    const visit_date = val("visit_date");
     if (!visit_date) {
       toast.error("تاريخ الزيارة مطلوب");
       return;
@@ -43,9 +46,9 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
     const values = {
       parcel_ref: parcelRef,
       visit_date,
-      visit_type: String(fd.get("visit_type") ?? "").trim() || null,
-      staff: String(fd.get("staff") ?? "").trim() || null,
-      notes: String(fd.get("notes") ?? "").trim() || null,
+      visit_type: val("visit_type") || null,
+      staff: val("staff") || null,
+      notes: val("notes") || null,
     };
     setSaving(true);
     const res = await saveVisit(values, editing?.id);
@@ -88,11 +91,11 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
       </div>
 
       {showForm ? (
-        <form key={editing?.id ?? "new"} onSubmit={onSubmit} className="mb-3 space-y-2 rounded-lg border border-border/60 bg-card/60 p-3">
+        <div key={editing?.id ?? "new"} ref={formRef} className="mb-3 space-y-2 rounded-lg border border-border/60 bg-card/60 p-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="space-y-1">
               <label className="block text-[11px] text-muted-foreground">تاريخ الزيارة *</label>
-              <input name="visit_date" type="date" required defaultValue={editing ? (editing.visit_date ?? "").slice(0, 10) : ""} className={INPUT} />
+              <input name="visit_date" type="date" defaultValue={editing ? (editing.visit_date ?? "").slice(0, 10) : ""} className={INPUT} />
             </div>
             <div className="space-y-1">
               <label className="block text-[11px] text-muted-foreground">نوع الزيارة</label>
@@ -109,10 +112,10 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
           </div>
           <p className="text-[10px] text-muted-foreground">الصور (حتى 3) تُضاف بعد تهيئة التخزين (Storage).</p>
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={saving}>{saving ? "جارٍ الحفظ…" : "حفظ"}</Button>
+            <Button type="button" size="sm" disabled={saving} onClick={() => void onSubmit()}>{saving ? "جارٍ الحفظ…" : "حفظ"}</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(false); setEditing(null); }}>إلغاء</Button>
           </div>
-        </form>
+        </div>
       ) : null}
 
       {visits.length === 0 && !showForm ? (

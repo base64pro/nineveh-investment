@@ -34,7 +34,7 @@ function highlightCitations(text: string, kb: string): ReactNode[] {
 }
 
 function inline(text: string, kb: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).flatMap((s, i) =>
+  return text.split(/(\*\*[^*]+\*\*)/g).flatMap<ReactNode>((s, i) =>
     s.startsWith("**") && s.endsWith("**")
       ? [
           <strong key={`${kb}b${i}`} className="font-bold text-foreground">

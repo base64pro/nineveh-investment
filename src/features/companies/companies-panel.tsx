@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FilterX,
   Globe,
   Hash,
   Landmark,
@@ -149,6 +150,15 @@ export function CompaniesPanel() {
   function toggleAll() {
     setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((o) => o.id)));
   }
+  const hasFilters = Boolean(q || sector || companyType || governorate || activity || elig);
+  function clearFilters() {
+    setQ("");
+    setSector("");
+    setCompanyType("");
+    setGovernorate("");
+    setActivity("");
+    setElig("");
+  }
   function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
     exportCsv("companies.csv", rows as unknown as Record<string, unknown>[], [...COMPANY_EXPORT_COLUMNS]);
@@ -194,6 +204,9 @@ export function CompaniesPanel() {
           </button>
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
+          </button>
+          <button type="button" onClick={clearFilters} disabled={!hasFilters} title="مسح التصفية (عودة للكل)" aria-label="مسح التصفية" className={cn(ORB, "size-12", !hasFilters && "opacity-40")}>
+            <FilterX className="size-4" />
           </button>
           <div className="absolute end-0 top-1/2 w-28 -translate-y-1/2" title="تصفية الأهلية">
             <Combo

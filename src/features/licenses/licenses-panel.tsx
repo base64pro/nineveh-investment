@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Download,
   Eye,
+  FilterX,
   Home,
   Landmark,
   ListChecks,
@@ -38,6 +39,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog } from "@/components/ui/dialog";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { LiveLocationButton } from "@/components/ui/live-location-button";
+import { ORB } from "@/components/ui/orb";
 import { requestFlyTo, requestOpenParcelDetail, requestStartDraw } from "@/features/map/lib/map-nav-store";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { LicenseForm } from "./license-form";
@@ -62,10 +64,6 @@ const STATUS_ACCENT: Record<string, string> = {
   completed: "from-state-completed to-state-completed/20",
   withdrawn: "from-state-withdrawn to-state-withdrawn/20",
 };
-
-// قرص ثلاثي الأبعاد بلون واحد بلا حدود، توهّج خفيف (ظلّ سفلي للطفو) — متسق للأزرار والعدّادات.
-const ORB =
-  "relative grid place-items-center rounded-full text-foreground bg-[radial-gradient(circle_at_50%_28%,#4f6498,#2a3a5c)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.32),0_10px_22px_-8px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_2px_rgba(255,255,255,0.45),0_15px_28px_-8px_rgba(0,0,0,0.85)] active:translate-y-0 active:scale-95";
 
 function Cell({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
@@ -180,6 +178,15 @@ export function LicensesPanel({
   function toggleAll() {
     setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((o) => o.record_id)));
   }
+  const hasFilters = Boolean(q || sector || district || subdistrict || neighborhood || status);
+  function clearFilters() {
+    setQ("");
+    setSector("");
+    setDistrict("");
+    setSubdistrict("");
+    setNeighborhood("");
+    setStatus("");
+  }
   function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.record_id)) : filtered;
     exportCsv("licenses.csv", rows as unknown as Record<string, unknown>[], [...LICENSE_EXPORT_COLUMNS]);
@@ -259,6 +266,16 @@ export function LicensesPanel({
             className={cn(ORB, "size-12")}
           >
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasFilters}
+            title="مسح التصفية (عودة للكل)"
+            aria-label="مسح التصفية"
+            className={cn(ORB, "size-12", !hasFilters && "opacity-40")}
+          >
+            <FilterX className="size-4" />
           </button>
         </div>
       </div>

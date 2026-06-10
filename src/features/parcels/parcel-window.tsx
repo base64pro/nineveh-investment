@@ -21,7 +21,7 @@ import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
-import type { ParcelKind } from "@/features/map/lib/map-nav-store";
+import { type ParcelKind, requestFlyTo } from "@/features/map/lib/map-nav-store";
 import type { Company, ParcelState } from "@/types/entities";
 import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "@/features/opportunities/fields";
 import { LICENSE_FORM_FIELDS, LICENSE_OPTION_FIELDS } from "@/features/licenses/fields";
@@ -87,6 +87,15 @@ const STATE_OPTIONS: { value: ParcelState; label: string }[] = [
   { value: "withdrawn", label: "مسحوبة" },
   { value: "assumed", label: "مفترضة" },
 ];
+
+// وجهة النقل (لرسالة واضحة تمنع لبس «الفقدان») — القسم + لون القطعة على الخريطة.
+const MOVE_DEST: Record<ParcelState, { section: string; color: string }> = {
+  announced: { section: "الفرص", color: "ذهبية" },
+  "in-progress": { section: "الرخص · قيد الإنجاز", color: "زرقاء" },
+  completed: { section: "الرخص · منجزة", color: "خضراء" },
+  withdrawn: { section: "الرخص · مسحوبة", color: "حمراء" },
+  assumed: { section: "تصميم فرصة · مفترضة", color: "بنفسجية" },
+};
 
 // حقول يُؤشَّر لإكمالها بعد النقل (لا مانعة — تُملأ لاحقاً).
 const HINTS: Record<ParcelKind, { key: string; label: string }[]> = {
@@ -189,7 +198,10 @@ export function ParcelWindow({
       queryClient.invalidateQueries({ queryKey: ["map_parcels"] }),
       queryClient.invalidateQueries({ queryKey: ["counts"] }),
     ]);
-    toast.success("نُقلت القطعة — أكمل الحقول المطلوبة إن لزم");
+    const pn = String(entity.parcel_no ?? "");
+    if (pn) requestFlyTo(pn); // طيران + إبراز القطعة في موضعها الجديد (يظهر عند إغلاق النافذة)
+    const d = MOVE_DEST[target];
+    toast.success(d ? `نُقلت إلى ${d.section} — تجدها ${d.color} على الخريطة` : "نُقلت القطعة");
     onMoved({ kind: res.kind, id: res.id });
   }
 
