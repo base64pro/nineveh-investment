@@ -1,17 +1,17 @@
 "use client";
 
 // النافذة الفرعية للإجراءات (§هـ.4) — شريط تابات أفقي علوي بأربعة تابات:
-// 1) الضوابط والمعايير القانونية (حتمي §ج.9 — م3.3) · 2) التوصيات الذكية (م4)
-// 3) إنشاء معايير (م4) · 4) التقرير (عرض داخلي؛ PDF في م6).
+// 1) الضوابط والمعايير القانونية (حتمي §ج.9) · 2) التوصيات الذكية 🟩 · 3) إنشاء معايير 🟩 · 4) التقرير (+PDF).
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { FileText, Lightbulb, ListChecks, Scale, Sparkles, X } from "lucide-react";
+import { FileText, Lightbulb, ListChecks, Scale, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ControlsTab } from "./legal/controls-tab";
 import { ReportTab } from "./legal/report-tab";
+import { RecommendationsTab } from "./insights/recommendations-tab";
+import { CriteriaTab } from "./insights/criteria-tab";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 
 type TabKey = "controls" | "recommendations" | "criteria" | "report";
@@ -21,26 +21,6 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: "criteria", label: "إنشاء معايير", icon: ListChecks },
   { key: "report", label: "التقرير", icon: FileText },
 ];
-
-function SoonPanel({ icon: Icon, title, desc, action, phase }: { icon: LucideIcon; title: string; desc: string; action: string; phase: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary/80 ring-1 ring-primary/20">
-        <Icon className="size-7" />
-      </div>
-      <div className="max-w-md space-y-1">
-        <h4 className="text-sm font-bold text-foreground">{title}</h4>
-        <p className="text-xs leading-relaxed text-muted-foreground">{desc}</p>
-      </div>
-      <Button type="button" disabled className="gap-1.5 opacity-60">
-        <Sparkles className="size-4" /> {action}
-      </Button>
-      <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] text-muted-foreground ring-1 ring-inset ring-border/60">
-        يُوصَل في {phase}
-      </span>
-    </div>
-  );
-}
 
 export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; entity: Record<string, unknown>; onClose: () => void }) {
   const [tab, setTab] = useState<TabKey>("controls");
@@ -98,24 +78,8 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {tab === "controls" ? <ControlsTab kind={kind} entity={entity} /> : null}
-          {tab === "recommendations" ? (
-            <SoonPanel
-              icon={Lightbulb}
-              title="التوصيات الذكية"
-              desc="توصيات مولّدة بالذكاء (معلَنة، غير مُلزِمة) تُكمّل الضوابط: الاستخدام الأنسب · الشركة الأنسب · المخاطر والفرص — مع ذكر الأساس."
-              action="إنشاء توصيات ذكية"
-              phase="م4 (RAG + ويب)"
-            />
-          ) : null}
-          {tab === "criteria" ? (
-            <SoonPanel
-              icon={ListChecks}
-              title="إنشاء معايير"
-              desc="توليد معايير مرجعية 🟩 (مهنية/تنافسية، غير مُلزِمة) من بيانات القطعة + قالب الشركة + ممارسات عالمية + مكتبة المعايير."
-              action="إنشاء معايير"
-              phase="م4 (RAG + ويب)"
-            />
-          ) : null}
+          {tab === "recommendations" ? <RecommendationsTab kind={kind} entity={entity} /> : null}
+          {tab === "criteria" ? <CriteriaTab kind={kind} entity={entity} /> : null}
           {tab === "report" ? <ReportTab kind={kind} entity={entity} /> : null}
         </div>
       </motion.div>

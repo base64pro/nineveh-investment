@@ -16,6 +16,7 @@ const TABLES = [
   "assumed_parcels",
   "parcel_geometry",
   "field_options",
+  "parcel_insights",
 ] as const;
 
 // جداول تؤثّر في طبقة قطع الخريطة (view map_parcels) ← إبطالها أيضاً.
@@ -33,6 +34,7 @@ export function useRealtimeSync(): void {
         void queryClient.invalidateQueries({ queryKey: ["table", table] });
         void queryClient.invalidateQueries({ queryKey: ["counts"] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+        if (table === "parcel_insights") void queryClient.invalidateQueries({ queryKey: ["insights"] });
         if (PARCEL_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       });
     }
