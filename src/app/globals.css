@@ -62,6 +62,26 @@
   html {
     font-variant-numeric: lining-nums tabular-nums;
   }
+
+  /* م6.3 · سكرول بار مُثيم عالمياً (كل نوافذ النظام ولوحاته §هـ.3) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--ring) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--ring) / 0.35);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--ring) / 0.6);
+  }
 }
 
 @layer utilities {

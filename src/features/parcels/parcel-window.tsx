@@ -255,8 +255,14 @@ export function ParcelWindow({
               <Button type="button" size="sm" onClick={() => setActionsOpen(true)} className="gap-1.5">
                 <Layers className="size-4" /> إجراءات
               </Button>
-              <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 transition hover:bg-accent">
-                <X className="size-4" />
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="إغلاق"
+                title="إغلاق"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
+              >
+                <X className="size-5" />
               </button>
             </div>
           </header>

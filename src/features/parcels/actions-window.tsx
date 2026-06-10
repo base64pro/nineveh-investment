@@ -62,8 +62,14 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
       >
         <header className="flex shrink-0 items-center justify-between border-b border-border/70 bg-gradient-to-l from-primary/10 to-transparent px-4 py-3">
           <h3 className="text-base font-bold tracking-tight">إجراءات القطعة</h3>
-          <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 transition hover:bg-accent">
-            <X className="size-4" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق"
+            title="إغلاق"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
+          >
+            <X className="size-5" />
           </button>
         </header>
 

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FilterX,
   Layers,
   ListChecks,
   Pencil,
@@ -18,8 +19,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
 import { formatDate, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -97,9 +99,18 @@ export function CriteriaPanel() {
   function toggleAll() {
     setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((o) => o.id)));
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
-    exportCsv("criteria.csv", rows as unknown as Record<string, unknown>[], [...CRITERION_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "criteria.csv", "تقرير مكتبة المعايير", rows as unknown as Record<string, unknown>[], [...CRITERION_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
+  }
+  const hasFilters = Boolean(q || domain || status);
+  function clearFilters() {
+    setQ("");
+    setDomain("");
+    setStatus("");
   }
   function invalidate() {
     void queryClient.invalidateQueries({ queryKey: ["table", "criteria"] });
@@ -144,7 +155,7 @@ export function CriteriaPanel() {
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="معيار جديد" aria-label="معيار جديد" className={cn(ORB, "size-12")}>
@@ -152,6 +163,9 @@ export function CriteriaPanel() {
           </button>
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
+          </button>
+          <button type="button" onClick={clearFilters} disabled={!hasFilters} title="مسح التصفية (عودة للكل)" aria-label="مسح التصفية" className={cn(ORB, "size-12", !hasFilters && "opacity-40")}>
+            <FilterX className="size-4" />
           </button>
         </div>
       </div>

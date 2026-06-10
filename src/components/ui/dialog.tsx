@@ -54,11 +54,17 @@ export function Dialog({
           >
             <header className="flex items-center justify-between border-b border-border/70 bg-gradient-to-l from-primary/10 to-transparent p-4">
               <h3 className="text-base font-bold tracking-tight">{title}</h3>
-              <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 transition hover:bg-accent">
-                <X className="size-4" />
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="إغلاق"
+                title="إغلاق"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
+              >
+                <X className="size-5" />
               </button>
             </header>
-            <div className="overflow-y-auto p-5">{children}</div>
+            <div className="scroll-slim overflow-y-auto p-5">{children}</div>
           </motion.div>
         </div>
       ) : null}
