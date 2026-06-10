@@ -164,13 +164,21 @@ async function upsertInsights(kind: ParcelKind, id: string, patch: Record<string
   return error ? error.message : null;
 }
 
+/** مسح عبر update (لا upsert) — لا يُنشئ صفاً فارغاً إن لم توجد نتائج أصلاً. */
+async function clearColumns(kind: ParcelKind, id: string, patch: Record<string, null>): Promise<OkResult> {
+  const sb = await createClient();
+  const { error } = await sb
+    .from("parcel_insights")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("kind", kind)
+    .eq("ref_id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
 export async function clearRecommendations(kind: ParcelKind, id: string): Promise<OkResult> {
-  const err = await upsertInsights(kind, id, { recommendations: null, recommendations_at: null });
-  return err ? { ok: false, error: err } : { ok: true };
+  return clearColumns(kind, id, { recommendations: null, recommendations_at: null });
 }
 export async function clearCriteriaDraft(kind: ParcelKind, id: string): Promise<OkResult> {
-  const err = await upsertInsights(kind, id, { criteria: null, criteria_at: null });
-  return err ? { ok: false, error: err } : { ok: true };
+  return clearColumns(kind, id, { criteria: null, criteria_at: null });
 }
 
 // ===== التوصيات الذكية (تاب 2) =====

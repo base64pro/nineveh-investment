@@ -17,8 +17,10 @@ export async function saveCompany(
   // توحيد القطاع والمحافظة: التسمية العربية ← رمز ثابت للتخزين.
   if ("sector" in values) normalized.sector = sectorCode(values.sector as string | null);
   if ("governorate" in values) normalized.governorate = governorateCode(values.governorate as string | null);
-  // is_excluded NOT NULL ← الافتراضي false.
-  normalized.is_excluded = values.is_excluded === true;
+  // is_excluded: تُضبَط فقط عند ورودها صراحةً — لا قلب صامت لشركة مستثناة عند حفظ جزئي (نزاهة الأهلية §ج.9).
+  // عند غيابها: الإنشاء يأخذ افتراضي القاعدة (false)، والتعديل يصون القيمة الحالية (upsert لا يلمس غير المُمرَّر).
+  if ("is_excluded" in values) normalized.is_excluded = values.is_excluded === true;
+  else delete normalized.is_excluded;
   const { error } = await supabase.from("companies").upsert(normalized, { onConflict: "id" });
   if (error) return { ok: false, error: error.message };
   return { ok: true };

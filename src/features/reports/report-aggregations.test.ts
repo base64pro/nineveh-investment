@@ -22,6 +22,17 @@ describe("report-aggregations (حتمي)", () => {
     expect(recs[2]).toMatchObject({ kind: "assumed", state: "assumed", year: null });
   });
 
+  it("لا عدّ مزدوج: فرصة على نفس قطعة رخصة تُحسب مساحتها مرّة واحدة (لدى الرخصة)", () => {
+    const recs = normalize(
+      [opp({ parcel_no: "65", muqataa_no: "12", area_total_m2: 5000 }), opp({ parcel_no: "99", area_total_m2: 300 })],
+      [lic({ parcel_no: "65", muqataa_no: "12", area_total_m2: 5000 })],
+      [],
+    );
+    const t = totals(recs);
+    expect(t.count).toBe(3); // السجلات تبقى ثلاثة (الفرصة لا تختفي)
+    expect(t.area).toBe(5300); // 5000 (رخصة) + 300 (فرصة مستقلة) — لا 10300
+  });
+
   it("totals يجمع المساحة/القيمة ويعدّ الحالات", () => {
     const recs = normalize([opp({ area_total_m2: 100 })], [lic({ status: "completed", area_total_m2: 50, capital: 300000 })], []);
     const t = totals(recs);
