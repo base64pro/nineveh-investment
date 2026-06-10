@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { Combo } from "@/components/ui/combo";
+import { onOpenCompany } from "@/features/shell/shell-store";
 import { CompanyForm } from "./company-form";
 import { CompanyDetail } from "./company-detail";
 import { deleteCompany } from "./actions";
@@ -87,6 +88,16 @@ export function CompaniesPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [detail, setDetail] = useState<Company | null>(null);
+
+  // فتح تفاصيل شركة بعينها من البحث الفائق (§هـ.2.ج «فتح بياناته») — يصمد أمام تأخّر تحميل البيانات
+  const [openCompanyId, setOpenCompanyId] = useState<string | null>(null);
+  useEffect(() => onOpenCompany(setOpenCompanyId), []);
+  useEffect(() => {
+    if (!openCompanyId || !data) return;
+    const c = data.find((x) => x.id === openCompanyId);
+    if (c) setDetail(c);
+    setOpenCompanyId(null);
+  }, [openCompanyId, data]);
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);

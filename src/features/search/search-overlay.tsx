@@ -9,8 +9,8 @@ import { BadgeCheck, Building2, Loader2, MapPin, Megaphone, Search, Shapes, X } 
 import { superSearch } from "./actions";
 import type { SearchKind, SearchResult } from "./types";
 import { onOpenSearch } from "./search-store";
-import { requestFlyTo, requestFlyToCoords } from "@/features/map/lib/map-nav-store";
-import { requestOpenSection } from "@/features/shell/shell-store";
+import { requestFlyTo, requestFlyToCoords, requestOpenParcelDetail, type ParcelKind } from "@/features/map/lib/map-nav-store";
+import { requestOpenCompany, requestOpenSection } from "@/features/shell/shell-store";
 
 const KIND_META: Record<
   SearchKind,
@@ -93,8 +93,13 @@ export function SearchOverlay() {
       requestFlyToCoords({ lng: r.lng, lat: r.lat, label: r.label });
     } else if (r.hasGeom && r.mapRef) {
       requestFlyTo(r.mapRef); // مرسوم ← طيران للخريطة
+    } else if (r.kind === "company" && r.entityId) {
+      requestOpenSection("companies"); // §هـ.2.ج «فتح بياناته»: القسم + تفاصيل الشركة نفسها
+      requestOpenCompany(r.entityId);
+    } else if (r.entityId && (r.kind === "opportunity" || r.kind === "license" || r.kind === "assumed")) {
+      requestOpenParcelDetail({ kind: r.kind as ParcelKind, id: r.entityId, readOnly: true }); // نافذة القطعة الموحّدة
     } else {
-      const section = KIND_META[r.kind].section; // غير مرسوم ← فتح سجلّه في قسمه
+      const section = KIND_META[r.kind].section;
       if (section) requestOpenSection(section);
     }
     setOpen(false);
@@ -122,7 +127,7 @@ export function SearchOverlay() {
 
   const q = query.trim();
   const navHint = (r: SearchResult): string =>
-    r.kind === "place" ? "↵ الموقع على الخريطة" : r.hasGeom ? "↵ القطعة على الخريطة" : "↵ فتح السجلّ";
+    r.kind === "place" ? "↵ الموقع على الخريطة" : r.hasGeom ? "↵ القطعة على الخريطة" : r.entityId ? "↵ فتح السجلّ" : "↵ فتح القسم";
 
   return (
     <AnimatePresence>

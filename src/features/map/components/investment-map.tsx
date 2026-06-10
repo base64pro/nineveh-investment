@@ -37,6 +37,7 @@ import { inferName } from "../lib/spatial-inference";
 import { onFlyTo, onFlyToCoords, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
 type MapData = {
@@ -349,6 +350,9 @@ export default function InvestmentMap() {
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
   const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
+  const [mapReady, setMapReady] = useState(false);
+  const { data: settingsData } = useSettings();
+  const startApplied = useRef(false);
   const showBoundariesRef = useRef(showBoundaries);
   showBoundariesRef.current = showBoundaries;
   const opps = useTable<Opportunity>("opportunities");
@@ -572,6 +576,7 @@ export default function InvestmentMap() {
           })();
         });
         drawRef.current = draw;
+        setMapReady(true);
 
         // مقاييس م2.3 + إظهار الحدود (بعد جهوز المصادر)
         applyStats(m, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
@@ -615,6 +620,18 @@ export default function InvestmentMap() {
   useEffect(() => {
     applyVisibility(mapRef.current, showBoundaries);
   }, [showBoundaries]);
+
+  // إعدادات البدء (§هـ.5 العرض): أساس الخريطة الافتراضي + الطبقات الظاهرة — مرّة عند جهوز الخريطة والإعدادات معاً
+  useEffect(() => {
+    const s = settingsData?.settings;
+    if (!s || !mapReady || startApplied.current) return;
+    startApplied.current = true;
+    setShowBoundaries(s.start_layers.boundaries !== false);
+    setShowParcels(s.start_layers.parcels !== false);
+    const base = s.default_base as BaseStyle;
+    if (base && base !== baseRef.current && ["dark", "light", "satellite"].includes(base)) void switchBase(base);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- switchBase مستقر منطقياً (refs)
+  }, [settingsData, mapReady]);
 
   // الانتقال لقطعة من السايدبار (§هـ.2): flyTo + تحديد — بمعرّف المعلم أو معرّف الكيان أو رقم القطعة
   useEffect(() => {

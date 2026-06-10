@@ -13,8 +13,8 @@ import { Combo } from "@/components/ui/combo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useSettings } from "./use-settings";
-import { applyFont } from "./apply";
-import { changePassword, deleteApiKey, saveSettings, setApiKey } from "./actions";
+import { applyDisplay } from "./apply";
+import { changePassword, deleteApiKey, saveSettings, setApiKey, testAiModel } from "./actions";
 import { CLAUDE_MODELS, type AppSettings } from "./types";
 
 const TABS = [
@@ -60,6 +60,7 @@ export function SettingsPanel() {
   const [busy, setBusy] = useState(false);
   const [keyInput, setKeyInput] = useState<Record<string, string>>({ anthropic: "", voyage: "" });
   const [pdf, setPdf] = useState({ org: "", header: "", footer: "" });
+  const [testingModel, setTestingModel] = useState(false);
 
   const s = data?.settings;
   useEffect(() => {
@@ -161,10 +162,10 @@ export function SettingsPanel() {
               <Combo value={s.theme} onChange={(v) => { setTheme(v); void commit({ theme: v }); }} options={[{ value: "light", label: "فاتح" }, { value: "dark", label: "داكن" }, { value: "system", label: "تلقائي" }]} ariaLabel="السمة" />
             </Field>
             <Field label="حجم الخطّ">
-              <Combo value={s.font_scale} onChange={(v) => { applyFont(v); void commit({ font_scale: v }); }} options={[{ value: "sm", label: "صغير" }, { value: "md", label: "متوسط" }, { value: "lg", label: "كبير" }]} ariaLabel="حجم الخطّ" />
+              <Combo value={s.font_scale} onChange={(v) => { applyDisplay(v, s.density); void commit({ font_scale: v }); }} options={[{ value: "sm", label: "صغير" }, { value: "md", label: "متوسط" }, { value: "lg", label: "كبير" }]} ariaLabel="حجم الخطّ" />
             </Field>
-            <Field label="كثافة العرض">
-              <Combo value={s.density} onChange={(v) => void commit({ density: v })} options={[{ value: "comfortable", label: "مريح" }, { value: "compact", label: "مدمج" }]} ariaLabel="كثافة العرض" />
+            <Field label="كثافة العرض" hint="«مدمج» يكثّف الواجهة كلها (نص وتباعد)">
+              <Combo value={s.density} onChange={(v) => { applyDisplay(s.font_scale, v); void commit({ density: v }); }} options={[{ value: "comfortable", label: "مريح" }, { value: "compact", label: "مدمج" }]} ariaLabel="كثافة العرض" />
             </Field>
             <Field label="أساس الخريطة الافتراضي" hint="يُطبَّق عند تحميل الخريطة">
               <Combo value={s.default_base} onChange={(v) => void commit({ default_base: v })} options={[{ value: "dark", label: "داكن" }, { value: "light", label: "فاتح" }, { value: "satellite", label: "قمر صناعي" }]} ariaLabel="أساس الخريطة" />
@@ -180,8 +181,27 @@ export function SettingsPanel() {
 
         {tab === "ai" ? (
           <>
-            <Field label="نموذج الذكاء" hint="يُطبَّق على كل وظائف النظام (المستشار · البحث · التوصيات)">
-              <Combo value={s.ai_model} onChange={(v) => void commit({ ai_model: v })} options={CLAUDE_MODELS} allowCustom ariaLabel="نموذج الذكاء" />
+            <Field label="نموذج الذكاء" hint={testingModel ? "جارٍ التحقّق من النموذج…" : "يُتحقَّق منه بنداء فعلي قبل الاعتماد — ويُطبَّق على كل وظائف النظام"}>
+              <Combo
+                value={s.ai_model}
+                onChange={(v) => {
+                  if (v === s.ai_model || testingModel) return;
+                  setTestingModel(true);
+                  void testAiModel(v).then((res) => {
+                    setTestingModel(false);
+                    if (res.ok) {
+                      void commit({ ai_model: v });
+                      toast.success("النموذج صالح وفُعِّل على كل وظائف الذكاء");
+                    } else {
+                      toast.error(`النموذج غير متاح — لم يُغيَّر (${res.error})`);
+                    }
+                  });
+                }}
+                options={CLAUDE_MODELS}
+                allowCustom
+                disabled={testingModel}
+                ariaLabel="نموذج الذكاء"
+              />
             </Field>
             <Toggle label="تفعيل البحث على الويب (للتوصيات/الإثراء)" checked={s.web_search_enabled} onChange={(v) => void commit({ web_search_enabled: v })} />
 

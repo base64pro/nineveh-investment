@@ -1,14 +1,25 @@
 "use client";
 
-// يطبّق إعدادات العرض (حجم الخطّ) عند التحميل — مركَّب مرّة في الصفحة المحميّة.
-import { useEffect } from "react";
+// يطبّق إعدادات العرض المحفوظة عند التحميل (السمة + حجم الخطّ + الكثافة) — عبر الأجهزة، مرّة عند جهوز الإعدادات.
+import { useEffect, useRef } from "react";
+import { useTheme } from "next-themes";
 import { useSettings } from "./use-settings";
-import { applyFont } from "./apply";
+import { applyDisplay } from "./apply";
 
 export function SettingsApplier() {
   const { data } = useSettings();
+  const { setTheme } = useTheme();
+  const appliedTheme = useRef(false);
+
   useEffect(() => {
-    if (data?.settings.font_scale) applyFont(data.settings.font_scale);
-  }, [data?.settings.font_scale]);
+    const s = data?.settings;
+    if (!s) return;
+    applyDisplay(s.font_scale, s.density);
+    if (!appliedTheme.current) {
+      appliedTheme.current = true; // السمة مرّة واحدة عند التحميل (تبديلها الحيّ من اللوحة)
+      setTheme(s.theme);
+    }
+  }, [data?.settings, setTheme]);
+
   return null;
 }

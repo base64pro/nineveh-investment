@@ -7,6 +7,7 @@ export interface SearchResult {
   sublabel: string;
   parcel_no: string | null; // للعرض (شارة الرقم)
   mapRef: string | null; // مرجع الطيران على الخريطة (رقم القطعة للفرص/الرخص · id للمفترضة)
+  entityId: string | null; // معرّف الكيان — لفتح سجلّه حين لا رسم (لا يُعرَض §ح)
   hasGeom: boolean; // له رسم على الخريطة؟ (يحدّد: طيران أم فتح السجلّ)
   lng: number | null; // للأماكن (geocoding)
   lat: number | null;
