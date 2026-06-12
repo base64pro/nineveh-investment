@@ -126,3 +126,28 @@
 .parcel-popup .maplibregl-popup-tip {
   display: none;
 }
+
+/* شاشة الدخول (م7.6) — خلفية هولوكرامية بمكوّن خادمي (كيفريمات CSS خالصة) */
+@keyframes login-aurora {
+  0%, 100% { transform: translate(-6%, -4%) scale(1); opacity: 0.55; }
+  50% { transform: translate(6%, 5%) scale(1.12); opacity: 0.9; }
+}
+@keyframes login-aurora-b {
+  0%, 100% { transform: translate(5%, 6%) scale(1.1); opacity: 0.7; }
+  50% { transform: translate(-5%, -5%) scale(0.96); opacity: 0.45; }
+}
+@keyframes login-grid-sway {
+  0% { background-position: 0px 0px; }
+  25% { background-position: 5px -3px; }
+  50% { background-position: 8px 4px; }
+  75% { background-position: 2px 7px; }
+  100% { background-position: 0px 0px; }
+}
+@keyframes login-sheen {
+  0% { transform: translateX(160%) skewX(-14deg); }
+  55%, 100% { transform: translateX(-260%) skewX(-14deg); }
+}
+@keyframes login-scan {
+  0% { transform: translateY(-120%); }
+  100% { transform: translateY(1300%); }
+}

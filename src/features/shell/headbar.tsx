@@ -36,20 +36,30 @@ const CHIPS: ChipDef[] = [
 // رقم بتدرّج ضوئي (أبيض ← أزرق ثلجي) — التوقيع البصري الهولوكرامي
 const NUM_GRADIENT = "bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-transparent";
 
-function Chip({ def, value }: { def: ChipDef; value: number }) {
+function Chip({ def, value, index }: { def: ChipDef; value: number; index: number }) {
   const display = useCountUp(value);
   return (
     <button
       type="button"
       onClick={() => requestOpenSection(def.section, def.status)}
       title={`${def.label} — انتقل للقسم`}
-      className="group relative flex min-w-0 flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 transition hover:bg-white/6 active:scale-95 md:px-2 lg:px-3 xl:px-4 2xl:px-6"
+      className="group relative flex min-w-0 flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 transition hover:bg-white/6 active:scale-95 md:px-2.5 md:py-2 lg:px-3 xl:px-4 2xl:px-6"
     >
       <span className="flex items-center gap-1 md:gap-1.5">
-        <span className={cn("size-1.5 shrink-0 rounded-full shadow-[0_0_9px_1px] shadow-current md:size-2", def.dot)} />
-        <span className={cn("text-sm font-extrabold tabular-nums leading-none tracking-tight md:text-[15px] lg:text-base xl:text-lg 2xl:text-2xl", NUM_GRADIENT)}>
+        <motion.span
+          aria-hidden
+          animate={{ opacity: [1, 0.45, 1], scale: [1, 1.25, 1] }}
+          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", delay: index * 0.4 }}
+          className={cn("size-1.5 shrink-0 rounded-full shadow-[0_0_9px_1px] shadow-current md:size-2", def.dot)}
+        />
+        {/* انسياب مستمر متناغم للأرقام (طفوّ لطيف متعاقب الأطوار) */}
+        <motion.span
+          animate={{ y: [0, -1.6, 0] }}
+          transition={{ duration: 3.6, repeat: Infinity, ease: "easeInOut", delay: index * 0.3 }}
+          className={cn("text-sm font-extrabold tabular-nums leading-none tracking-tight md:text-base lg:text-[17px] xl:text-lg 2xl:text-2xl", NUM_GRADIENT)}
+        >
           {formatNumber(display)}
-        </span>
+        </motion.span>
       </span>
       <span className="max-w-full truncate text-[8px] leading-none text-muted-foreground transition group-hover:text-foreground/85 md:text-[9px] lg:text-[10px] 2xl:text-[11px]">
         <span className="md:hidden">{def.shortLabel ?? def.label}</span>
@@ -81,16 +91,16 @@ function CountersBar({ stats }: { stats: DashboardStats | undefined }) {
   const z = (n: number | undefined): number => n ?? 0;
   return (
     <div className="relative flex max-w-full items-stretch divide-x divide-[rgba(148,175,209,0.16)] overflow-hidden rounded-2xl border border-[rgba(148,175,209,0.4)] bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_28px_-14px_rgba(0,0,0,0.7),0_0_22px_-10px_rgba(148,175,209,0.5)]">
-      {/* لمعة ضوئية تعبر الشريط باستمرار (موشن حيّ) */}
+      {/* لمعة ضوئية واضحة تعبر الشريط باستمرار (موشن حيّ) */}
       <motion.span
         aria-hidden
-        initial={{ x: "-130%" }}
-        animate={{ x: "1300%" }}
-        transition={{ duration: 7.5, repeat: Infinity, ease: "linear", repeatDelay: 2.5 }}
-        className="pointer-events-none absolute inset-y-0 w-16 -skew-x-12 bg-gradient-to-l from-transparent via-white/[0.07] to-transparent"
+        initial={{ x: "-140%" }}
+        animate={{ x: "1100%" }}
+        transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.2 }}
+        className="pointer-events-none absolute inset-y-0 w-24 -skew-x-12 bg-gradient-to-l from-transparent via-white/[0.12] to-transparent"
       />
-      {CHIPS.map((c) => (
-        <Chip key={c.key} def={c} value={z(stats?.[c.key])} />
+      {CHIPS.map((c, i) => (
+        <Chip key={c.key} def={c} value={z(stats?.[c.key])} index={i} />
       ))}
       <AreaChip value={z(stats?.total_area_m2)} />
     </div>
@@ -119,24 +129,25 @@ export function Headbar() {
 
   return (
     <div className="relative bg-[linear-gradient(180deg,hsl(220_38%_16%/0.97),hsl(220_36%_12%/0.95))] shadow-[0_6px_24px_-10px_rgba(0,0,0,0.7)] backdrop-blur">
-      {/* شفق هولوكرامي حيّ ينجرف ببطء + خط توهّج قاعدي تعبره شرارة ضوئية (موشن مستمر) */}
+      {/* شفق هولوكرامي حيّ ينجرف بوضوح + خط توهّج قاعدي تجري عليه لمعة أنيقة مريحة (موشن مستمر) */}
       <motion.span
         aria-hidden
-        animate={{ x: ["-6%", "6%", "-6%"], opacity: [0.85, 1, 0.85] }}
-        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-        className="pointer-events-none absolute inset-y-0 -left-[10%] w-[120%] bg-[radial-gradient(58%_140%_at_50%_-30%,rgba(148,175,209,0.17),transparent_70%)]"
+        animate={{ x: ["-9%", "9%", "-9%"], opacity: [0.8, 1, 0.8] }}
+        transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute inset-y-0 -left-[12%] w-[124%] bg-[radial-gradient(58%_150%_at_50%_-30%,rgba(148,175,209,0.22),transparent_72%)]"
       />
       <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.75)] to-transparent" />
       <motion.span
         aria-hidden
-        initial={{ left: "-4%" }}
-        animate={{ left: "104%" }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.5 }}
-        className="pointer-events-none absolute -bottom-px size-1.5 -translate-x-1/2 rounded-full bg-[#cfe3ff] shadow-[0_0_10px_2px_rgba(159,192,232,0.9)]"
+        initial={{ left: "-18%" }}
+        animate={{ left: "112%" }}
+        transition={{ duration: 9.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.8 }}
+        className="pointer-events-none absolute -bottom-[2px] h-[4px] w-32 -translate-x-1/2 rounded-full bg-gradient-to-l from-transparent via-[#cfe3ff]/85 to-transparent blur-[1.5px]"
       />
 
       {/* المستوى الأفقي الواحد (md+): بحث · الأرقام · العنوان · الصورة */}
-      <div className="relative flex h-12 items-center gap-2 px-2.5 md:h-14 md:gap-2.5 md:px-3 xl:h-16 2xl:h-20 2xl:gap-4 2xl:px-6">
+      {/* ارتفاع أكبر على التابلت (8–13″): عناصر واضحة بارتفاع منطقي متّسق */}
+      <div className="relative flex h-12 items-center gap-2 px-2.5 md:h-[68px] md:gap-2.5 md:px-3 xl:h-[68px] 2xl:h-20 2xl:gap-4 2xl:px-6">
         {/* البحث: دائري على الجوال · حقل بارز من md */}
         <button
           type="button"

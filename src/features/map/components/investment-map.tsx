@@ -322,14 +322,14 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
       if (layer.id === "water") layer.paint = { ...layer.paint, "fill-color": NAVY.water };
       const paint = (layer.paint ?? {}) as Record<string, unknown>;
       if (layer.type === "line" && typeof paint["line-color"] === "string") {
-        paint["line-color"] = lightenColor(paint["line-color"], 0.16);
+        paint["line-color"] = lightenColor(paint["line-color"], 0.3); // طرق/ممرات أكثر حدّة وبياضاً
         layer.paint = paint as never;
       } else if (layer.type === "symbol") {
-        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.28);
+        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.35);
         paint["text-halo-color"] = NAVY.background;
         layer.paint = paint as never;
       } else if (layer.type === "fill" && layer.id !== "water" && typeof paint["fill-color"] === "string") {
-        paint["fill-color"] = darkenColor(paint["fill-color"], 0.1);
+        paint["fill-color"] = darkenColor(paint["fill-color"], 0.18); // أرضية المضلّعات أغمق (يوحّد غمق نينوى)
         layer.paint = paint as never;
       }
     }
@@ -390,16 +390,13 @@ function spacetimePatternData(): { width: number; height: number; data: Uint8Arr
   const g = c.getContext("2d");
   if (!g) return null;
   g.clearRect(0, 0, s, s);
-  const grid = (alpha: number, step: number): void => {
-    g.strokeStyle = `rgba(158,192,232,${alpha})`;
-    g.lineWidth = 1;
-    for (let i = 0; i <= s; i += step) {
-      g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, s); g.stroke();
-      g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(s, i + 0.5); g.stroke();
-    }
-  };
-  grid(0.15, 4); // الدقيقة (٨× أصغر من السابقة)
-  grid(0.24, 16); // خطوط أوضح
+  // شبكة واحدة متساوية رشيقة (4px) — أنصع وأكثر حدّة، بلا تقسيمات كبرى
+  g.strokeStyle = "rgba(196,219,247,0.27)";
+  g.lineWidth = 1;
+  for (let i = 0; i <= s; i += 4) {
+    g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, s); g.stroke();
+    g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(s, i + 0.5); g.stroke();
+  }
   const img = g.getImageData(0, 0, s, s);
   return { width: s, height: s, data: new Uint8Array(img.data.buffer) };
 }
@@ -421,7 +418,7 @@ function applySpacetime(map: GLMap | null, gov: FeatureCollection | null): void 
           source: "spacetime",
           paint: {
             "fill-pattern": "spacetime-tile",
-            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 8, 0.34, 11, 0.18, 13, 0.1, 15, 0.05] as never,
+            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.58, 8, 0.42, 11, 0.24, 13, 0.13, 15, 0.06] as never,
           },
         },
         before,
@@ -1255,16 +1252,18 @@ export default function InvestmentMap() {
     return { sector: a?.sector ?? null, area: a?.area_m2 ?? null, investor: null };
   }, [selectedProps, opps.data, lics.data, assumed.data]);
 
-  // تدفّق نسيج الزمكان: انزياح قُطري بطيء (~3px/ث) يلتفّ على حجم البلاطة 32 — انسياب ساحر هادئ
+  // تموّج النسيج: حركة مائية ثلاثية الإحساس (Lissajous) — اهتزاز بطيء منسجم مستمر، لا انزياح خطّي
   useEffect(() => {
     if (!mapReady) return;
     let t = 0;
     const id = window.setInterval(() => {
       const m = mapRef.current;
       if (!m) return;
-      t = (t + 0.5) % 32;
+      t += 0.15;
+      const x = 7 * Math.sin(t * 0.55);
+      const y = 5 * Math.sin(t * 0.38 + 1.25);
       try {
-        if (m.getLayer(SPACETIME_LAYER)) m.setPaintProperty(SPACETIME_LAYER, "fill-translate", [t, t * 0.5]);
+        if (m.getLayer(SPACETIME_LAYER)) m.setPaintProperty(SPACETIME_LAYER, "fill-translate", [x, y]);
       } catch {
         // النمط قيد التبديل
       }
