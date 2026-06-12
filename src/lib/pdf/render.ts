@@ -81,6 +81,15 @@ table.rpt tr:nth-child(even) td { background: #f4f6fa; }
 .qa-a p { margin: 0 0 6px; }
 .qa-a ul { margin: 0 0 6px; padding-right: 18px; }
 .qa-a h3 { font-size: 12.5px; color: #2a3a5c; margin: 8px 0 4px; }
+/* م7.5 · غلاف التقرير + الرسوم */
+.cover { height: 245mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; page-break-after: always; }
+.cover .org { font-size: 15px; font-weight: 600; color: #33518a; letter-spacing: 0.04em; }
+.cover .bar { width: 120px; height: 3px; border-radius: 2px; margin: 14px 0; background: linear-gradient(90deg, #C7A24E, #5775A8, #8B6FB0); }
+.cover h1 { font-size: 30px; color: #1b2740; margin: 0 0 8px; }
+.cover .meta { color: #6b7a99; font-size: 12px; line-height: 2; }
+.cover .frame { border: 1px solid #d8dee9; border-radius: 16px; padding: 36px 48px; box-shadow: 0 10px 30px -18px rgba(35,51,85,0.4); }
+.chart { margin: 4px 0 12px; break-inside: avoid; }
+.chart .ct { font-size: 12px; font-weight: 700; color: #2a3a5c; margin-bottom: 6px; border-right: 3px solid #C7A24E; padding-right: 6px; }
 `;
 
 export async function renderPdf(opts: { title: string; bodyHtml: string; branding: Branding }): Promise<Uint8Array<ArrayBuffer>> {

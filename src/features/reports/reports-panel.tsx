@@ -1,22 +1,26 @@
 "use client";
 
-// م5.3 · التقارير الذكية (§هـ.5) — **حتمي بالكامل** (أرقام من البيانات الفعلية، لا تأليف، لا كشف تحقّق).
-// لوحات KPI + رسوم Recharts + فلاتر متقدّمة تنعكس لحظياً + تصدير + النقر ينتقل للمصدر.
+// م5.3 → م7.5 · التقارير الذكية المبهرة (§هـ.5) — **حتمية بالكامل** (أرقام من البيانات الفعلية، لا تأليف).
+// KPI بعدّ متحرك + شرائط تقدّم · رسوم متوهّجة بدخول متدرّج · أعلى 5 (نقر ← السجلّ) · دلتا سنوية ·
+// فلاتر لحظية · تصدير PDF بغلاف براندد ورسم داخل التقرير (أو CSV وفق الإعدادات).
 
 import { useMemo, useState, type ReactNode } from "react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { BarChart3, Building2, Coins, Download, FilterX, Layers, Ruler } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, Coins, Crown, Download, FilterX, Layers, Ruler, TrendingUp } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
+import { useCountUp } from "@/components/ui/use-count-up";
 import { formatNumber } from "@/lib/format";
-import { formatArea } from "@/lib/display";
+import { formatArea, NOT_AVAILABLE } from "@/lib/display";
 import { sectorCode, sectorLabel } from "@/lib/sectors";
-import { exportTable } from "@/lib/export-table";
+import { exportTable, type ExportChart } from "@/lib/export-table";
 import { Combo } from "@/components/ui/combo";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { ORB } from "@/components/ui/orb";
 import { cn } from "@/lib/utils";
-import { requestOpenSection } from "@/features/shell/shell-store";
+import { requestOpenCompany, requestOpenSection } from "@/features/shell/shell-store";
+import { requestOpenParcelDetail } from "@/features/map/lib/map-nav-store";
 import type { AssumedParcel, Company, License, Opportunity } from "@/types/entities";
 import {
   applyFilters,
@@ -49,7 +53,9 @@ const distinct = (vals: (string | null)[]): string[] =>
 
 const cols = (keys: string[]) => keys.map((k) => ({ key: k, label: k }));
 
-function Kpi({ icon: Icon, label, value, hint, onClick, color }: { icon: typeof Ruler; label: string; value: string; hint?: string; onClick?: () => void; color?: string }) {
+/** بطاقة KPI بعدّ متحرك. */
+function Kpi({ icon: Icon, label, value, format, onClick }: { icon: typeof Ruler; label: string; value: number | null; format: (n: number) => string; onClick?: () => void }) {
+  const display = useCountUp(value ?? 0);
   return (
     <button
       type="button"
@@ -60,26 +66,63 @@ function Kpi({ icon: Icon, label, value, hint, onClick, color }: { icon: typeof 
         onClick ? "hover:border-foreground/40 hover:shadow-[0_8px_24px_-12px] hover:shadow-foreground/20 active:scale-[0.98]" : "cursor-default",
       )}
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 ring-1 ring-inset ring-border/40" style={color ? { color } : undefined}>
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 ring-1 ring-inset ring-border/40 text-[#9fc0e8]">
         <Icon className="size-4" />
       </span>
       <span className="min-w-0">
-        <span className="block text-base font-extrabold tabular-nums leading-none text-foreground">{value}</span>
+        <span className="block text-base font-extrabold tabular-nums leading-none text-foreground">
+          {value === null ? NOT_AVAILABLE : format(display)}
+        </span>
         <span className="block truncate text-[10px] text-muted-foreground">{label}</span>
-        {hint ? <span className="block truncate text-[9px] text-muted-foreground/70">{hint}</span> : null}
       </span>
     </button>
   );
 }
 
-function Section({ icon: Icon, title, children }: { icon: typeof Ruler; title: string; children: ReactNode }) {
+/** بطاقة حالة بعدّ متحرك + شريط تقدّم نسبي. */
+function StateCard({ stateKey, count, total, onClick }: { stateKey: string; count: number; total: number; onClick: () => void }) {
+  const m = STATE_META[stateKey]!;
+  const display = useCountUp(count);
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
-    <section className="rounded-xl border border-border/60 bg-background/30 p-3">
-      <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-primary/80">
-        <Icon className="size-3.5" /> {title}
-      </h4>
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${m.label} — انتقل للمصدر`}
+      className="flex flex-col items-center gap-1 rounded-lg border border-border/50 bg-card/40 px-1 py-1.5 transition hover:bg-white/5 active:scale-95"
+    >
+      <span className="size-2 rounded-full" style={{ background: m.color, boxShadow: `0 0 8px -1px ${m.color}` }} />
+      <span className="text-sm font-bold tabular-nums text-foreground">{formatNumber(display)}</span>
+      <span className="text-[8px] leading-none text-muted-foreground">{m.label}</span>
+      <span className="h-1 w-full overflow-hidden rounded-full bg-white/8">
+        <motion.span
+          className="block h-full rounded-full"
+          style={{ background: m.color }}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+        />
+      </span>
+    </button>
+  );
+}
+
+function Section({ icon: Icon, title, children, extra }: { icon: typeof Ruler; title: string; children: ReactNode; extra?: ReactNode }) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="rounded-xl border border-border/60 bg-background/30 p-3"
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="flex items-center gap-1.5 text-xs font-bold text-primary/80">
+          <Icon className="size-3.5" /> {title}
+        </h4>
+        {extra}
+      </div>
       {children}
-    </section>
+    </motion.section>
   );
 }
 
@@ -96,7 +139,6 @@ export function ReportsPanel() {
   const districtOptions = useMemo(() => distinct(all.map((r) => r.district)), [all]);
   const yearOptions = useMemo(() => distinct(all.map((r) => r.year)), [all]);
 
-  // الفلتر المطبَّق: تحويل تسمية القطاع المعروضة ← رمز للمطابقة الحتمية
   const applied = useMemo<ReportFilters>(
     () => ({ ...filters, sector: filters.sector ? (sectorCode(filters.sector) ?? filters.sector) : "" }),
     [filters],
@@ -112,13 +154,33 @@ export function ReportsPanel() {
   const districtData = useMemo(() => byDistrict(recs).slice(0, 8).map((g) => ({ label: g.key, count: g.count })), [recs]);
   const yearData = useMemo(() => byYear(recs), [recs]);
 
+  // دلتا سنوية حتمية: مجموع (فرص+رخص) آخر سنة مقابل التي قبلها
+  const yearDelta = useMemo(() => {
+    if (yearData.length < 2) return null;
+    const last = yearData[yearData.length - 1]!;
+    const prev = yearData[yearData.length - 2]!;
+    const a = last.opportunities + last.licenses;
+    const b = prev.opportunities + prev.licenses;
+    return { year: last.year, prevYear: prev.year, delta: a - b };
+  }, [yearData]);
+
+  // أعلى 5 (حتمية): رخص برأس المال · شركات برأس المال — النقر يفتح السجلّ
+  const topLicenses = useMemo(
+    () => (licsData ?? []).filter((l) => typeof l.capital === "number" && l.capital > 0).sort((a, b) => (b.capital ?? 0) - (a.capital ?? 0)).slice(0, 5),
+    [licsData],
+  );
+  const topCompanies = useMemo(
+    () => (compData ?? []).filter((c) => typeof c.capital_usd === "number" && c.capital_usd > 0).sort((a, b) => (b.capital_usd ?? 0) - (a.capital_usd ?? 0)).slice(0, 5),
+    [compData],
+  );
+
   const hasFilters = Boolean(filters.state || filters.sector || filters.district || filters.yearFrom || filters.yearTo);
   const set = (p: Partial<ReportFilters>) => setFilters((f) => ({ ...f, ...p }));
 
   const { data: settingsData } = useSettings();
   const exportFormat = settingsData?.settings.default_export ?? "pdf";
-  async function doExport(csvName: string, title: string, rows: Record<string, unknown>[], keys: string[]): Promise<void> {
-    const ok = await exportTable(exportFormat, csvName, title, rows, cols(keys));
+  async function doExport(csvName: string, title: string, rows: Record<string, unknown>[], keys: string[], chart?: ExportChart): Promise<void> {
+    const ok = await exportTable(exportFormat, csvName, title, rows, cols(keys), chart);
     if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   function exportParcels() {
@@ -131,20 +193,31 @@ export function ReportsPanel() {
       السنة: r.year ?? "غير متوفّر",
       القيمة: r.value,
     }));
-    void doExport("تقرير-القطع.csv", "تقرير القطع", rows, ["النوع", "الحالة", "القطاع", "القضاء", "المساحة م²", "السنة", "القيمة"]);
+    void doExport("تقرير-القطع.csv", "تقرير القطع", rows, ["النوع", "الحالة", "القطاع", "القضاء", "المساحة م²", "السنة", "القيمة"], {
+      title: "توزيع الحالات",
+      items: pieData.map((p) => ({ label: p.label, value: p.count })),
+    });
   }
   function exportSectoral() {
-    const rows = bySector(recs).map((g) => ({ القطاع: sectorLabel(g.key), العدد: g.count, "المساحة م²": Math.round(g.area) }));
-    void doExport("تقرير-قطاعي.csv", "التقرير القطاعي", rows, ["القطاع", "العدد", "المساحة م²"]);
+    const g = bySector(recs);
+    const rows = g.map((x) => ({ القطاع: sectorLabel(x.key), العدد: x.count, "المساحة م²": Math.round(x.area) }));
+    void doExport("تقرير-قطاعي.csv", "التقرير القطاعي", rows, ["القطاع", "العدد", "المساحة م²"], {
+      title: "التوزيع القطاعي (عدد القطع)",
+      items: g.slice(0, 10).map((x) => ({ label: sectorLabel(x.key), value: x.count })),
+    });
   }
   function exportSpatial() {
-    const rows = byDistrict(recs).map((g) => ({ القضاء: g.key, العدد: g.count, "المساحة م²": Math.round(g.area) }));
-    void doExport("تقرير-مكاني.csv", "التقرير المكاني", rows, ["القضاء", "العدد", "المساحة م²"]);
+    const g = byDistrict(recs);
+    const rows = g.map((x) => ({ القضاء: x.key, العدد: x.count, "المساحة م²": Math.round(x.area) }));
+    void doExport("تقرير-مكاني.csv", "التقرير المكاني", rows, ["القضاء", "العدد", "المساحة م²"], {
+      title: "التوزيع المكاني (عدد القطع)",
+      items: g.slice(0, 10).map((x) => ({ label: x.key, value: x.count })),
+    });
   }
 
   return (
     <div className="flex h-full flex-col">
-      {/* الفلاتر المتقدّمة (§هـ.5) — تنعكس لحظياً */}
+      {/* الفلاتر المتقدّمة — تنعكس لحظياً */}
       <div className="space-y-2 border-b border-border p-3">
         <div className="grid grid-cols-3 gap-1.5 text-xs">
           <Combo value={filters.state} onChange={(v) => set({ state: v })} options={STATE_OPTIONS} ariaLabel="الحالة" />
@@ -162,28 +235,18 @@ export function ReportsPanel() {
       </div>
 
       <div className="scroll-slim min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        {/* لوحة العدّادات (KPIs) */}
+        {/* لوحة العدّادات (KPIs بعدّ متحرك) */}
         <div className="grid grid-cols-2 gap-1.5">
-          <Kpi icon={Layers} label="إجمالي القطع" value={formatNumber(t.count)} />
-          <Kpi icon={Building2} label="الشركات" value={formatNumber((compData ?? []).length)} onClick={() => requestOpenSection("companies")} />
-          <Kpi icon={Ruler} label="إجمالي المساحات" value={formatArea(t.area)} />
-          <Kpi icon={Coins} label="إجمالي القيم" value={t.value > 0 ? `${formatNumber(Math.round(t.value))} $` : "غير متوفّر"} />
+          <Kpi icon={Layers} label="إجمالي القطع" value={t.count} format={formatNumber} />
+          <Kpi icon={Building2} label="الشركات" value={(compData ?? []).length} format={formatNumber} onClick={() => requestOpenSection("companies")} />
+          <Kpi icon={Ruler} label="إجمالي المساحات" value={Math.round(t.area)} format={(n) => formatArea(n)} />
+          <Kpi icon={Coins} label="إجمالي القيم ($)" value={t.value > 0 ? Math.round(t.value) : null} format={formatNumber} />
         </div>
 
-        {/* عدّادات الحالات (قابلة للنقر ← المصدر) */}
+        {/* بطاقات الحالات: عدّ متحرك + شريط نسبة */}
         <div className="grid grid-cols-5 gap-1">
-          {Object.entries(STATE_META).map(([st, m]) => (
-            <button
-              key={st}
-              type="button"
-              onClick={() => requestOpenSection(m.section, m.status)}
-              title={`${m.label} — انتقل للمصدر`}
-              className="flex flex-col items-center gap-0.5 rounded-lg border border-border/50 bg-card/40 py-1.5 transition hover:bg-white/5 active:scale-95"
-            >
-              <span className="size-2 rounded-full" style={{ background: m.color, boxShadow: `0 0 8px -1px ${m.color}` }} />
-              <span className="text-sm font-bold tabular-nums text-foreground">{formatNumber(t.byState[st] ?? 0)}</span>
-              <span className="text-[8px] leading-none text-muted-foreground">{m.label}</span>
-            </button>
+          {Object.keys(STATE_META).map((st) => (
+            <StateCard key={st} stateKey={st} count={t.byState[st] ?? 0} total={t.count} onClick={() => requestOpenSection(STATE_META[st]!.section, STATE_META[st]!.status)} />
           ))}
         </div>
 
@@ -199,21 +262,88 @@ export function ReportsPanel() {
           <CategoryBar data={districtData} color="#5E977A" onPick={(label) => set({ district: label })} />
         </Section>
 
-        <Section icon={BarChart3} title="الاتجاه الزمني (فرص · رخص)">
+        <Section
+          icon={TrendingUp}
+          title="الاتجاه الزمني (فرص · رخص)"
+          extra={
+            yearDelta ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset",
+                  yearDelta.delta >= 0
+                    ? "bg-state-completed/15 text-state-completed ring-state-completed/40"
+                    : "bg-state-withdrawn/15 text-state-withdrawn ring-state-withdrawn/40",
+                )}
+                title={`${yearDelta.year} مقابل ${yearDelta.prevYear}`}
+              >
+                {yearDelta.delta >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+                {formatNumber(Math.abs(yearDelta.delta))} عن {yearDelta.prevYear}
+              </span>
+            ) : null
+          }
+        >
           <YearLine data={yearData} />
         </Section>
 
-        {/* تقارير جاهزة — تصدير CSV (PDF في م6) */}
+        {/* أعلى 5 — حتمية، النقر يفتح السجلّ */}
+        <Section icon={Crown} title="أعلى 5 رخص رأسمالاً ($)">
+          {topLicenses.length ? (
+            <ul className="space-y-1">
+              {topLicenses.map((l, i) => (
+                <li key={l.record_id}>
+                  <button
+                    type="button"
+                    onClick={() => requestOpenParcelDetail({ kind: "license", id: String(l.record_id) })}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-white/5 active:scale-[0.99]"
+                  >
+                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-state-inprogress/20 text-[10px] font-bold text-state-inprogress">{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold">{l.title ?? l.license_number ?? "رخصة"}</span>
+                    <span className="shrink-0 text-[11px] font-bold tabular-nums text-[#9fc0e8]">{formatNumber(l.capital ?? 0)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-2 text-xs text-muted-foreground">{NOT_AVAILABLE}</p>
+          )}
+        </Section>
+
+        <Section icon={Crown} title="أعلى 5 شركات رأسمالاً ($)">
+          {topCompanies.length ? (
+            <ul className="space-y-1">
+              {topCompanies.map((c, i) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      requestOpenSection("companies");
+                      requestOpenCompany(c.id);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-white/5 active:scale-[0.99]"
+                  >
+                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold">{c.name}</span>
+                    <span className="shrink-0 text-[11px] font-bold tabular-nums text-[#9fc0e8]">{formatNumber(c.capital_usd ?? 0)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-2 text-xs text-muted-foreground">{NOT_AVAILABLE}</p>
+          )}
+        </Section>
+
+        {/* تقارير جاهزة — PDF بغلاف ورسم (أو CSV وفق الإعدادات) */}
         <div className="grid grid-cols-3 gap-1.5">
-          <button type="button" onClick={exportParcels} className="flex items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-card/50 py-2 text-[11px] font-semibold transition hover:bg-accent">
-            <Download className="size-3.5" /> القطع
-          </button>
-          <button type="button" onClick={exportSectoral} className="flex items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-card/50 py-2 text-[11px] font-semibold transition hover:bg-accent">
-            <Download className="size-3.5" /> قطاعي
-          </button>
-          <button type="button" onClick={exportSpatial} className="flex items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-card/50 py-2 text-[11px] font-semibold transition hover:bg-accent">
-            <Download className="size-3.5" /> مكاني
-          </button>
+          {([
+            { fn: exportParcels, label: "القطع" },
+            { fn: exportSectoral, label: "قطاعي" },
+            { fn: exportSpatial, label: "مكاني" },
+          ] as const).map((b) => (
+            <button key={b.label} type="button" onClick={b.fn} className="flex items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-card/50 py-2 text-[11px] font-semibold transition hover:bg-accent hover:shadow-[0_0_16px_-6px_rgba(148,175,209,0.7)]">
+              <Download className="size-3.5" /> {b.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

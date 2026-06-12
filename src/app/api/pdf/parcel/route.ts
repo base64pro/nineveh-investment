@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getBranding } from "@/lib/pdf/branding";
 import { renderPdf } from "@/lib/pdf/render";
 import { parcelReportBody, type PinnedInsights, type ReportScope } from "@/lib/pdf/parcel-report";
+import { coverHtml } from "@/lib/pdf/table-report";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
 
 const SCOPES = new Set<ReportScope>(["parcel", "controls", "recommendations", "criteria", "full"]);
@@ -45,8 +46,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     insights = ins ?? undefined;
   }
 
+  const branding = await getBranding();
   const { title, html } = parcelReportBody(kind as ParcelKind, entity as Record<string, unknown>, { scope, insights });
-  const pdf = await renderPdf({ title, bodyHtml: html, branding: await getBranding() });
+  // التقرير الشامل يبدأ بغلاف براندد (م7.5)
+  const issued = new Date().toLocaleDateString("en-GB");
+  const body = scope === "full" ? coverHtml(title, branding.org ?? branding.header, [`تاريخ الإصدار: ${issued}`]) + html : html;
+  const pdf = await renderPdf({ title, bodyHtml: body, branding });
 
   return new NextResponse(new Blob([pdf], { type: "application/pdf" }), {
     status: 200,

@@ -3,13 +3,19 @@
 import { exportCsv, type CsvColumn } from "./export-csv";
 import { toLatinDigits } from "./format";
 
-/** يصدّر الصفوف وفق الصيغة. يُرجِع false عند فشل توليد الـPDF (للتنبيه). */
+export interface ExportChart {
+  title: string;
+  items: { label: string; value: number }[];
+}
+
+/** يصدّر الصفوف وفق الصيغة (PDF بغلاف براندد + رسم اختياري). يُرجِع false عند فشل التوليد. */
 export async function exportTable(
   format: string,
   csvName: string,
   title: string,
   rows: Record<string, unknown>[],
   columns: CsvColumn[],
+  chart?: ExportChart,
 ): Promise<boolean> {
   if (format !== "pdf") {
     exportCsv(csvName, rows, columns);
@@ -28,7 +34,7 @@ export async function exportTable(
     const res = await fetch("/api/pdf/table", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, subtitle: `${rows.length} سجلّ`, columns: cols, rows: body }),
+      body: JSON.stringify({ title, subtitle: `${rows.length} سجلّ`, columns: cols, rows: body, chart }),
     });
     if (!res.ok) return false;
     const blob = await res.blob();
