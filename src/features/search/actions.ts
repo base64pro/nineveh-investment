@@ -90,7 +90,7 @@ interface Row {
   lat: number | null;
 }
 
-export async function superSearch(query: string): Promise<{ results: SearchResult[] }> {
+export async function superSearch(query: string): Promise<{ results: SearchResult[]; warning?: string }> {
   const q = query.trim();
   if (q.length < 2) return { results: [] };
 
@@ -116,6 +116,7 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
     }),
     geocodeNineveh(intent.place || q),
   ]);
+  if (dbRes.error) console.error("super_search:", dbRes.error.message); // لا إسقاط صامت لنتائج البيانات (§ز)
   const rows = (dbRes.data ?? []) as Row[];
   const entityResults: SearchResult[] = rows.map((r) => ({
     kind: r.kind,
@@ -143,5 +144,8 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
   }));
 
   // دمج: بياناتنا أولاً ثم تسميات/مواقع الخريطة (§هـ.4 الأولوية لعناصرنا)
-  return { results: [...entityResults, ...placeResults].slice(0, 18) };
+  return {
+    results: [...entityResults, ...placeResults].slice(0, 18),
+    ...(dbRes.error ? { warning: "تعذّر البحث في بيانات النظام مؤقتاً — تُعرض نتائج الخريطة فقط" } : {}),
+  };
 }

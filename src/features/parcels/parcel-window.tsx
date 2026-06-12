@@ -182,7 +182,7 @@ export function ParcelWindow({
       void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       void queryClient.invalidateQueries({ queryKey: ["counts"] });
     } else {
-      toast.error("تعذّر الحفظ — حاول مجدداً");
+      toast.error("تعذّر الحفظ", { description: res.error }); // §ز: سبب واضح قابل للفعل لا رسالة عامة
     }
   }
 
@@ -192,7 +192,7 @@ export function ParcelWindow({
     const res = await moveParcel(kind, String(entityId(kind, entity) ?? ""), target);
     setMoving(false);
     if (!res.ok) {
-      toast.error("تعذّر نقل الحالة — حاول مجدداً");
+      toast.error("تعذّر نقل الحالة", { description: res.error });
       return;
     }
     await Promise.all([

@@ -1,16 +1,18 @@
 "use client";
 
-// م7.6 · شارة القطعة (Callout هولوكرامي): تنبثق **بجانب** القطعة المنقورة بخط رشيق متوهّج يربطها بها،
-// وتتبعها حيّاً مع الزوم والتنقّل (إسقاط شاشة) — الخريطة تبقى ظاهرة بلا تعتيم (§هـ.3 هولوكرامي مودرن).
+// م7.6/م7.8 · شارة القطعة (Callout هولوكرامي): تنبثق **بجانب** القطعة المنقورة بخط رشيق متوهّج يربطها بها،
+// وتتبعها حيّاً مع الزوم والتنقّل — الصورة تهيمن على البطاقة (~80%) والقراءات شريط زجاجي فوقها،
+// مع عارض كبير (Lightbox) للتكبير، وزر «حذف الرسمة» (فكّ الارتباط §هـ.4).
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, ChevronLeft, Eye, ImageOff, PencilRuler, X } from "lucide-react";
+import { ChevronRight, ChevronLeft, Eye, ImageOff, Maximize2, PencilRuler, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { useParcelPhotos } from "@/features/parcels/photos/photo-lib";
+import { PhotoLightbox } from "@/features/parcels/photos/photo-lightbox";
 import type { ParcelKind } from "../lib/map-nav-store";
 import type { ParcelProps } from "../lib/use-map-parcels";
 import type { ParcelState } from "@/types/entities";
@@ -23,8 +25,8 @@ const STATE_HEX: Record<string, string> = {
   assumed: "#8B6FB0",
 };
 
-const CARD_W = 272;
-const CARD_H = 308; // تقدير للحجب داخل حدود الخريطة
+const CARD_W = 340;
+const CARD_H = 446; // تقدير للحجب داخل حدود الخريطة (رأس 42 + صورة 300 + قراءات/أزرار)
 const GAP = 46; // مسافة الخط بين القطعة والبطاقة
 
 export interface SelectedEntityInfo {
@@ -36,8 +38,8 @@ export interface SelectedEntityInfo {
 function Readout({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <div className="text-[8.5px] tracking-wide text-[#9fc0e8]/70">{label}</div>
-      <div className={cn("truncate text-xs font-bold text-foreground/95", mono && "tabular-nums")} title={value}>
+      <div className="text-[8.5px] tracking-wide text-[#cfe3ff]/75">{label}</div>
+      <div className={cn("truncate text-[11.5px] font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]", mono && "tabular-nums")} title={value}>
         {value}
       </div>
     </div>
@@ -51,6 +53,7 @@ export function SelectedParcelCard({
   container,
   onView,
   onEditGeometry,
+  onDeleteGeometry,
   onClose,
 }: {
   props: ParcelProps;
@@ -59,11 +62,13 @@ export function SelectedParcelCard({
   container: { w: number; h: number };
   onView: () => void;
   onEditGeometry: () => void;
+  onDeleteGeometry: () => void;
   onClose: () => void;
 }) {
   const kind = props.kind as ParcelKind;
   const { data: photos = [] } = useParcelPhotos(kind, props.entity_id);
   const [idx, setIdx] = useState(0);
+  const [lightbox, setLightbox] = useState(false);
   const safeIdx = photos.length ? Math.min(idx, photos.length - 1) : 0;
   const accent = STATE_HEX[props.state] ?? "#94afd1";
 
@@ -74,6 +79,8 @@ export function SelectedParcelCard({
   const attachX = flip ? cardX + CARD_W : cardX; // حافة البطاقة المواجهة للقطعة
   const attachY = cardY + 84;
   const elbowX = (anchor.x + attachX) / 2;
+
+  const BTN = "flex flex-1 items-center justify-center gap-1 rounded-lg py-2 text-[11px] font-bold ring-1 ring-inset transition active:scale-95";
 
   return (
     <>
@@ -148,8 +155,8 @@ export function SelectedParcelCard({
           </div>
           <span aria-hidden className="block h-px" style={{ background: `linear-gradient(90deg, transparent, ${accent}cc, transparent)` }} />
 
-          {/* الصور */}
-          <div className="relative h-24 w-full bg-[rgba(148,175,209,0.06)]">
+          {/* الصور — تهيمن على البطاقة (~80%)، والقراءات شريط زجاجي فوق أسفلها */}
+          <div className="group relative h-[300px] w-full bg-[rgba(148,175,209,0.06)]">
             <AnimatePresence mode="wait">
               {photos.length ? (
                 <motion.img
@@ -160,46 +167,65 @@ export function SelectedParcelCard({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.25 }}
-                  className="size-full object-cover"
+                  className="size-full cursor-zoom-in object-cover"
+                  onClick={() => setLightbox(true)}
                 />
               ) : (
-                <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex size-full flex-col items-center justify-center gap-1 text-muted-foreground">
-                  <ImageOff className="size-5 opacity-50" />
-                  <span className="text-[9px]">لا صور بعد</span>
+                <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex size-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
+                  <ImageOff className="size-7 opacity-50" />
+                  <span className="text-[10px]">لا صور بعد — تُضاف من نافذة القطعة</span>
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* تكبير في عارض كبير */}
+            {photos.length ? (
+              <button
+                type="button"
+                onClick={() => setLightbox(true)}
+                aria-label="عرض الصور بنافذة كبيرة"
+                title="عرض كبير + تكبير"
+                className="absolute end-2 top-2 grid size-8 place-items-center rounded-full bg-black/45 text-white ring-1 ring-inset ring-white/20 backdrop-blur transition hover:bg-black/70 active:scale-90"
+              >
+                <Maximize2 className="size-4" />
+              </button>
+            ) : null}
+
             {photos.length > 1 ? (
               <>
-                <button type="button" aria-label="السابقة" onClick={() => setIdx((i) => (i - 1 + photos.length) % photos.length)} className="absolute end-1 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 active:scale-90">
-                  <ChevronRight className="size-3.5" />
+                <button type="button" aria-label="السابقة" onClick={() => setIdx((i) => (i - 1 + photos.length) % photos.length)} className="absolute end-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 active:scale-90">
+                  <ChevronRight className="size-4" />
                 </button>
-                <button type="button" aria-label="التالية" onClick={() => setIdx((i) => (i + 1) % photos.length)} className="absolute start-1 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 active:scale-90">
-                  <ChevronLeft className="size-3.5" />
+                <button type="button" aria-label="التالية" onClick={() => setIdx((i) => (i + 1) % photos.length)} className="absolute start-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 active:scale-90">
+                  <ChevronLeft className="size-4" />
                 </button>
-                <div className="absolute inset-x-0 bottom-1 flex justify-center gap-1">
+              </>
+            ) : null}
+
+            {/* القراءات — شريط زجاجي متدرّج فوق أسفل الصورة */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[hsl(221_45%_6%/0.92)] via-[hsl(221_45%_6%/0.6)] to-transparent px-3 pb-2 pt-7">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <Readout label="القطاع" value={sectorLabel(info.sector)} />
+                <Readout label="المساحة" value={formatArea(info.area)} mono />
+                <Readout label="رقم القطعة" value={orNA(props.parcel_no)} mono />
+                <Readout label="الحي" value={orNA(props.neighborhood)} />
+              </div>
+              {photos.length > 1 ? (
+                <div className="pointer-events-auto mt-1.5 flex justify-center gap-1">
                   {photos.map((p, i) => (
                     <button key={p.id} type="button" aria-label={`صورة ${i + 1}`} onClick={() => setIdx(i)} className={cn("h-1 rounded-full transition-all", i === safeIdx ? "w-4 bg-white" : "w-1 bg-white/45")} />
                   ))}
                 </div>
-              </>
-            ) : null}
+              ) : null}
+            </div>
           </div>
 
-          {/* قراءات مكثّفة */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 px-3 py-2">
-            <Readout label="القطاع" value={sectorLabel(info.sector)} />
-            <Readout label="المساحة" value={formatArea(info.area)} mono />
-            <Readout label="رقم القطعة" value={orNA(props.parcel_no)} mono />
-            <Readout label="الحي" value={orNA(props.neighborhood)} />
-          </div>
-
-          {/* الأزرار */}
-          <div className="flex gap-1.5 px-3 pb-3">
+          {/* الأزرار: عرض · الحدود · حذف الرسمة */}
+          <div className="flex gap-1.5 px-3 py-2.5">
             <button
               type="button"
               onClick={onView}
-              className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary/15 py-2 text-[11px] font-bold text-primary ring-1 ring-inset ring-primary/40 transition hover:bg-primary/25 hover:shadow-[0_0_18px_-6px_rgba(148,175,209,0.9)] active:scale-95"
+              className={cn(BTN, "bg-primary/15 text-primary ring-primary/40 hover:bg-primary/25 hover:shadow-[0_0_18px_-6px_rgba(148,175,209,0.9)]")}
             >
               <Eye className="size-3.5" /> عرض
             </button>
@@ -207,13 +233,26 @@ export function SelectedParcelCard({
               type="button"
               onClick={onEditGeometry}
               title="تعديل حدود الرسم"
-              className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-state-assumed/15 py-2 text-[11px] font-bold text-state-assumed ring-1 ring-inset ring-state-assumed/40 transition hover:bg-state-assumed/25 active:scale-95"
+              className={cn(BTN, "bg-state-assumed/15 text-state-assumed ring-state-assumed/40 hover:bg-state-assumed/25")}
             >
               <PencilRuler className="size-3.5" /> الحدود
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteGeometry}
+              title="إزالة الرسمة من الخريطة — بيانات القطعة تبقى محفوظة"
+              className={cn(BTN, "bg-state-withdrawn/12 text-state-withdrawn ring-state-withdrawn/40 hover:bg-state-withdrawn/22")}
+            >
+              <Trash2 className="size-3.5" /> حذف الرسمة
             </button>
           </div>
         </div>
       </motion.div>
+
+      {/* العارض الكبير (تكبير/تنقّل) */}
+      <AnimatePresence>
+        {lightbox && photos.length ? <PhotoLightbox photos={photos} startIndex={safeIdx} onClose={() => setLightbox(false)} /> : null}
+      </AnimatePresence>
     </>
   );
 }

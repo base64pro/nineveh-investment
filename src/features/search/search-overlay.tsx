@@ -28,6 +28,7 @@ export function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [warning, setWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(0);
   const reqId = useRef(0);
@@ -66,6 +67,7 @@ export function SearchOverlay() {
     const q = query.trim();
     if (q.length < 2) {
       setResults([]);
+      setWarning(null);
       setLoading(false);
       return undefined;
     }
@@ -76,6 +78,7 @@ export function SearchOverlay() {
         .then((r) => {
           if (id === reqId.current) {
             setResults(r.results);
+            setWarning(r.warning ?? null);
             setSel(0);
           }
         })
@@ -177,6 +180,11 @@ export function SearchOverlay() {
             </form>
 
             <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-2">
+              {warning ? (
+                <p className="mx-1 mb-1.5 rounded-lg bg-state-announced/10 px-3 py-2 text-xs text-state-announced ring-1 ring-inset ring-state-announced/35">
+                  {warning}
+                </p>
+              ) : null}
               {q.length < 2 ? (
                 <p className="px-3 py-8 text-center text-sm text-muted-foreground">
                   اكتب حرفين على الأقل — تُعرَض بياناتنا أولاً ثم المواقع الجغرافية ضمن نينوى.

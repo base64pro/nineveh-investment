@@ -10,7 +10,7 @@ import turfArea from "@turf/area";
 import turfCircle from "@turf/circle";
 import destination from "@turf/destination";
 import distance from "@turf/distance";
-import type { GeoJSONSource, Map as GLMap, Popup, StyleSpecification } from "maplibre-gl";
+import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import { ChevronDown, FilterX, Layers, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,7 @@ import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
 import { getPinIcons } from "../lib/parcel-markers";
 import { TerraDraw, TerraDrawCircleMode, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import { updateParcelGeometry } from "../lib/geometry-actions";
+import { deleteParcelGeometry, updateParcelGeometry } from "../lib/geometry-actions";
 import { useMapAnnotations } from "../lib/use-map-annotations";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
@@ -44,6 +44,7 @@ import { DrawDock, type DrawModeId } from "./draw-dock";
 import { DimensionDialog, type DimShape } from "./dimension-dialog";
 import { AnnotateCreateDialog, AnnotateEditDialog } from "./annotate-dialogs";
 import { SelectedParcelCard, type SelectedEntityInfo } from "./selected-parcel-card";
+import { MarkerCallout } from "./marker-callout";
 import { HoloStatsChart } from "./holo-stats-chart";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { useEscClose } from "@/components/ui/use-esc-close";
@@ -284,6 +285,7 @@ function applyVisibility(m: GLMap | null, show: boolean): void {
  */
 async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecification> {
   const res = await fetch(styleUrl(base), { cache: "no-store" });
+  if (!res.ok) throw new Error(`تعذّر جلب نمط القاعدة (${res.status})`); // switchBase يلتقطه ويعرض تنبيهاً (§ز)
   const style = (await res.json()) as StyleJson;
   const origin = window.location.origin;
   const abs = (u: string | undefined): string | undefined =>
@@ -511,7 +513,9 @@ export default function InvestmentMap() {
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
   const overlayRef = useRef<MapboxOverlay | null>(null);
-  const popupRef = useRef<Popup | null>(null);
+  // نافذة إشارة القطعة (م7.8): بطاقة هولوكرامية بخط ربط تتبع الإشارة حيّاً — بدل Popup (كانت تختفي خلف طبقة الإشارات)
+  const [mkSel, setMkSel] = useState<{ refId: string; label: string | null; kind: ParcelKind; entityId: string; lngLat: [number, number] } | null>(null);
+  const [mkPx, setMkPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const { fc } = useMapParcels();
   const fcRef = useRef<FeatureCollection>(fc);
   fcRef.current = fc;
@@ -652,12 +656,12 @@ export default function InvestmentMap() {
           // استوديو الرسم (م7.1): الوضعيات تستهلك النقر قبل التحديد/النوافذ
           const dm = drawModeRef.current;
           if (dm === "dimensions") {
-            popupRef.current?.remove();
+            setMkSel(null);
             setDimAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
             return;
           }
           if (dm === "annotate") {
-            popupRef.current?.remove();
+            setMkSel(null);
             setAnnAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
             return;
           }
@@ -674,7 +678,7 @@ export default function InvestmentMap() {
             const hit = m.queryRenderedFeatures(e.point, { layers: annLayers })[0];
             const ap = hit?.properties as { id?: string; name?: string; element_type?: string } | undefined;
             if (ap?.id) {
-              popupRef.current?.remove();
+              setMkSel(null);
               setAnnEdit({ id: ap.id, name: ap.name ?? "", type: ap.element_type ?? "landmark" });
               return;
             }
@@ -684,60 +688,20 @@ export default function InvestmentMap() {
             | { ref_id?: string; position?: [number, number]; label?: string; kind?: string; entity_id?: string }
             | undefined;
           if (mkObj?.ref_id) {
-            const refId = mkObj.ref_id;
-            popupRef.current?.remove();
-            // بطاقة عمودية أنيقة بهوية النظام: العنوان أعلى، ثم «عرض» ثم «الموقع»
-            const el = document.createElement("div");
-            el.style.fontFamily = "var(--font-readex), system-ui, sans-serif";
-            el.className =
-              "flex w-48 flex-col gap-2 rounded-2xl border border-border/70 bg-gradient-to-b from-card to-card/90 p-2.5 text-foreground shadow-2xl shadow-primary/25 ring-1 ring-inset ring-foreground/10 backdrop-blur-md";
-            const titleEl = document.createElement("div");
-            titleEl.className = "truncate border-b border-border/60 px-1 pb-2 text-center text-[13px] font-bold tracking-tight text-foreground";
-            titleEl.textContent = mkObj.label || "قطعة";
-            titleEl.title = mkObj.label ?? "";
-            el.appendChild(titleEl);
-            const EYE =
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>';
-            const NAV =
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>';
-            const mkBtn = (text: string, icon: string, cls: string, fn: () => void): HTMLButtonElement => {
-              const b = document.createElement("button");
-              b.type = "button";
-              b.className =
-                "flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95 " + cls;
-              b.innerHTML = icon + "<span>" + text + "</span>";
-              b.addEventListener("click", () => {
-                fn();
-                popupRef.current?.remove();
-              });
-              return b;
-            };
-            el.appendChild(
-              mkBtn("عرض", EYE, "bg-primary/15 text-primary ring-1 ring-inset ring-primary/30 hover:bg-primary/25", () =>
-                requestOpenParcelDetail({ kind: (mkObj.kind as ParcelKind) || "assumed", id: mkObj.entity_id || "" }),
-              ),
-            );
-            el.appendChild(
-              mkBtn("الموقع", NAV, "bg-secondary/60 text-foreground ring-1 ring-inset ring-border/50 hover:bg-accent", () => requestFlyTo(refId)),
-            );
-            // تنبثق بجانب القرص (يمين/يسار حسب الموضع) فلا تتداخل
-            const onRight = e.point.x > m.getContainer().clientWidth / 2;
-            popupRef.current = new maplibregl.Popup({
-              className: "parcel-popup",
-              closeButton: false,
-              anchor: onRight ? "right" : "left",
-              offset: onRight ? [-18, -42] : [18, -42],
-              maxWidth: "none",
-            })
-              .setLngLat(mkObj.position ?? e.lngLat)
-              .setDOMContent(el)
-              .addTo(m);
+            // م7.8: بطاقة هولوكرامية بخط ربط تتبع الإشارة حيّاً — فوق كل الطبقات (بدل Popup التي كانت تختفي خلف الإشارات)
+            setMkSel({
+              refId: mkObj.ref_id,
+              label: mkObj.label ?? null,
+              kind: (mkObj.kind as ParcelKind) || "assumed",
+              entityId: mkObj.entity_id ?? "",
+              lngLat: (mkObj.position ?? [e.lngLat.lng, e.lngLat.lat]) as [number, number],
+            });
             return;
           }
           const info = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 5, layerIds: ["parcels"] });
           const ref = info?.object?.properties?.ref_id;
           setSelectedId(typeof ref === "string" ? ref : null);
-          popupRef.current?.remove();
+          setMkSel(null);
         });
 
         // استوديو الرسم (terra-draw · م7.1): مضلّع · مستطيل · دائرة · تحرير (select) — بنمط بنفسجي موحّد
@@ -817,8 +781,6 @@ export default function InvestmentMap() {
         /* تجاهل */
       }
       drawRef.current = null;
-      popupRef.current?.remove();
-      popupRef.current = null;
       map?.remove();
       mapRef.current = null;
       overlayRef.current = null;
@@ -899,12 +861,13 @@ export default function InvestmentMap() {
       const d = drawRef.current;
       if (d) {
         try {
+          if (!d.enabled) d.start(); // شفاء ذاتي بعد تبديل القاعدة
           d.clear();
           d.setMode("polygon");
           setEditing(null);
           setDrawMode("polygon");
         } catch {
-          // تجاهل — يُعاد عند التحميل
+          toast.error("تعذّر بدء الرسم — أعد المحاولة");
         }
       }
     });
@@ -914,29 +877,45 @@ export default function InvestmentMap() {
     const map = mapRef.current;
     const data = dataRef.current;
     if (!map || !data || next === baseRef.current) return;
+    const prev = baseRef.current;
     baseRef.current = next;
     setBase(next);
-    map.setStyle(await buildStyle(next, data)); // النمط الجديد يحوي طبقاتنا → فوري
+    let style: StyleSpecification;
+    try {
+      style = await buildStyle(next, data);
+    } catch {
+      baseRef.current = prev; // §ز: فشل الجلب لا يُعلّق الزر على قاعدة لم تُحمَّل
+      setBase(prev);
+      toast.error("تعذّر تحميل قاعدة الخريطة — تحقّق من الاتصال وأعد المحاولة");
+      return;
+    }
+    // إيقاف أداة الرسم **قبل** setStyle: مصادرها ما تزال قائمة فيمرّ unregister بنظافة.
+    // (كان stop داخل idle يرمي بعد مسح المصادر فلا يصل start أبداً — جذر «لا يمكن الرسم بعد التبديل»)
+    const d = drawRef.current;
+    if (drawModeRef.current !== "off") toast.info("أُلغي الرسم الجاري بسبب تبديل قاعدة الخريطة");
+    try {
+      d?.stop();
+    } catch {
+      // يُعاد تشغيلها بعد idle على كل حال
+    }
+    linkTargetRef.current = null;
+    setDrawMode("off");
+    setEditing(null);
+    setLiveArea(null);
+    setMkSel(null);
+    map.setStyle(style); // النمط الجديد يحوي طبقاتنا → فوري
     map.once("idle", () => {
       applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
       applyVisibility(mapRef.current, showBoundariesRef.current);
       applyAnnotations(mapRef.current, annFcRef.current, showAnnotationsRef.current); // النمط الجديد مسح المصدر
       applySpacetime(mapRef.current, dataRef.current?.gov ?? null);
-      // إعادة تسجيل طبقات أداة الرسم — setStyle يمسح مصادرها (جذر أخطاء setData المتدفّقة)
-      const d = drawRef.current;
-      if (d) {
-        try {
-          d.stop();
-          d.start();
-          d.setMode("static");
-        } catch {
-          // تعذّرت إعادة التسجيل — الزرّ محميّ بـtry/catch ويُعاد عند التحميل
-        }
+      // إعادة تشغيل أداة الرسم على النمط الجديد — حارس مستقل كي لا يُسقطها أي فشل آخر
+      try {
+        if (d && !d.enabled) d.start();
+        d?.setMode("static");
+      } catch {
+        // تُشفى ذاتياً عند أول دخول للرسم (enterDrawMode يعيد التشغيل)
       }
-      linkTargetRef.current = null;
-      setDrawMode("off");
-      setEditing(null);
-      setLiveArea(null);
     });
   }
 
@@ -975,6 +954,15 @@ export default function InvestmentMap() {
     }
     const d = drawRef.current;
     if (!d) return;
+    if (!d.enabled) {
+      // شفاء ذاتي: إن تعطّلت الأداة بعد تبديل قاعدة سابق تُعاد للعمل هنا فوراً
+      try {
+        d.start();
+      } catch {
+        toast.error("تعذّرت تهيئة أداة الرسم — أعد تحميل الصفحة");
+        return;
+      }
+    }
     try {
       d.clear();
       setEditing(null);
@@ -1000,6 +988,7 @@ export default function InvestmentMap() {
       setDrawMode(m);
     } catch {
       exitDraw();
+      toast.error("تعذّر تفعيل وضعية الرسم — حاول مجدداً");
     }
   }
 
@@ -1011,11 +1000,12 @@ export default function InvestmentMap() {
       const meta = annPendingRef.current;
       annPendingRef.current = null;
       const res = await createMapElement(meta.name, meta.type, raw.geometry);
-      exitDraw();
       if (!res.ok) {
-        toast.error(`تعذّر حفظ التسمية — ${res.error}`);
+        annPendingRef.current = meta; // الاسم يبقى — أعد إغلاق المضلّع للمحاولة مجدداً (§ز: لا فقدان مدخلات)
+        toast.error("تعذّر حفظ التسمية", { description: res.error });
         return;
       }
+      exitDraw();
       toast.success(`سُمِّيت المنطقة «${meta.name}» — تظهر بالخريطة والبحث`);
       void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
       return;
@@ -1027,7 +1017,7 @@ export default function InvestmentMap() {
     linkTargetRef.current = null;
     const supabase = createClient();
     let createdId: string | null = null;
-    let failed = false;
+    let errMsg: string | null = null;
     if (target) {
       // ربط الهندسة بقطعة موجودة (فرصة/رخصة)
       const { error } = await supabase.rpc("create_parcel_geometry", {
@@ -1035,7 +1025,7 @@ export default function InvestmentMap() {
         p_parcel_no: target.parcel_no,
         p_muqataa_no: target.muqataa_no,
       });
-      failed = Boolean(error);
+      errMsg = error?.message ?? null;
     } else {
       // قطعة مفترضة جديدة + استنتاج مكاني
       const district = inferName(polygon, data.districts);
@@ -1045,14 +1035,15 @@ export default function InvestmentMap() {
         p_district: district,
         p_subdistrict: subdistrict,
       });
-      failed = Boolean(error);
+      errMsg = error?.message ?? null;
       if (typeof newId === "string") createdId = newId;
     }
-    exitDraw();
-    if (failed) {
-      toast.error("تعذّر حفظ الحدود");
+    if (errMsg) {
+      linkTargetRef.current = target; // إبقاء هدف الربط والشكل المرسوم — أعد المحاولة أو Esc (§ز: لا فقدان عمل)
+      toast.error("تعذّر حفظ الحدود", { description: errMsg });
       return;
     }
+    exitDraw();
     toast.success(target ? `رُبطت الحدود بـ${target.label ?? "القطعة"}` : "أُنشئت قطعة مفترضة");
     void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
     void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
@@ -1096,7 +1087,7 @@ export default function InvestmentMap() {
       d.addFeatures([{ type: "Feature", properties: { mode: "polygon" }, geometry: polyGeom } as never]);
       d.setMode("select");
       setSelectedId(null);
-      popupRef.current?.remove();
+      setMkSel(null);
       setEditing({ kind: props.kind, refId: props.ref_id, label: props.label || props.parcel_no || "قطعة" });
       toast.info("اسحب الرؤوس أو النقاط الوسطى لتعديل الحدود، ثم «حفظ الحدود»");
     } catch {
@@ -1136,11 +1127,11 @@ export default function InvestmentMap() {
     setAnnSaving(true);
     const res = await createMapElement(name, type, { type: "Point", coordinates: [anchor.lng, anchor.lat] });
     setAnnSaving(false);
-    exitDraw();
     if (!res.ok) {
-      toast.error(`تعذّر حفظ التسمية — ${res.error}`);
+      toast.error("تعذّر حفظ التسمية", { description: res.error }); // الحوار والموقع يبقيان — أعد المحاولة (§ز)
       return;
     }
+    exitDraw();
     toast.success(`أُضيفت التسمية «${name}» — تظهر بالخريطة والبحث`);
     void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
   }
@@ -1181,7 +1172,7 @@ export default function InvestmentMap() {
     const res = await deleteMapElement(ed.id);
     setAnnSaving(false);
     if (!res.ok) {
-      toast.error("تعذّر الحذف");
+      toast.error("تعذّر الحذف", { description: res.error });
       return;
     }
     setAnnEdit(null);
@@ -1254,11 +1245,63 @@ export default function InvestmentMap() {
     };
   }, [selectedProps]);
 
+  // تتبّع بطاقة الإشارة (م7.8): إسقاط شاشة حيّ لموقع الإشارة مع كل حركة/تكبير — كالشارة تماماً
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !mkSel) {
+      setMkPx(null);
+      return;
+    }
+    let raf = 0;
+    const update = (): void => {
+      raf = 0;
+      const mm = mapRef.current;
+      if (!mm) return;
+      const p = mm.project(mkSel.lngLat);
+      const el = mm.getContainer();
+      setMkPx({ x: p.x, y: p.y, w: el.clientWidth, h: el.clientHeight });
+    };
+    const onMove = (): void => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    m.on("move", onMove);
+    m.on("resize", onMove);
+    return () => {
+      m.off("move", onMove);
+      m.off("resize", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mkSel]);
+
   function onCardEditGeometry(): void {
     const p = selectedProps;
     if (!p) return;
     if (drawModeRef.current !== "edit") enterDrawMode("edit");
     editStartRef.current?.(p);
+  }
+
+  // حذف الرسمة من الخريطة (فكّ الارتباط §هـ.4) — بيانات القطعة لا تُمسّ
+  async function onCardDeleteGeometry(): Promise<void> {
+    const p = selectedProps;
+    if (!p) return;
+    const msg =
+      p.kind === "assumed"
+        ? `إزالة حدود «${p.label}» من الخريطة؟ يبقى سجلّها محفوظاً في «تصميم فرصة».`
+        : `إزالة رسمة «${p.label}» من الخريطة؟ بيانات القطعة تبقى محفوظة في قسمها.`;
+    if (!window.confirm(msg)) return;
+    const res = await deleteParcelGeometry(p.kind, p.ref_id);
+    if (!res.ok) {
+      toast.error(`تعذّرت إزالة الرسمة: ${res.error}`);
+      return;
+    }
+    setSelectedId(null);
+    setMkSel(null);
+    void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
+    void queryClient.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+    void queryClient.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
+    void queryClient.invalidateQueries({ queryKey: ["counts"] });
+    toast.success("أُزيلت الرسمة من الخريطة — البيانات محفوظة");
   }
 
   // أحياء فلترة الظهور: القطع المرسومة ∪ القاموس الموحّد (م7.7 — نفس القيم في كل منسدلات النظام)
@@ -1437,12 +1480,42 @@ export default function InvestmentMap() {
             anchor={{ x: calloutPx.x, y: calloutPx.y }}
             container={{ w: calloutPx.w, h: calloutPx.h }}
             onView={() => {
-              // مطابق حرفياً لزرّ «عرض» في نافذة إشارة الخريطة (نافذة القطعة الموحَّدة الكاملة)
-              requestOpenParcelDetail({ kind: (selectedProps.kind as ParcelKind) || "assumed", id: selectedProps.entity_id || "" });
+              // مطابق حرفياً لزرّ «عرض» في بطاقة إشارة الخريطة (نافذة القطعة الموحَّدة الكاملة)
+              if (!selectedProps.entity_id) {
+                toast.error("لا كيان بياني مرتبط بهذه الرسمة بعد", { description: "اربطها من بطاقة قسمها أو احذف الرسمة" });
+                return;
+              }
+              requestOpenParcelDetail({ kind: (selectedProps.kind as ParcelKind) || "assumed", id: selectedProps.entity_id });
               setSelectedId(null);
             }}
             onEditGeometry={onCardEditGeometry}
+            onDeleteGeometry={() => void onCardDeleteGeometry()}
             onClose={() => setSelectedId(null)}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      {/* بطاقة إشارة القطعة (م7.8) — هولوكرامية بخط ربط، فوق كل الإشارات، تتبع الإشارة حيّاً */}
+      <AnimatePresence>
+        {mkSel && mkPx && drawMode === "off" ? (
+          <MarkerCallout
+            key={mkSel.refId}
+            label={mkSel.label}
+            anchor={{ x: mkPx.x, y: mkPx.y }}
+            container={{ w: mkPx.w, h: mkPx.h }}
+            onView={() => {
+              if (!mkSel.entityId) {
+                toast.error("لا كيان بياني مرتبط بهذه الرسمة بعد", { description: "اربطها من بطاقة قسمها أو احذف الرسمة من شارة القطعة" });
+                return;
+              }
+              requestOpenParcelDetail({ kind: mkSel.kind, id: mkSel.entityId });
+              setMkSel(null);
+            }}
+            onLocate={() => {
+              requestFlyTo(mkSel.refId);
+              setMkSel(null);
+            }}
+            onClose={() => setMkSel(null)}
           />
         ) : null}
       </AnimatePresence>

@@ -14,3 +14,10 @@ export async function updateParcelGeometry(kind: string, refId: string, geometry
   const { error } = await supabase.rpc("update_parcel_geom", { p_kind: kind, p_ref_id: refId, p_geom: geometry });
   return error ? { ok: false, error: error.message } : { ok: true };
 }
+
+/** إزالة رسمة قطعة من الخريطة (فكّ الارتباط §هـ.4) — البيانات تبقى سليمة في جدولها. */
+export async function deleteParcelGeometry(kind: string, refId: string): Promise<GeomResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_parcel_geom", { p_kind: kind, p_ref_id: refId });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}

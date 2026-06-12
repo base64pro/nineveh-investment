@@ -113,7 +113,7 @@ function DirectorAvatar() {
     <div className="relative size-9 shrink-0 overflow-hidden rounded-full ring-2 ring-[rgba(148,175,209,0.6)] shadow-[0_0_18px_-3px_rgba(148,175,209,0.8)] lg:size-10 2xl:size-12">
       {ok ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src="/director.jpeg" alt="المدير العام" onError={() => setOk(false)} className="size-full object-cover" />
+        <img src="/director.jpeg" alt="السيد رئيس الهيئة" onError={() => setOk(false)} className="size-full object-cover" />
       ) : (
         <span className="grid size-full place-items-center bg-[rgba(148,175,209,0.14)] text-muted-foreground">
           <User className="size-5" />
@@ -184,7 +184,7 @@ export function Headbar() {
               هيئة استثمار نينوى
             </div>
             <div className="whitespace-nowrap text-[9px] text-muted-foreground lg:text-[10px] 2xl:text-xs">
-              مكتب المدير العام · الأستاذ حارث البخو
+              مكتب السيد رئيس الهيئة الأستاذ حارث البخو
             </div>
           </div>
           <DirectorAvatar />

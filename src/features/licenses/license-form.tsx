@@ -59,7 +59,7 @@ export function LicenseForm({
       void queryClient.invalidateQueries({ queryKey: ["counts"] });
       onClose();
     } else {
-      toast.error("تعذّر الحفظ — حاول مجدداً"); // §ز.2: النموذج يبقى بلا فقدان
+      toast.error("تعذّر الحفظ", { description: res.error }); // §ز.2: سبب واضح + النموذج يبقى بلا فقدان
     }
   }
 

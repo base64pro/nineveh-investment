@@ -116,16 +116,7 @@
   }
 }
 
-/* نافذة إشارة القطعة على الخريطة — محتوى مخصّص (نتجاوز نمط MapLibre الفاتح) */
-.parcel-popup .maplibregl-popup-content {
-  background: transparent;
-  padding: 0;
-  box-shadow: none;
-  border-radius: 0;
-}
-.parcel-popup .maplibregl-popup-tip {
-  display: none;
-}
+/* نافذة إشارة القطعة صارت بطاقة React هولوكرامية (م7.8) — أزيلت تجاوزات Popup */
 
 /* شاشة الدخول (م7.6) — خلفية هولوكرامية بمكوّن خادمي (كيفريمات CSS خالصة) */
 @keyframes login-aurora {
