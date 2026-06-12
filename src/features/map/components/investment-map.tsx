@@ -1332,8 +1332,8 @@ export default function InvestmentMap() {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* عمود الأدوات العائمة (يسار الخريطة): القاعدة · العودة · الطبقات ← ثم استوديو الرسم تحتها */}
-      <div className="absolute end-3 top-16 z-10 flex flex-col items-end gap-2">
+      {/* عمود الأدوات العائمة: القاعدة · العودة · الطبقات ← ثم استوديو الرسم — فوق الجارت دائماً (z-20) */}
+      <div className="absolute end-3 top-16 z-20 flex flex-col items-end gap-2">
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           {BASES.map((b) => (
             <button
@@ -1391,11 +1391,11 @@ export default function InvestmentMap() {
           {showLayers ? (
             <motion.div
               key="layers-panel"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className={cn("flex w-48 flex-col gap-1.5 overflow-hidden rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
+              initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+              animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+              exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className={cn("flex w-48 flex-col gap-1.5 rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
             >
               <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
                 <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-4 accent-primary" />
@@ -1473,8 +1473,8 @@ export default function InvestmentMap() {
         />
       </div>
 
-      {/* الجارت الهولوكرامي (م7.6) — الزاوية السفلى اليسرى */}
-      <HoloStatsChart />
+      {/* الجارت الهولوكرامي (م7.6) — ينزاح بأناقة عند انشغال الأدوات العائمة (طبقات/رسم) فلا تداخل */}
+      <HoloStatsChart hidden={showLayers || drawOpen || drawMode !== "off"} />
 
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}

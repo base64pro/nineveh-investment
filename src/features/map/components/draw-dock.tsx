@@ -75,11 +75,11 @@ export function DrawDock({
           {open ? (
             <motion.div
               key="modes"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="flex flex-col gap-0.5 overflow-hidden"
+              initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+              animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+              exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className="flex flex-col gap-0.5"
             >
               {MODES.map((m) => {
                 const isActive = mode === m.id;

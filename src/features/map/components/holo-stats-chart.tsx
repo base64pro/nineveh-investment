@@ -59,7 +59,7 @@ function Bar({ value, max, label, color, delay, onClick }: { value: number; max:
   );
 }
 
-export function HoloStatsChart() {
+export function HoloStatsChart({ hidden = false }: { hidden?: boolean }) {
   const { data: s } = useDashboardStats();
   const values = BARS.map((b) => (s?.[b.key] as number | undefined) ?? 0);
   const max = Math.max(1, ...values);
@@ -67,9 +67,9 @@ export function HoloStatsChart() {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className={cn("absolute bottom-9 end-3 z-10 hidden md:block", FRAME)}
+      animate={hidden ? { opacity: 0, y: 28, scale: 0.94 } : { opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      className={cn("absolute bottom-9 end-3 z-10 hidden md:block", hidden && "pointer-events-none", FRAME)}
     >
       <div className={cn(BODY, "px-3 pb-2 pt-2")}>
         {/* خط مسح خافت */}
