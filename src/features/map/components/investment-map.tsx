@@ -1,13 +1,18 @@
 "use client";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import bbox from "@turf/bbox";
 import mask from "@turf/mask";
 import centroid from "@turf/centroid";
+import turfArea from "@turf/area";
+import turfCircle from "@turf/circle";
+import destination from "@turf/destination";
+import distance from "@turf/distance";
 import type { GeoJSONSource, Map as GLMap, Popup, StyleSpecification } from "maplibre-gl";
-import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
-import { Maximize2, PenTool } from "lucide-react";
+import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
+import { FilterX, Layers, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -25,11 +30,16 @@ import {
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { GeoJsonLayer, IconLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
-import { useMapParcels } from "../lib/use-map-parcels";
+import { type ParcelProps, useMapParcels } from "../lib/use-map-parcels";
 import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
 import { getPinIcons } from "../lib/parcel-markers";
-import { TerraDraw, TerraDrawPolygonMode } from "terra-draw";
+import { TerraDraw, TerraDrawCircleMode, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
+import { updateParcelGeometry } from "../lib/geometry-actions";
+import { DrawDock, type DrawModeId } from "./draw-dock";
+import { DimensionDialog, type DimShape } from "./dimension-dialog";
+import { FilterCombo } from "@/components/ui/filter-combo";
+import { useEscClose } from "@/components/ui/use-esc-close";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -327,6 +337,40 @@ const STATE_TOGGLES = [
   { value: "assumed", label: "مفترضة", accent: "accent-state-assumed" },
 ] as const;
 
+// مستطيل مضبوط جغرافياً حول مركز (متر) — turf حتمي (لوضعَي «بأبعاد» و«مربّع»).
+function buildRectPolygon(lng: number, lat: number, widthM: number, heightM: number): Feature<Polygon> {
+  const km = (m: number) => m / 1000;
+  const n = destination([lng, lat], km(heightM / 2), 0).geometry.coordinates;
+  const s = destination([lng, lat], km(heightM / 2), 180).geometry.coordinates;
+  const e = destination([lng, lat], km(widthM / 2), 90).geometry.coordinates;
+  const w = destination([lng, lat], km(widthM / 2), 270).geometry.coordinates;
+  const [minX, maxX, minY, maxY] = [w[0]!, e[0]!, s[1]!, n[1]!];
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [[[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY]]] },
+  };
+}
+
+/** ضبط مستطيل مرسوم يدوياً إلى مربّع (وضع «مربّع»): الضلع = متوسط البعدين، حول نفس المركز. */
+function regularizeSquare(polygon: Feature<Polygon>): Feature<Polygon> {
+  const [minX, minY, maxX, maxY] = bbox(polygon);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const widthM = distance([minX, cy], [maxX, cy]) * 1000;
+  const heightM = distance([cx, minY], [cx, maxY]) * 1000;
+  const side = (widthM + heightM) / 2;
+  return buildRectPolygon(cx, cy, side, side);
+}
+
+const GLASS = "border border-[rgba(148,175,209,0.45)] bg-[hsl(220_36%_15%_/_0.92)] shadow-[0_8px_28px_-10px_rgba(0,0,0,0.7),0_0_22px_-8px_rgba(148,175,209,0.5)] backdrop-blur";
+
+interface EditingRef {
+  kind: string;
+  refId: string;
+  label: string;
+}
+
 export default function InvestmentMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GLMap | null>(null);
@@ -340,7 +384,16 @@ export default function InvestmentMap() {
   fcRef.current = fc;
   const drawRef = useRef<TerraDraw | null>(null);
   const linkTargetRef = useRef<DrawTarget | null>(null);
-  const [drawing, setDrawing] = useState(false);
+  // استوديو الرسم (م7.1): وضعية الرسم + مساحة حيّة + تحرير قائم + مرسى الأبعاد + فلترة الحي + لوحة الطبقات
+  const [drawMode, setDrawMode] = useState<DrawModeId>("off");
+  const drawModeRef = useRef<DrawModeId>(drawMode);
+  drawModeRef.current = drawMode;
+  const [liveArea, setLiveArea] = useState<number | null>(null);
+  const [editing, setEditing] = useState<EditingRef | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [dimAnchor, setDimAnchor] = useState<{ lng: number; lat: number } | null>(null);
+  const [nbhFilter, setNbhFilter] = useState("");
+  const [showLayers, setShowLayers] = useState(false);
   const queryClient = useQueryClient();
   const qcRef = useRef(queryClient);
   qcRef.current = queryClient;
@@ -448,6 +501,20 @@ export default function InvestmentMap() {
         m.on("click", (e) => {
           const ov = overlayRef.current;
           if (!ov) return;
+          // استوديو الرسم (م7.1): الوضعيات تستهلك النقر قبل التحديد/النوافذ
+          const dm = drawModeRef.current;
+          if (dm === "dimensions") {
+            popupRef.current?.remove();
+            setDimAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+            return;
+          }
+          if (dm === "edit") {
+            const picked = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 6, layerIds: ["parcels"] });
+            const props = picked?.object?.properties as ParcelProps | undefined;
+            if (props?.ref_id) editStartRef.current?.(props);
+            return;
+          }
+          if (dm !== "off") return; // أثناء الإنشاء: terra-draw يتكفّل بالنقر
           const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
           const mkObj = mk?.object as
             | { ref_id?: string; position?: [number, number]; label?: string; kind?: string; entity_id?: string }
@@ -509,71 +576,60 @@ export default function InvestmentMap() {
           popupRef.current?.remove();
         });
 
-        // أداة الرسم (terra-draw) — قطعة مفترضة + استنتاج مكاني
+        // استوديو الرسم (terra-draw · م7.1): مضلّع · مستطيل · دائرة · تحرير (select) — بنمط بنفسجي موحّد
+        const SHAPE_STYLE = {
+          fillColor: "#8B6FB0",
+          fillOpacity: 0.25,
+          outlineColor: "#8B6FB0",
+          outlineWidth: 2,
+        } as const;
         const draw = new TerraDraw({
           adapter: new TerraDrawMapLibreGLAdapter({ map: m }),
           modes: [
             new TerraDrawPolygonMode({
+              styles: { ...SHAPE_STYLE, closingPointColor: "#C7A24E", closingPointWidth: 5 },
+              snapping: { toCoordinate: true }, // جذب لرؤوس القطع المجاورة — رسم متلاصق نظيف
+            }),
+            new TerraDrawRectangleMode({ styles: SHAPE_STYLE }),
+            new TerraDrawCircleMode({ styles: SHAPE_STYLE }),
+            new TerraDrawSelectMode({
               styles: {
-                fillColor: "#8B6FB0",
-                fillOpacity: 0.25,
-                outlineColor: "#8B6FB0",
-                outlineWidth: 2,
-                closingPointColor: "#C7A24E",
-                closingPointWidth: 5,
+                selectedPolygonColor: "#C7A24E",
+                selectedPolygonFillOpacity: 0.18,
+                selectedPolygonOutlineColor: "#C7A24E",
+                selectedPolygonOutlineWidth: 2.5,
+                selectionPointColor: "#C7A24E",
+                selectionPointWidth: 6,
+                selectionPointOutlineColor: "#0b1220",
+                selectionPointOutlineWidth: 1.5,
+                midPointColor: "#94afd1",
+                midPointWidth: 4,
+              },
+              flags: {
+                polygon: {
+                  feature: { draggable: true, coordinates: { draggable: true, deletable: true, midpoints: true } },
+                },
               },
             }),
           ],
         });
         draw.start();
+        // مساحة حيّة توضيحية أثناء الرسم/التحرير (المساحة الرسمية من البيانات)
+        draw.on("change", () => {
+          try {
+            const f = draw.getSnapshot().find((sf) => sf.geometry?.type === "Polygon");
+            setLiveArea(f ? turfArea(f as unknown as Feature<Polygon>) : null);
+          } catch {
+            // تجاهل ومضات إعادة التحميل
+          }
+        });
         draw.on("finish", (id) => {
+          if (drawModeRef.current === "edit") return; // التحرير يُحفَظ صراحةً بزرّ «حفظ الحدود»
           const d = drawRef.current;
-          const data = dataRef.current;
-          if (!d || !data) return;
+          if (!d) return;
           const feat = d.getSnapshot().find((f) => f.id === id);
           if (!feat || feat.geometry?.type !== "Polygon") return;
-          const polygon = feat as unknown as Feature<Polygon>;
-          const target = linkTargetRef.current;
-          linkTargetRef.current = null;
-          void (async () => {
-            const supabase = createClient();
-            let createdId: string | null = null;
-            let failed = false;
-            if (target) {
-              // ربط الهندسة بقطعة موجودة (فرصة/رخصة)
-              const { error } = await supabase.rpc("create_parcel_geometry", {
-                p_geom: polygon.geometry,
-                p_parcel_no: target.parcel_no,
-                p_muqataa_no: target.muqataa_no,
-              });
-              failed = Boolean(error);
-            } else {
-              // قطعة مفترضة جديدة + استنتاج مكاني
-              const district = inferName(polygon, data.districts);
-              const subdistrict = inferName(polygon, data.subdistricts);
-              const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
-                p_geom: polygon.geometry,
-                p_district: district,
-                p_subdistrict: subdistrict,
-              });
-              failed = Boolean(error);
-              if (typeof newId === "string") createdId = newId;
-            }
-            d.clear();
-            d.setMode("static");
-            setDrawing(false);
-            if (failed) {
-              toast.error("تعذّر حفظ الحدود");
-              return;
-            }
-            toast.success(target ? `رُبطت الحدود بـ${target.label ?? "القطعة"}` : "أُنشئت قطعة مفترضة");
-            void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
-            void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
-            void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
-            void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
-            // قطعة مفترضة جديدة ← انبثاق نموذج بياناتها (اسم + باقي الحقول)
-            if (createdId) requestOpenParcelForm(createdId);
-          })();
+          void persistRef.current?.(feat as unknown as Feature<Polygon>);
         });
         drawRef.current = draw;
         setMapReady(true);
@@ -603,13 +659,22 @@ export default function InvestmentMap() {
     };
   }, []);
 
-  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار/الحالات (انعكاس لحظي)
+  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار/الحالات/الحي/التحرير (انعكاس لحظي)
   useEffect(() => {
     const vis = showParcels
-      ? { ...fc, features: fc.features.filter((f) => !hiddenStates.has(String(f.properties?.state ?? ""))) }
+      ? {
+          ...fc,
+          features: fc.features.filter((f) => {
+            const p = f.properties ?? {};
+            if (hiddenStates.has(String(p.state ?? ""))) return false;
+            if (nbhFilter && p.neighborhood !== nbhFilter) return false;
+            if (editing && p.ref_id === editing.refId) return false; // نسخته تُحرَّر في terra-draw
+            return true;
+          }),
+        }
       : null;
     overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
-  }, [fc, selectedId, showParcels, hiddenStates]);
+  }, [fc, selectedId, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {
@@ -669,8 +734,14 @@ export default function InvestmentMap() {
       linkTargetRef.current = target;
       const d = drawRef.current;
       if (d) {
-        d.setMode("polygon");
-        setDrawing(true);
+        try {
+          d.clear();
+          d.setMode("polygon");
+          setEditing(null);
+          setDrawMode("polygon");
+        } catch {
+          // تجاهل — يُعاد عند التحميل
+        }
       }
     });
   }, []);
@@ -697,7 +768,9 @@ export default function InvestmentMap() {
         }
       }
       linkTargetRef.current = null;
-      setDrawing(false);
+      setDrawMode("off");
+      setEditing(null);
+      setLiveArea(null);
     });
   }
 
@@ -708,107 +781,305 @@ export default function InvestmentMap() {
     map.fitBounds(data.bounds, { padding: 48, duration: 1200 });
   }
 
-  function toggleDraw(): void {
-    const draw = drawRef.current;
-    if (!draw) return;
+  // ===== استوديو الرسم (م7.1) =====
+
+  /** خروج كامل من أي وضعية رسم/تحرير (Esc أو زرّ الإلغاء). */
+  function exitDraw(): void {
     try {
-      if (drawing) {
-        draw.setMode("static");
-        draw.clear();
-        linkTargetRef.current = null;
-        setDrawing(false);
-      } else {
-        linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
-        draw.setMode("polygon");
-        setDrawing(true);
-      }
+      drawRef.current?.setMode("static");
+      drawRef.current?.clear();
     } catch {
-      // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء وأعد الضبط
-      linkTargetRef.current = null;
-      setDrawing(false);
+      // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء
+    }
+    linkTargetRef.current = null;
+    setDrawMode("off");
+    setEditing(null);
+    setLiveArea(null);
+    setDimAnchor(null);
+  }
+  useEscClose(drawMode !== "off", exitDraw);
+
+  /** تفعيل وضعية رسم — اختيار الوضعية نفسها يلغيها. */
+  function enterDrawMode(m: Exclude<DrawModeId, "off">): void {
+    if (drawMode === m) {
+      exitDraw();
+      return;
+    }
+    const d = drawRef.current;
+    if (!d) return;
+    try {
+      d.clear();
+      setEditing(null);
+      setLiveArea(null);
+      setDimAnchor(null);
+      linkTargetRef.current = null; // الوضعيات اليدوية ترسم قطعة جديدة (الربط يأتي من بطاقات الأقسام)
+      if (m === "dimensions" || m === "edit") {
+        d.setMode("static"); // النقر التالي على الخريطة هو المدخل
+        toast.info(m === "dimensions" ? "انقر موقع الشكل على الخريطة ثم أدخل الأبعاد" : "انقر قطعة مرسومة لتعديل حدودها");
+      } else if (m === "square") {
+        d.setMode("rectangle"); // يُضبَط مربّعاً عند الإنهاء
+      } else {
+        d.setMode(m);
+      }
+      setDrawMode(m);
+    } catch {
+      exitDraw();
     }
   }
+
+  // حفظ شكل منتهٍ (كل وضعيات الإنشاء + «بأبعاد») — يحترم هدف الربط من بطاقات الأقسام.
+  const persistRef = useRef<((polygon: Feature<Polygon>) => Promise<void>) | null>(null);
+  persistRef.current = async (raw) => {
+    const data = dataRef.current;
+    if (!data) return;
+    const polygon = drawModeRef.current === "square" ? regularizeSquare(raw) : raw;
+    const target = linkTargetRef.current;
+    linkTargetRef.current = null;
+    const supabase = createClient();
+    let createdId: string | null = null;
+    let failed = false;
+    if (target) {
+      // ربط الهندسة بقطعة موجودة (فرصة/رخصة)
+      const { error } = await supabase.rpc("create_parcel_geometry", {
+        p_geom: polygon.geometry,
+        p_parcel_no: target.parcel_no,
+        p_muqataa_no: target.muqataa_no,
+      });
+      failed = Boolean(error);
+    } else {
+      // قطعة مفترضة جديدة + استنتاج مكاني
+      const district = inferName(polygon, data.districts);
+      const subdistrict = inferName(polygon, data.subdistricts);
+      const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
+        p_geom: polygon.geometry,
+        p_district: district,
+        p_subdistrict: subdistrict,
+      });
+      failed = Boolean(error);
+      if (typeof newId === "string") createdId = newId;
+    }
+    exitDraw();
+    if (failed) {
+      toast.error("تعذّر حفظ الحدود");
+      return;
+    }
+    toast.success(target ? `رُبطت الحدود بـ${target.label ?? "القطعة"}` : "أُنشئت قطعة مفترضة");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
+    if (createdId) requestOpenParcelForm(createdId);
+  };
+
+  /** «بأبعاد»: بناء الشكل المضبوط حول الموقع المنقور ثم الحفظ المعتاد. */
+  function onDimensionSubmit(shape: DimShape, a: number, b: number): void {
+    const anchor = dimAnchor;
+    if (!anchor) return;
+    setDimAnchor(null);
+    const polygon =
+      shape === "circle"
+        ? (turfCircle([anchor.lng, anchor.lat], a / 1000, { steps: 64, units: "kilometers" }) as Feature<Polygon>)
+        : buildRectPolygon(anchor.lng, anchor.lat, a, shape === "square" ? a : b);
+    void persistRef.current?.(polygon);
+  }
+
+  // «تحرير»: تحميل هندسة القطعة المنقورة في terra-draw (وضع select: سحب رؤوس/نقاط وسطى/تحريك).
+  const editStartRef = useRef<((props: ParcelProps) => void) | null>(null);
+  editStartRef.current = (props) => {
+    const d = drawRef.current;
+    if (!d) return;
+    const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === props.ref_id);
+    const geom = f?.geometry;
+    if (!geom) return;
+    const polyGeom: Polygon | null =
+      geom.type === "Polygon"
+        ? geom
+        : geom.type === "MultiPolygon"
+          ? { type: "Polygon", coordinates: (geom as MultiPolygon).coordinates[0] ?? [] }
+          : null;
+    if (!polyGeom || !polyGeom.coordinates.length) {
+      toast.error("هندسة غير قابلة للتحرير");
+      return;
+    }
+    try {
+      d.clear();
+      d.addFeatures([{ type: "Feature", properties: { mode: "polygon" }, geometry: polyGeom } as never]);
+      d.setMode("select");
+      setSelectedId(null);
+      popupRef.current?.remove();
+      setEditing({ kind: props.kind, refId: props.ref_id, label: props.label || props.parcel_no || "قطعة" });
+      toast.info("اسحب الرؤوس أو النقاط الوسطى لتعديل الحدود، ثم «حفظ الحدود»");
+    } catch {
+      toast.error("تعذّر فتح التحرير");
+    }
+  };
+
+  /** حفظ الحدود المعدَّلة في القاعدة (RPC update_parcel_geom) — انعكاس فوري في كل المواضع. */
+  async function saveEdit(): Promise<void> {
+    const d = drawRef.current;
+    const ed = editing;
+    if (!d || !ed || savingEdit) return;
+    const f = d.getSnapshot().find((sf) => sf.geometry?.type === "Polygon");
+    if (!f) {
+      toast.error("لا شكل للحفظ");
+      return;
+    }
+    setSavingEdit(true);
+    const res = await updateParcelGeometry(ed.kind, ed.refId, f.geometry as Geometry);
+    setSavingEdit(false);
+    if (!res.ok) {
+      toast.error(`تعذّر حفظ الحدود — ${res.error}`);
+      return;
+    }
+    exitDraw();
+    toast.success("حُدِّثت حدود القطعة");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
+  }
+
+  // أحياء حقيقية من القطع المرسومة (لفلترة الظهور حسب الحي)
+  const neighborhoodOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          fc.features
+            .map((f) => (typeof f.properties?.neighborhood === "string" ? f.properties.neighborhood : null))
+            .filter((v): v is string => Boolean(v)),
+        ),
+      ).sort(),
+    [fc],
+  );
 
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* مبدّل القاعدة (§هـ.4) */}
-      <div className="absolute end-3 top-16 z-10 flex gap-1 rounded-md border border-border bg-card/85 p-1 backdrop-blur">
-        {BASES.map((b) => (
+      {/* استوديو الرسم (م7.1) — يسار الخريطة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
+      <DrawDock
+        mode={drawMode}
+        onMode={enterDrawMode}
+        liveAreaM2={drawMode !== "off" ? liveArea : null}
+        editingLabel={editing?.label ?? null}
+        savingEdit={savingEdit}
+        onSaveEdit={() => void saveEdit()}
+        onCancel={exitDraw}
+      />
+
+      {/* مرسى أدوات الخريطة (م7.1) — يمين: القاعدة · العودة · الطبقات (زجاجي موحّد ملائم للمس §هـ.4) */}
+      <div className="absolute end-3 top-16 z-10 flex flex-col items-end gap-2">
+        <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
+          {BASES.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => void switchBase(b.id)}
+              className={cn(
+                "rounded-xl px-2.5 py-2 text-[11px] font-semibold transition active:scale-95",
+                base === b.id
+                  ? "bg-primary text-primary-foreground shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)]"
+                  : "text-foreground/75 hover:bg-white/8 hover:text-foreground",
+              )}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           <button
-            key={b.id}
             type="button"
-            onClick={() => void switchBase(b.id)}
+            onClick={resetView}
+            title="إعادة العرض إلى كامل نينوى"
+            aria-label="كامل نينوى"
+            className="grid size-10 place-items-center rounded-xl text-foreground/80 transition hover:bg-white/8 hover:text-foreground active:scale-95"
+          >
+            <Maximize2 className="size-4 text-primary/80" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowLayers((v) => !v)}
+            title="الطبقات وتحديد الظهور"
+            aria-label="الطبقات"
+            aria-expanded={showLayers}
             className={cn(
-              "rounded px-2 py-1 text-xs transition",
-              base === b.id ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+              "grid size-10 place-items-center rounded-xl transition active:scale-95",
+              showLayers
+                ? "bg-primary/20 text-primary shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)] ring-1 ring-inset ring-primary/40"
+                : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
             )}
           >
-            {b.label}
+            <Layers className="size-4" aria-hidden />
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* العودة لكامل نينوى (§هـ.4) — يسار الخريطة، تحت مبدّل القاعدة */}
-      <button
-        type="button"
-        onClick={resetView}
-        title="إعادة العرض إلى كامل نينوى"
-        className="absolute end-3 top-28 z-10 inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/85 px-2.5 py-1.5 text-xs font-medium text-foreground/90 shadow-[0_0_18px_-6px_rgba(148,175,209,0.55)] ring-1 ring-inset ring-foreground/5 backdrop-blur transition hover:bg-accent hover:text-foreground"
-      >
-        <Maximize2 className="size-3.5 text-primary/70" aria-hidden />
-        كامل نينوى
-      </button>
-
-      {/* أداة الرسم (م2.4) — قطعة مفترضة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
-      <button
-        type="button"
-        onClick={toggleDraw}
-        title={drawing ? "إلغاء الرسم" : "رسم قطعة مفترضة"}
-        className={cn(
-          "absolute end-3 top-40 z-10 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium backdrop-blur transition",
-          drawing
-            ? "border-state-assumed/60 bg-state-assumed/20 text-state-assumed shadow-[0_0_18px_-6px_rgba(139,111,176,0.8)]"
-            : "border-border/70 bg-card/85 text-foreground/90 ring-1 ring-inset ring-foreground/5 hover:bg-accent hover:text-foreground",
-        )}
-      >
-        <PenTool className="size-3.5" aria-hidden /> {drawing ? "إلغاء الرسم" : "رسم قطعة"}
-      </button>
-
-      {/* تبديل الطبقات (م2.4) */}
-      <div className="absolute end-3 top-52 z-10 flex flex-col gap-1 rounded-lg border border-border/70 bg-card/85 p-2 text-xs text-foreground/90 backdrop-blur">
-        <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-3.5 accent-primary" />
-          الحدود
-        </label>
-        <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-primary" />
-          القطع
-        </label>
-        {showParcels ? (
-          <div className="mt-0.5 flex flex-col gap-1 border-t border-border/50 ps-1 pt-1.5">
-            {STATE_TOGGLES.map((st) => (
-              <label key={st.value} className="inline-flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={!hiddenStates.has(st.value)}
-                  onChange={() =>
-                    setHiddenStates((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(st.value)) next.delete(st.value);
-                      else next.add(st.value);
-                      return next;
-                    })
-                  }
-                  className={`size-3.5 ${st.accent}`}
-                />
-                {st.label}
+        {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس · الحي (م7.1) */}
+        <AnimatePresence>
+          {showLayers ? (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.16, ease: "easeOut" }}
+              className={cn("flex w-48 flex-col gap-1.5 rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
+            >
+              <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-4 accent-primary" />
+                الحدود الإدارية
               </label>
-            ))}
-          </div>
-        ) : null}
+              <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-4 accent-primary" />
+                القطع
+              </label>
+              {showParcels ? (
+                <>
+                  <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+                    {STATE_TOGGLES.map((st) => (
+                      <label key={st.value} className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={!hiddenStates.has(st.value)}
+                          onChange={() =>
+                            setHiddenStates((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(st.value)) next.delete(st.value);
+                              else next.add(st.value);
+                              return next;
+                            })
+                          }
+                          className={`size-4 ${st.accent}`}
+                        />
+                        {st.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="border-t border-border/50 pt-1.5">
+                    <div className="mb-1 text-[10px] text-muted-foreground">حسب الحي</div>
+                    <FilterCombo value={nbhFilter} onChange={setNbhFilter} options={neighborhoodOptions} placeholder="كل الأحياء" />
+                  </div>
+                </>
+              ) : null}
+              {hiddenStates.size > 0 || nbhFilter || !showBoundaries || !showParcels ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHiddenStates(new Set());
+                    setNbhFilter("");
+                    setShowBoundaries(true);
+                    setShowParcels(true);
+                  }}
+                  className="mt-0.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-border/50 py-1.5 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                >
+                  <FilterX className="size-3.5" /> إظهار الكل
+                </button>
+              ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
+
+      {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
+      {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
     </div>
   );
 }
