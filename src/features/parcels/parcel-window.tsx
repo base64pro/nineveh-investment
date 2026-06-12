@@ -18,6 +18,7 @@ import { ActionsWindow } from "@/features/parcels/actions-window";
 import { CompanyField } from "@/features/parcels/company-field";
 import { TransferLogView, type TransferEntry } from "@/features/parcels/transfer-log-view";
 import { VisitsLog } from "@/features/licenses/visits/visits-log";
+import { PhotosSection } from "@/features/parcels/photos/photos-section";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
@@ -327,6 +328,10 @@ export function ParcelWindow({
                   })}
                 </div>
               ) : null}
+              {/* صور المشروع (م7.4) — تظهر في بطاقة الخريطة وتقرير القطعة */}
+              <div className="sm:col-span-2">
+                <PhotosSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={readOnly} />
+              </div>
               {kind === "license" && (state === "in-progress" || state === "completed") ? (
                 <div className="sm:col-span-2">
                   <VisitsLog parcelRef={String(entity.record_id ?? "")} />

@@ -11,6 +11,7 @@ export interface VisitValues {
   visit_type: string | null;
   staff: string | null;
   notes: string | null;
+  photos?: string[]; // مسارات تخزين (حتى 3 §ج.8/7)
 }
 
 export async function saveVisit(values: VisitValues, id?: string): Promise<ActionResult> {

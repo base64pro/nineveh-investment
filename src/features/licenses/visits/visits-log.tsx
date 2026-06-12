@@ -1,14 +1,40 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, ClipboardList, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { CalendarDays, Camera, ClipboardList, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
 import { Button } from "@/components/ui/button";
 import { formatDate, orNA } from "@/lib/display";
+import { signedUrls, uploadVisitPhotos } from "@/features/parcels/photos/photo-lib";
 import { saveVisit, deleteVisit } from "./visits-actions";
 import type { Visit } from "@/types/entities";
+
+/** مصغّرات صور زيارة (روابط موقّعة من الدلو الخاص). */
+function VisitThumbs({ paths }: { paths: string[] }) {
+  const { data: urls } = useQuery({
+    queryKey: ["visit_thumbs", paths.join("|")],
+    enabled: paths.length > 0,
+    queryFn: () => signedUrls(paths),
+  });
+  if (!paths.length) return null;
+  return (
+    <div className="mt-1.5 flex gap-1.5">
+      {paths.map((p) => {
+        const u = urls?.[p];
+        return u ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={p} src={u} alt="صورة زيارة" loading="lazy" className="size-14 rounded-lg object-cover ring-1 ring-inset ring-border/50" />
+        ) : (
+          <span key={p} className="grid size-14 place-items-center rounded-lg bg-secondary/40 ring-1 ring-inset ring-border/50">
+            <Camera className="size-4 text-muted-foreground" />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 const INPUT = "w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring";
 
@@ -20,6 +46,26 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLDivElement>(null); // بديل <form> لتجنّب تداخل النماذج (نافذة القطعة فيها <form>)
+  // صور الزيارة (حتى 3 §ج.8/7) — تُرفَع فوراً وتُحفَظ مساراتها مع الزيارة
+  const [photoPaths, setPhotoPaths] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const { data: formThumbs } = useQuery({
+    queryKey: ["visit_thumbs", photoPaths.join("|")],
+    enabled: photoPaths.length > 0,
+    queryFn: () => signedUrls(photoPaths),
+  });
+
+  async function onPickPhotos(list: FileList | null): Promise<void> {
+    const files = Array.from(list ?? []);
+    if (!files.length || uploadingPhoto) return;
+    setUploadingPhoto(true);
+    const res = await uploadVisitPhotos(editing?.id ?? crypto.randomUUID(), files, photoPaths);
+    setUploadingPhoto(false);
+    if (res.paths.length) setPhotoPaths((p) => [...p, ...res.paths].slice(0, 3));
+    if (res.error) toast.error(res.error);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
 
   const visits = useMemo(
     () =>
@@ -49,6 +95,7 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
       visit_type: val("visit_type") || null,
       staff: val("staff") || null,
       notes: val("notes") || null,
+      photos: photoPaths.slice(0, 3),
     };
     setSaving(true);
     const res = await saveVisit(values, editing?.id);
@@ -84,7 +131,7 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
           <span className="rounded bg-secondary/60 px-1.5 text-[10px] text-secondary-foreground">{visits.length}</span>
         </h4>
         {!showForm ? (
-          <Button size="sm" variant="outline" onClick={() => { setEditing(null); setAdding(true); }}>
+          <Button size="sm" variant="outline" onClick={() => { setEditing(null); setPhotoPaths([]); setAdding(true); }}>
             <Plus className="size-3.5" /> زيارة
           </Button>
         ) : null}
@@ -110,7 +157,42 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
             <label className="block text-[11px] text-muted-foreground">ملاحظات</label>
             <textarea name="notes" rows={2} defaultValue={editing?.notes ?? ""} className={INPUT + " min-h-16 leading-relaxed"} />
           </div>
-          <p className="text-[10px] text-muted-foreground">الصور (حتى 3) تُضاف بعد تهيئة التخزين (Storage).</p>
+          {/* صور الزيارة — حتى 3 (§ج.8/7) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">الصور (حتى 3)</span>
+              <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => void onPickPhotos(e.target.files)} />
+              <Button type="button" size="sm" variant="outline" disabled={uploadingPhoto || photoPaths.length >= 3} onClick={() => photoInputRef.current?.click()}>
+                {uploadingPhoto ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+                {uploadingPhoto ? "جارٍ الرفع…" : "إضافة"}
+              </Button>
+            </div>
+            {photoPaths.length ? (
+              <div className="flex gap-1.5">
+                {photoPaths.map((p) => (
+                  <div key={p} className="relative">
+                    {formThumbs?.[p] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={formThumbs[p]} alt="صورة زيارة" className="size-16 rounded-lg object-cover ring-1 ring-inset ring-border/50" />
+                    ) : (
+                      <span className="grid size-16 place-items-center rounded-lg bg-secondary/40 ring-1 ring-inset ring-border/50">
+                        <Camera className="size-4 text-muted-foreground" />
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPhotoPaths((arr) => arr.filter((x) => x !== p))}
+                      aria-label="إزالة الصورة"
+                      title="إزالة"
+                      className="absolute -end-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-state-withdrawn text-white shadow"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div className="flex gap-2">
             <Button type="button" size="sm" disabled={saving} onClick={() => void onSubmit()}>{saving ? "جارٍ الحفظ…" : "حفظ"}</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(false); setEditing(null); }}>إلغاء</Button>
@@ -139,9 +221,10 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
                   ) : null}
                 </div>
                 {v.notes ? <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{orNA(v.notes)}</p> : null}
+                <VisitThumbs paths={Array.isArray(v.photos) ? v.photos : []} />
               </div>
               <div className="flex shrink-0 gap-1">
-                <Button size="icon" variant="ghost" onClick={() => { setAdding(false); setEditing(v); }} title="تعديل" aria-label="تعديل">
+                <Button size="icon" variant="ghost" onClick={() => { setAdding(false); setPhotoPaths(v.photos ?? []); setEditing(v); }} title="تعديل" aria-label="تعديل">
                   <Pencil className="size-3.5" />
                 </Button>
                 <Button size="icon" variant="ghost" onClick={() => void onDelete(v)} title="حذف" aria-label="حذف">

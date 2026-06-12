@@ -41,6 +41,7 @@ import { createMapElement, deleteMapElement, renameMapElement } from "../lib/ann
 import { DrawDock, type DrawModeId } from "./draw-dock";
 import { DimensionDialog, type DimShape } from "./dimension-dialog";
 import { AnnotateCreateDialog, AnnotateEditDialog } from "./annotate-dialogs";
+import { SelectedParcelCard, type SelectedEntityInfo } from "./selected-parcel-card";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { useEscClose } from "@/components/ui/use-esc-close";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1125,6 +1126,35 @@ export default function InvestmentMap() {
     applyAnnotations(mapRef.current, annFc, showAnnotations);
   }, [annFc, showAnnotations, mapReady, base]);
 
+  // ===== بطاقة القطعة المحدَّدة (م7.4) =====
+  const selectedProps = useMemo<ParcelProps | null>(() => {
+    if (!selectedId) return null;
+    const f = fc.features.find((ft) => ft.properties?.ref_id === selectedId);
+    return (f?.properties as ParcelProps | undefined) ?? null;
+  }, [fc, selectedId]);
+
+  const selectedInfo = useMemo<SelectedEntityInfo>(() => {
+    const p = selectedProps;
+    if (!p) return { sector: null, area: null, investor: null };
+    if (p.kind === "opportunity") {
+      const o = (opps.data ?? []).find((x) => String(x.record_id) === p.entity_id);
+      return { sector: o?.sector ?? null, area: o?.area_total_m2 ?? null, investor: null };
+    }
+    if (p.kind === "license") {
+      const l = (lics.data ?? []).find((x) => String(x.record_id) === p.entity_id);
+      return { sector: l?.sector ?? null, area: l?.area_total_m2 ?? null, investor: l?.investor_name ?? null };
+    }
+    const a = (assumed.data ?? []).find((x) => x.id === p.entity_id);
+    return { sector: a?.sector ?? null, area: a?.area_m2 ?? null, investor: null };
+  }, [selectedProps, opps.data, lics.data, assumed.data]);
+
+  function onCardEditGeometry(): void {
+    const p = selectedProps;
+    if (!p) return;
+    if (drawModeRef.current !== "edit") enterDrawMode("edit");
+    editStartRef.current?.(p);
+  }
+
   // أحياء حقيقية من القطع المرسومة (لفلترة الظهور حسب الحي)
   const neighborhoodOptions = useMemo(
     () =>
@@ -1272,6 +1302,21 @@ export default function InvestmentMap() {
 
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
+
+      {/* بطاقة القطعة المحدَّدة (م7.4) — صور + بيانات مفتاحية + أزرار سريعة */}
+      <AnimatePresence>
+        {selectedProps && drawMode === "off" ? (
+          <SelectedParcelCard
+            key={selectedProps.ref_id}
+            props={selectedProps}
+            info={selectedInfo}
+            onView={() => requestOpenParcelDetail({ kind: selectedProps.kind as ParcelKind, id: selectedProps.entity_id, readOnly: true })}
+            onEdit={() => requestOpenParcelDetail({ kind: selectedProps.kind as ParcelKind, id: selectedProps.entity_id, readOnly: false })}
+            onEditGeometry={onCardEditGeometry}
+            onClose={() => setSelectedId(null)}
+          />
+        ) : null}
+      </AnimatePresence>
 
       {/* حوارا التسميات المحرَّرة (م7.3) */}
       {annAnchor ? (
