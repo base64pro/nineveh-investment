@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
 import { exportTable } from "@/lib/export-table";
@@ -83,25 +84,26 @@ export function OpportunitiesPanel() {
   const [editing, setEditing] = useState<Opportunity | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
-  const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
+  const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
-  const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
+  const districts = useMemo(() => distinct([...all.map((o) => o.district), ...(fo?.district ?? [])]), [all, fo]);
   const muqataas = useMemo(() => distinct(all.map((o) => o.muqataa_no)), [all]);
-  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const neighborhoods = useMemo(() => distinct([...all.map((o) => o.neighborhood), ...(fo?.neighborhood ?? [])]), [all, fo]);
   const statuses = useMemo(() => distinct(all.map((o) => o.opp_status)), [all]);
   const availableCount = useMemo(() => all.filter(isAvailable).length, [all]);
 
   const optionSets = useMemo(
     () => ({
       sector: sectors,
-      project_type: distinct(all.map((o) => o.project_type)),
+      project_type: distinct([...all.map((o) => o.project_type), ...(fo?.project_type ?? [])]),
       district: districts,
       neighborhood: neighborhoods,
-      muqataa_name: distinct(all.map((o) => o.muqataa_name)),
+      muqataa_name: distinct([...all.map((o) => o.muqataa_name), ...(fo?.muqataa_name ?? [])]),
       announcement_type: distinct(all.map((o) => o.announcement_type)),
       opp_status: statuses,
     }),
-    [all, sectors, districts, neighborhoods, statuses],
+    [all, fo, sectors, districts, neighborhoods, statuses],
   );
 
   const filtered = useMemo(() => {

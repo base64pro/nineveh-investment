@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
 import { exportTable } from "@/lib/export-table";
@@ -111,11 +112,12 @@ export function LicensesPanel({
   const [visitsFor, setVisitsFor] = useState<License | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
-  const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
+  const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
-  const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
-  const subdistricts = useMemo(() => distinct(all.map((o) => o.subdistrict)), [all]);
-  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const districts = useMemo(() => distinct([...all.map((o) => o.district), ...(fo?.district ?? [])]), [all, fo]);
+  const subdistricts = useMemo(() => distinct([...all.map((o) => o.subdistrict), ...(fo?.subdistrict ?? [])]), [all, fo]);
+  const neighborhoods = useMemo(() => distinct([...all.map((o) => o.neighborhood), ...(fo?.neighborhood ?? [])]), [all, fo]);
   const districtOptions = useMemo(
     () => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(),
     [districts],
@@ -127,15 +129,15 @@ export function LicensesPanel({
   const optionSets = useMemo(
     () => ({
       sector: sectors,
-      project_type: distinct(all.map((o) => o.project_type)),
+      project_type: distinct([...all.map((o) => o.project_type), ...(fo?.project_type ?? [])]),
       district: districtOptions,
       subdistrict: subdistrictOptions,
       neighborhood: neighborhoods,
-      muqataa_name: distinct(all.map((o) => o.muqataa_name)),
-      land_right: distinct(all.map((o) => o.land_right)),
-      investor_nationality: distinct(all.map((o) => o.investor_nationality)),
+      muqataa_name: distinct([...all.map((o) => o.muqataa_name), ...(fo?.muqataa_name ?? [])]),
+      land_right: distinct([...all.map((o) => o.land_right), ...(fo?.land_right ?? [])]),
+      investor_nationality: distinct([...all.map((o) => o.investor_nationality), ...(fo?.investor_nationality ?? [])]),
     }),
-    [all, sectors, districtOptions, subdistrictOptions, neighborhoods],
+    [all, fo, sectors, districtOptions, subdistrictOptions, neighborhoods],
   );
 
   const filtered = useMemo(() => {

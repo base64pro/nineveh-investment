@@ -37,6 +37,7 @@ import { TerraDraw, TerraDrawCircleMode, TerraDrawPolygonMode, TerraDrawRectangl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { updateParcelGeometry } from "../lib/geometry-actions";
 import { useMapAnnotations } from "../lib/use-map-annotations";
+import { useFieldOptions } from "@/lib/data/use-field-options";
 import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
 import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
 import { DrawDock, type DrawModeId } from "./draw-dock";
@@ -1260,17 +1261,19 @@ export default function InvestmentMap() {
     editStartRef.current?.(p);
   }
 
-  // أحياء حقيقية من القطع المرسومة (لفلترة الظهور حسب الحي)
+  // أحياء فلترة الظهور: القطع المرسومة ∪ القاموس الموحّد (م7.7 — نفس القيم في كل منسدلات النظام)
+  const { data: fieldOpts } = useFieldOptions();
   const neighborhoodOptions = useMemo(
     () =>
       Array.from(
-        new Set(
-          fc.features
+        new Set([
+          ...fc.features
             .map((f) => (typeof f.properties?.neighborhood === "string" ? f.properties.neighborhood : null))
             .filter((v): v is string => Boolean(v)),
-        ),
+          ...(fieldOpts?.neighborhood ?? []),
+        ]),
       ).sort(),
-    [fc],
+    [fc, fieldOpts],
   );
 
   return (

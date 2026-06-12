@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
 import { exportTable } from "@/lib/export-table";
@@ -87,11 +88,12 @@ export function AssumedPanel() {
   const [editing, setEditing] = useState<AssumedParcel | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
-  const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
+  const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
-  const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
-  const subdistricts = useMemo(() => distinct(all.map((o) => o.subdistrict)), [all]);
-  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const districts = useMemo(() => distinct([...all.map((o) => o.district), ...(fo?.district ?? [])]), [all, fo]);
+  const subdistricts = useMemo(() => distinct([...all.map((o) => o.subdistrict), ...(fo?.subdistrict ?? [])]), [all, fo]);
+  const neighborhoods = useMemo(() => distinct([...all.map((o) => o.neighborhood), ...(fo?.neighborhood ?? [])]), [all, fo]);
   const districtOptions = useMemo(() => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(), [districts]);
   const subdistrictOptions = useMemo(() => Array.from(new Set([...NINEVEH_SUBDISTRICTS, ...subdistricts])).sort(), [subdistricts]);
 
@@ -101,10 +103,10 @@ export function AssumedPanel() {
       district: districtOptions,
       subdistrict: subdistrictOptions,
       neighborhood: neighborhoods,
-      muqataa_name: distinct(all.map((o) => o.muqataa_name)),
-      land_right: distinct(all.map((o) => o.land_right)),
+      muqataa_name: distinct([...all.map((o) => o.muqataa_name), ...(fo?.muqataa_name ?? [])]),
+      land_right: distinct([...all.map((o) => o.land_right), ...(fo?.land_right ?? [])]),
     }),
-    [all, sectors, districtOptions, subdistrictOptions, neighborhoods],
+    [all, fo, sectors, districtOptions, subdistrictOptions, neighborhoods],
   );
 
   const filtered = useMemo(() => {

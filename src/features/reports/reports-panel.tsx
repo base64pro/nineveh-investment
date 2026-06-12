@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, Coins, Crown, Download, FilterX, Layers, Ruler, TrendingUp } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { useCountUp } from "@/components/ui/use-count-up";
 import { formatNumber } from "@/lib/format";
@@ -136,7 +137,8 @@ export function ReportsPanel() {
 
   const all = useMemo(() => normalize(oppsData ?? [], licsData ?? [], asmData ?? []), [oppsData, licsData, asmData]);
   const sectorOptions = useMemo(() => Array.from(new Set(distinct(all.map((r) => r.sector)).map(sectorLabel))).sort(), [all]);
-  const districtOptions = useMemo(() => distinct(all.map((r) => r.district)), [all]);
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7)
+  const districtOptions = useMemo(() => distinct([...all.map((r) => r.district), ...(fo?.district ?? [])]), [all, fo]);
   const yearOptions = useMemo(() => distinct(all.map((r) => r.year)), [all]);
 
   const applied = useMemo<ReportFilters>(
