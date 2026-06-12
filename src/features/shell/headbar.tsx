@@ -6,6 +6,7 @@
 // أرقام بعدّ متحرك وتدرّج ضوئي · خط توهّج قاعدي · حتمية (§هـ.1).
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Ruler, Search, User } from "lucide-react";
 import { useDashboardStats, type DashboardStats } from "@/lib/data/use-dashboard-stats";
 import { useCountUp } from "@/components/ui/use-count-up";
@@ -79,7 +80,15 @@ function AreaChip({ value }: { value: number }) {
 function CountersBar({ stats }: { stats: DashboardStats | undefined }) {
   const z = (n: number | undefined): number => n ?? 0;
   return (
-    <div className="flex max-w-full items-stretch divide-x divide-[rgba(148,175,209,0.16)] overflow-hidden rounded-2xl border border-[rgba(148,175,209,0.4)] bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_28px_-14px_rgba(0,0,0,0.7),0_0_22px_-10px_rgba(148,175,209,0.5)]">
+    <div className="relative flex max-w-full items-stretch divide-x divide-[rgba(148,175,209,0.16)] overflow-hidden rounded-2xl border border-[rgba(148,175,209,0.4)] bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_28px_-14px_rgba(0,0,0,0.7),0_0_22px_-10px_rgba(148,175,209,0.5)]">
+      {/* لمعة ضوئية تعبر الشريط باستمرار (موشن حيّ) */}
+      <motion.span
+        aria-hidden
+        initial={{ x: "-130%" }}
+        animate={{ x: "1300%" }}
+        transition={{ duration: 7.5, repeat: Infinity, ease: "linear", repeatDelay: 2.5 }}
+        className="pointer-events-none absolute inset-y-0 w-16 -skew-x-12 bg-gradient-to-l from-transparent via-white/[0.07] to-transparent"
+      />
       {CHIPS.map((c) => (
         <Chip key={c.key} def={c} value={z(stats?.[c.key])} />
       ))}
@@ -110,9 +119,21 @@ export function Headbar() {
 
   return (
     <div className="relative bg-[linear-gradient(180deg,hsl(220_38%_16%/0.97),hsl(220_36%_12%/0.95))] shadow-[0_6px_24px_-10px_rgba(0,0,0,0.7)] backdrop-blur">
-      {/* هالة هولوكرامية علوية + خط توهّج قاعدي (الجرافيك المميز) */}
-      <span aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_140%_at_50%_-30%,rgba(148,175,209,0.16),transparent_70%)]" />
+      {/* شفق هولوكرامي حيّ ينجرف ببطء + خط توهّج قاعدي تعبره شرارة ضوئية (موشن مستمر) */}
+      <motion.span
+        aria-hidden
+        animate={{ x: ["-6%", "6%", "-6%"], opacity: [0.85, 1, 0.85] }}
+        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute inset-y-0 -left-[10%] w-[120%] bg-[radial-gradient(58%_140%_at_50%_-30%,rgba(148,175,209,0.17),transparent_70%)]"
+      />
       <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.75)] to-transparent" />
+      <motion.span
+        aria-hidden
+        initial={{ left: "-4%" }}
+        animate={{ left: "104%" }}
+        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.5 }}
+        className="pointer-events-none absolute -bottom-px size-1.5 -translate-x-1/2 rounded-full bg-[#cfe3ff] shadow-[0_0_10px_2px_rgba(159,192,232,0.9)]"
+      />
 
       {/* المستوى الأفقي الواحد (md+): بحث · الأرقام · العنوان · الصورة */}
       <div className="relative flex h-12 items-center gap-2 px-2.5 md:h-14 md:gap-2.5 md:px-3 xl:h-16 2xl:h-20 2xl:gap-4 2xl:px-6">

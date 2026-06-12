@@ -109,8 +109,9 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
         ) : null}
       </AnimatePresence>
 
-      {/* الشريط — يمين الشاشة (§هـ.1) */}
-      <nav className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-card/90 py-3 shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55)] backdrop-blur">
+      {/* الشريط — يمين الشاشة (§هـ.1) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق + توهّجات */}
+      <nav className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur">
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent" />
         {SECTIONS.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;
@@ -126,13 +127,23 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
                 setActive(isActive ? null : s.id);
               }}
               className={cn(
-                "relative flex size-14 items-center justify-center rounded-lg transition",
-                isActive ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+                "group relative flex size-14 items-center justify-center rounded-xl transition-all duration-200",
+                isActive
+                  ? "bg-[linear-gradient(135deg,rgba(148,175,209,0.22),rgba(139,111,176,0.14))] text-foreground shadow-[0_0_22px_-6px_rgba(148,175,209,0.8)] ring-1 ring-inset ring-[rgba(148,175,209,0.55)]"
+                  : "text-foreground/70 hover:bg-white/6 hover:text-foreground",
               )}
             >
-              <Icon className="size-9" />
+              {/* المؤشّر الضوئي المنزلق بين الأقسام */}
+              {isActive ? (
+                <motion.span
+                  layoutId="rail-active"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  className="absolute inset-y-2 left-0.5 w-[3px] rounded-full bg-gradient-to-b from-[#C7A24E] via-[#94afd1] to-[#8B6FB0] shadow-[0_0_10px_1px_rgba(148,175,209,0.9)]"
+                />
+              ) : null}
+              <Icon className={cn("size-9 transition-transform duration-200 group-hover:scale-110", isActive && "drop-shadow-[0_0_8px_rgba(148,175,209,0.8)]")} />
               {typeof count === "number" && count > 0 ? (
-                <span className="absolute -bottom-0.5 end-0 rounded bg-secondary px-1 text-[9px] leading-tight text-secondary-foreground">
+                <span className="absolute -bottom-0.5 end-0 rounded-full bg-[hsl(220_36%_11%/0.92)] px-1.5 text-[9px] font-bold leading-tight text-[#cfe3ff] ring-1 ring-inset ring-[rgba(148,175,209,0.45)]">
                   {formatNumber(count)}
                 </span>
               ) : null}

@@ -12,7 +12,7 @@ import destination from "@turf/destination";
 import distance from "@turf/distance";
 import type { GeoJSONSource, Map as GLMap, Popup, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
-import { FilterX, Layers, Maximize2 } from "lucide-react";
+import { ChevronDown, FilterX, Layers, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -42,6 +42,7 @@ import { DrawDock, type DrawModeId } from "./draw-dock";
 import { DimensionDialog, type DimShape } from "./dimension-dialog";
 import { AnnotateCreateDialog, AnnotateEditDialog } from "./annotate-dialogs";
 import { SelectedParcelCard, type SelectedEntityInfo } from "./selected-parcel-card";
+import { HoloStatsChart } from "./holo-stats-chart";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { useEscClose } from "@/components/ui/use-esc-close";
 import { useQueryClient } from "@tanstack/react-query";
@@ -310,6 +311,8 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   }
 
   // تعريب التسميات (name:ar) + ضبط القاعدة الداكنة نحو الكحلي المات
+  // م7.6 · حدّة المعالم: أرضية أغمق + خطوط (طرق/ممرات/تضاريس) أفتح قليلاً + نصوص أنصع بهالة أغمق —
+  // معالجة لونية صرفة (mix نحو الأبيض/الأسود) دون أي تغيير في المعالم نفسها.
   for (const layer of style.layers ?? []) {
     if (layer.type === "symbol" && layer.layout && "text-field" in layer.layout) {
       layer.layout["text-field"] = ARABIC_LABEL;
@@ -317,6 +320,18 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
     if (base === "dark") {
       if (layer.id === "background") layer.paint = { ...layer.paint, "background-color": NAVY.background };
       if (layer.id === "water") layer.paint = { ...layer.paint, "fill-color": NAVY.water };
+      const paint = (layer.paint ?? {}) as Record<string, unknown>;
+      if (layer.type === "line" && typeof paint["line-color"] === "string") {
+        paint["line-color"] = lightenColor(paint["line-color"], 0.16);
+        layer.paint = paint as never;
+      } else if (layer.type === "symbol") {
+        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.28);
+        paint["text-halo-color"] = NAVY.background;
+        layer.paint = paint as never;
+      } else if (layer.type === "fill" && layer.id !== "water" && typeof paint["fill-color"] === "string") {
+        paint["fill-color"] = darkenColor(paint["fill-color"], 0.1);
+        layer.paint = paint as never;
+      }
     }
   }
 
@@ -330,6 +345,92 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   style.layers = [...(style.layers ?? []), ...overlayLayers()];
 
   return style as unknown as StyleSpecification;
+}
+
+/** مزج لون نحو الأبيض/الأسود — يدعم hex/rgb(a)/hsl(a)؛ التعبيرات تُترَك كما هي (لا تغيير معالم). */
+function mixColor(color: string, amt: number, toWhite: boolean): string {
+  const c = color.trim();
+  const target = toWhite ? 255 : 0;
+  const mix = (v: number): number => Math.round(v + (target - v) * amt);
+  const mHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+  if (mHex) {
+    let h = mHex[1]!;
+    if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+  }
+  const mRgb = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(c);
+  if (mRgb) {
+    const a = mRgb[4];
+    return `rgba(${mix(Number(mRgb[1]))},${mix(Number(mRgb[2]))},${mix(Number(mRgb[3]))},${a ?? "1"})`;
+  }
+  const mHsl = /^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(c);
+  if (mHsl) {
+    const l = Number(mHsl[3]);
+    const nl = toWhite ? l + (100 - l) * amt : l * (1 - amt);
+    const a = mHsl[4];
+    return a !== undefined ? `hsla(${mHsl[1]},${mHsl[2]}%,${nl.toFixed(1)}%,${a})` : `hsl(${mHsl[1]},${mHsl[2]}%,${nl.toFixed(1)}%)`;
+  }
+  return color;
+}
+const lightenColor = (c: string, a: number): string => mixColor(c, a, true);
+const darkenColor = (c: string, a: number): string => mixColor(c, a, false);
+
+// م7.6 · نسيج الزمكان داخل حدود نينوى حصراً: نمط بلاطي دقيق (شبكة 4px + 16px) كطبقة fill-pattern،
+// شفافية أعلى قليلاً تتخافت مع الزوم، وتدفّق قُطري بطيء ساحر عبر fill-translate (GPU، حجم ثابت بالشاشة).
+const SPACETIME_LAYER = "spacetime-grid";
+function spacetimePatternData(): { width: number; height: number; data: Uint8Array } | null {
+  if (typeof document === "undefined") return null;
+  const s = 32;
+  const c = document.createElement("canvas");
+  c.width = s;
+  c.height = s;
+  const g = c.getContext("2d");
+  if (!g) return null;
+  g.clearRect(0, 0, s, s);
+  const grid = (alpha: number, step: number): void => {
+    g.strokeStyle = `rgba(158,192,232,${alpha})`;
+    g.lineWidth = 1;
+    for (let i = 0; i <= s; i += step) {
+      g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, s); g.stroke();
+      g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(s, i + 0.5); g.stroke();
+    }
+  };
+  grid(0.15, 4); // الدقيقة (٨× أصغر من السابقة)
+  grid(0.24, 16); // خطوط أوضح
+  const img = g.getImageData(0, 0, s, s);
+  return { width: s, height: s, data: new Uint8Array(img.data.buffer) };
+}
+
+function applySpacetime(map: GLMap | null, gov: FeatureCollection | null): void {
+  if (!map || !gov) return;
+  try {
+    if (!map.hasImage("spacetime-tile")) {
+      const p = spacetimePatternData();
+      if (p) map.addImage("spacetime-tile", p);
+    }
+    if (!map.getSource("spacetime")) map.addSource("spacetime", { type: "geojson", data: gov as never });
+    if (!map.getLayer(SPACETIME_LAYER)) {
+      const before = map.getLayer("bnd-districts-line") ? "bnd-districts-line" : undefined;
+      map.addLayer(
+        {
+          id: SPACETIME_LAYER,
+          type: "fill",
+          source: "spacetime",
+          paint: {
+            "fill-pattern": "spacetime-tile",
+            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 8, 0.34, 11, 0.18, 13, 0.1, 15, 0.05] as never,
+          },
+        },
+        before,
+      );
+      map.setPaintProperty(SPACETIME_LAYER, "fill-translate-transition", { duration: 150, delay: 0 });
+    }
+  } catch {
+    // النمط قيد التبديل — تُعاد عند idle
+  }
 }
 
 // مربّعات إظهار القطع حسب الحالة (§هـ.4): قيمة الحالة ← {تسمية · لون accent}.
@@ -739,6 +840,7 @@ export default function InvestmentMap() {
         applyStats(m, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
         applyVisibility(m, showBoundariesRef.current);
         applyAnnotations(m, annFcRef.current, showAnnotationsRef.current);
+        applySpacetime(m, dataRef.current?.gov ?? null);
 
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
@@ -857,6 +959,7 @@ export default function InvestmentMap() {
       applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
       applyVisibility(mapRef.current, showBoundariesRef.current);
       applyAnnotations(mapRef.current, annFcRef.current, showAnnotationsRef.current); // النمط الجديد مسح المصدر
+      applySpacetime(mapRef.current, dataRef.current?.gov ?? null);
       // إعادة تسجيل طبقات أداة الرسم — setStyle يمسح مصادرها (جذر أخطاء setData المتدفّقة)
       const d = drawRef.current;
       if (d) {
@@ -1152,6 +1255,23 @@ export default function InvestmentMap() {
     return { sector: a?.sector ?? null, area: a?.area_m2 ?? null, investor: null };
   }, [selectedProps, opps.data, lics.data, assumed.data]);
 
+  // تدفّق نسيج الزمكان: انزياح قُطري بطيء (~3px/ث) يلتفّ على حجم البلاطة 32 — انسياب ساحر هادئ
+  useEffect(() => {
+    if (!mapReady) return;
+    let t = 0;
+    const id = window.setInterval(() => {
+      const m = mapRef.current;
+      if (!m) return;
+      t = (t + 0.5) % 32;
+      try {
+        if (m.getLayer(SPACETIME_LAYER)) m.setPaintProperty(SPACETIME_LAYER, "fill-translate", [t, t * 0.5]);
+      } catch {
+        // النمط قيد التبديل
+      }
+    }, 150);
+    return () => window.clearInterval(id);
+  }, [mapReady]);
+
   // تتبّع مرساة الشارة: مركز القطعة ← إسقاط شاشة يتحدّث مع كل حركة (rAF — سلس بلا إجهاد)
   useEffect(() => {
     const m = mapRef.current;
@@ -1213,9 +1333,6 @@ export default function InvestmentMap() {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* نسيج الزمكان (م7.6) — شبكة ساحرة منخفضة الشفافية فوق الخريطة، لا تمسّ التفاعل */}
-      <div aria-hidden className="map-spacetime pointer-events-none absolute inset-0 z-[5]" />
-
       {/* عمود الأدوات العائمة (يسار الخريطة): القاعدة · العودة · الطبقات ← ثم استوديو الرسم تحتها */}
       <div className="absolute end-3 top-16 z-10 flex flex-col items-end gap-2">
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
@@ -1259,25 +1376,27 @@ export default function InvestmentMap() {
             aria-label="الطبقات"
             aria-expanded={showLayers}
             className={cn(
-              "grid size-10 place-items-center rounded-xl transition active:scale-95",
+              "flex size-10 flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95",
               showLayers
                 ? "bg-primary/20 text-primary shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)] ring-1 ring-inset ring-primary/40"
                 : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
             )}
           >
-            <Layers className="size-4" aria-hidden />
+            <Layers style={{ width: 15, height: 15 }} aria-hidden />
+            <ChevronDown style={{ width: 10, height: 10 }} className={cn("transition-transform", showLayers && "rotate-180")} aria-hidden />
           </button>
         </div>
 
-        {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس · الحي (م7.1) */}
-        <AnimatePresence>
+        {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس · الحي — انسدال بسلاسة استوديو الرسم (م7.6) */}
+        <AnimatePresence initial={false}>
           {showLayers ? (
             <motion.div
-              initial={{ opacity: 0, y: -8, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.97 }}
-              transition={{ duration: 0.16, ease: "easeOut" }}
-              className={cn("flex w-48 flex-col gap-1.5 rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
+              key="layers-panel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className={cn("flex w-48 flex-col gap-1.5 overflow-hidden rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
             >
               <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
                 <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-4 accent-primary" />
@@ -1354,6 +1473,9 @@ export default function InvestmentMap() {
           onCancel={exitDraw}
         />
       </div>
+
+      {/* الجارت الهولوكرامي (م7.6) — الزاوية السفلى اليسرى */}
+      <HoloStatsChart />
 
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}

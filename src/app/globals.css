@@ -95,39 +95,6 @@
 }
 
 @layer utilities {
-  /* م7.6 · نسيج الزمكان فوق خريطة نينوى: شبكة مزدوجة (دقيقة + كبيرة) تنساب ببطء —
-     شفافية منخفضة جداً، GPU فقط (background-position)، لا تمسّ التفاعل (pointer-events-none). */
-  @keyframes spacetime-pan {
-    from {
-      background-position:
-        0 0,
-        0 0,
-        0 0,
-        0 0;
-    }
-    to {
-      background-position:
-        28px 28px,
-        -28px 28px,
-        112px 112px,
-        -112px 112px;
-    }
-  }
-  .map-spacetime {
-    background-image:
-      linear-gradient(rgba(148, 175, 209, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 175, 209, 0.05) 1px, transparent 1px),
-      linear-gradient(rgba(148, 175, 209, 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 175, 209, 0.035) 1px, transparent 1px);
-    background-size:
-      28px 28px,
-      28px 28px,
-      112px 112px,
-      112px 112px;
-    animation: spacetime-pan 26s linear infinite;
-    mix-blend-mode: screen;
-  }
-
   /* شريط تمرير رشيق منسجم مع السمة الكحلية (بدل البنّي الافتراضي) */
   .scroll-slim {
     scrollbar-width: thin;
