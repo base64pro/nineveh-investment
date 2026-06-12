@@ -36,8 +36,11 @@ import { getPinIcons } from "../lib/parcel-markers";
 import { TerraDraw, TerraDrawCircleMode, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { updateParcelGeometry } from "../lib/geometry-actions";
+import { useMapAnnotations } from "../lib/use-map-annotations";
+import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
 import { DrawDock, type DrawModeId } from "./draw-dock";
 import { DimensionDialog, type DimShape } from "./dimension-dialog";
+import { AnnotateCreateDialog, AnnotateEditDialog } from "./annotate-dialogs";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { useEscClose } from "@/components/ui/use-esc-close";
 import { useQueryClient } from "@tanstack/react-query";
@@ -365,6 +368,72 @@ function regularizeSquare(polygon: Feature<Polygon>): Feature<Polygon> {
 
 const GLASS = "border border-[rgba(148,175,209,0.45)] bg-[hsl(220_36%_15%_/_0.92)] shadow-[0_8px_28px_-10px_rgba(0,0,0,0.7),0_0_22px_-8px_rgba(148,175,209,0.5)] backdrop-blur";
 
+// طبقة التسميات المحرَّرة (م7.3 · §هـ.4 «السكتش الهولوكرامي»): مضلّعات متقطّعة + نقاط متوهّجة + أسماء عربية (RTL سليم عبر maplibre).
+const ANN_SOURCE = "annotations";
+const ANN_CLICK_LAYERS = ["ann-symbol", "ann-point", "ann-fill"];
+function applyAnnotations(map: GLMap | null, fc: FeatureCollection, visible: boolean): void {
+  if (!map) return;
+  try {
+    const src = map.getSource(ANN_SOURCE) as GeoJSONSource | undefined;
+    if (!src) {
+      map.addSource(ANN_SOURCE, { type: "geojson", data: fc });
+      map.addLayer({
+        id: "ann-fill",
+        type: "fill",
+        source: ANN_SOURCE,
+        filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+        paint: { "fill-color": "#94afd1", "fill-opacity": 0.07 },
+      });
+      map.addLayer({
+        id: "ann-line",
+        type: "line",
+        source: ANN_SOURCE,
+        filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+        paint: { "line-color": "#94afd1", "line-width": 1.6, "line-dasharray": [2.5, 2] },
+      });
+      map.addLayer({
+        id: "ann-point",
+        type: "circle",
+        source: ANN_SOURCE,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 4.5,
+          "circle-color": "#94afd1",
+          "circle-stroke-color": "#0b1220",
+          "circle-stroke-width": 1.5,
+          "circle-blur": 0.15,
+        },
+      });
+      map.addLayer({
+        id: "ann-symbol",
+        type: "symbol",
+        source: ANN_SOURCE,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 13,
+          "text-offset": [0, 0.9],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#cfe3ff",
+          "text-halo-color": "#0b1220",
+          "text-halo-width": 1.4,
+        },
+      });
+    } else {
+      src.setData(fc as never);
+    }
+    const vis = visible ? "visible" : "none";
+    for (const id of ["ann-fill", "ann-line", "ann-point", "ann-symbol"]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    }
+  } catch {
+    // النمط قيد التبديل — ستُعاد عند idle
+  }
+}
+
 interface EditingRef {
   kind: string;
   refId: string;
@@ -394,6 +463,17 @@ export default function InvestmentMap() {
   const [dimAnchor, setDimAnchor] = useState<{ lng: number; lat: number } | null>(null);
   const [nbhFilter, setNbhFilter] = useState("");
   const [showLayers, setShowLayers] = useState(false);
+  // التسميات المحرَّرة (م7.3)
+  const { fc: annFc } = useMapAnnotations();
+  const annFcRef = useRef(annFc);
+  annFcRef.current = annFc;
+  const [showAnnotations, setShowAnnotations] = useState(true);
+  const showAnnotationsRef = useRef(showAnnotations);
+  showAnnotationsRef.current = showAnnotations;
+  const [annAnchor, setAnnAnchor] = useState<{ lng: number; lat: number } | null>(null);
+  const annPendingRef = useRef<{ name: string; type: string } | null>(null);
+  const [annEdit, setAnnEdit] = useState<{ id: string; name: string; type: string } | null>(null);
+  const [annSaving, setAnnSaving] = useState(false);
   const queryClient = useQueryClient();
   const qcRef = useRef(queryClient);
   qcRef.current = queryClient;
@@ -508,6 +588,11 @@ export default function InvestmentMap() {
             setDimAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
             return;
           }
+          if (dm === "annotate") {
+            popupRef.current?.remove();
+            setAnnAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+            return;
+          }
           if (dm === "edit") {
             const picked = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 6, layerIds: ["parcels"] });
             const props = picked?.object?.properties as ParcelProps | undefined;
@@ -515,6 +600,17 @@ export default function InvestmentMap() {
             return;
           }
           if (dm !== "off") return; // أثناء الإنشاء: terra-draw يتكفّل بالنقر
+          // نقر تسمية محرَّرة ← تحرير/حذف (م7.3)
+          const annLayers = ANN_CLICK_LAYERS.filter((l) => m.getLayer(l));
+          if (annLayers.length && showAnnotationsRef.current) {
+            const hit = m.queryRenderedFeatures(e.point, { layers: annLayers })[0];
+            const ap = hit?.properties as { id?: string; name?: string; element_type?: string } | undefined;
+            if (ap?.id) {
+              popupRef.current?.remove();
+              setAnnEdit({ id: ap.id, name: ap.name ?? "", type: ap.element_type ?? "landmark" });
+              return;
+            }
+          }
           const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
           const mkObj = mk?.object as
             | { ref_id?: string; position?: [number, number]; label?: string; kind?: string; entity_id?: string }
@@ -634,9 +730,10 @@ export default function InvestmentMap() {
         drawRef.current = draw;
         setMapReady(true);
 
-        // مقاييس م2.3 + إظهار الحدود (بعد جهوز المصادر)
+        // مقاييس م2.3 + إظهار الحدود + التسميات المحرَّرة (بعد جهوز المصادر)
         applyStats(m, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
         applyVisibility(m, showBoundariesRef.current);
+        applyAnnotations(m, annFcRef.current, showAnnotationsRef.current);
 
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
@@ -756,6 +853,7 @@ export default function InvestmentMap() {
     map.once("idle", () => {
       applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
       applyVisibility(mapRef.current, showBoundariesRef.current);
+      applyAnnotations(mapRef.current, annFcRef.current, showAnnotationsRef.current); // النمط الجديد مسح المصدر
       // إعادة تسجيل طبقات أداة الرسم — setStyle يمسح مصادرها (جذر أخطاء setData المتدفّقة)
       const d = drawRef.current;
       if (d) {
@@ -792,10 +890,12 @@ export default function InvestmentMap() {
       // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء
     }
     linkTargetRef.current = null;
+    annPendingRef.current = null;
     setDrawMode("off");
     setEditing(null);
     setLiveArea(null);
     setDimAnchor(null);
+    setAnnAnchor(null);
   }
   useEscClose(drawMode !== "off", exitDraw);
 
@@ -813,9 +913,15 @@ export default function InvestmentMap() {
       setLiveArea(null);
       setDimAnchor(null);
       linkTargetRef.current = null; // الوضعيات اليدوية ترسم قطعة جديدة (الربط يأتي من بطاقات الأقسام)
-      if (m === "dimensions" || m === "edit") {
+      if (m === "dimensions" || m === "edit" || m === "annotate") {
         d.setMode("static"); // النقر التالي على الخريطة هو المدخل
-        toast.info(m === "dimensions" ? "انقر موقع الشكل على الخريطة ثم أدخل الأبعاد" : "انقر قطعة مرسومة لتعديل حدودها");
+        toast.info(
+          m === "dimensions"
+            ? "انقر موقع الشكل على الخريطة ثم أدخل الأبعاد"
+            : m === "annotate"
+              ? "انقر الموقع المراد تسميته على الخريطة"
+              : "انقر قطعة مرسومة لتعديل حدودها",
+        );
       } else if (m === "square") {
         d.setMode("rectangle"); // يُضبَط مربّعاً عند الإنهاء
       } else {
@@ -830,6 +936,20 @@ export default function InvestmentMap() {
   // حفظ شكل منتهٍ (كل وضعيات الإنشاء + «بأبعاد») — يحترم هدف الربط من بطاقات الأقسام.
   const persistRef = useRef<((polygon: Feature<Polygon>) => Promise<void>) | null>(null);
   persistRef.current = async (raw) => {
+    // مضلّع تسمية منطقة (م7.3) — يُحفَظ عنصراً محرَّراً لا قطعة
+    if (drawModeRef.current === "annotate" && annPendingRef.current) {
+      const meta = annPendingRef.current;
+      annPendingRef.current = null;
+      const res = await createMapElement(meta.name, meta.type, raw.geometry);
+      exitDraw();
+      if (!res.ok) {
+        toast.error(`تعذّر حفظ التسمية — ${res.error}`);
+        return;
+      }
+      toast.success(`سُمِّيت المنطقة «${meta.name}» — تظهر بالخريطة والبحث`);
+      void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+      return;
+    }
     const data = dataRef.current;
     if (!data) return;
     const polygon = drawModeRef.current === "square" ? regularizeSquare(raw) : raw;
@@ -938,6 +1058,73 @@ export default function InvestmentMap() {
     void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
   }
 
+  // ===== التسميات المحرَّرة (م7.3) =====
+
+  async function onAnnotatePoint(name: string, type: string): Promise<void> {
+    const anchor = annAnchor;
+    if (!anchor || annSaving) return;
+    setAnnSaving(true);
+    const res = await createMapElement(name, type, { type: "Point", coordinates: [anchor.lng, anchor.lat] });
+    setAnnSaving(false);
+    exitDraw();
+    if (!res.ok) {
+      toast.error(`تعذّر حفظ التسمية — ${res.error}`);
+      return;
+    }
+    toast.success(`أُضيفت التسمية «${name}» — تظهر بالخريطة والبحث`);
+    void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+  }
+
+  function onAnnotateArea(name: string, type: string): void {
+    const d = drawRef.current;
+    if (!d) return;
+    annPendingRef.current = { name: name.trim(), type };
+    setAnnAnchor(null);
+    try {
+      d.setMode("polygon"); // drawMode يبقى "annotate" — الحفظ يفرّق
+      toast.info(`ارسم حدود «${name.trim()}» وأغلق المضلّع`);
+    } catch {
+      exitDraw();
+    }
+  }
+
+  async function onAnnotateSave(name: string, type: string): Promise<void> {
+    const ed = annEdit;
+    if (!ed || annSaving) return;
+    setAnnSaving(true);
+    const res = await renameMapElement(ed.id, name, type);
+    setAnnSaving(false);
+    if (!res.ok) {
+      toast.error(`تعذّر الحفظ — ${res.error}`);
+      return;
+    }
+    setAnnEdit(null);
+    toast.success("حُدِّثت التسمية");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+  }
+
+  async function onAnnotateDelete(): Promise<void> {
+    const ed = annEdit;
+    if (!ed || annSaving) return;
+    if (!window.confirm(`حذف التسمية «${ed.name}»؟`)) return;
+    setAnnSaving(true);
+    const res = await deleteMapElement(ed.id);
+    setAnnSaving(false);
+    if (!res.ok) {
+      toast.error("تعذّر الحذف");
+      return;
+    }
+    setAnnEdit(null);
+    toast.success("حُذِفت التسمية");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+  }
+
+  // انعكاس التسميات لحظياً (بيانات/إظهار/قاعدة)
+  useEffect(() => {
+    if (!mapReady) return;
+    applyAnnotations(mapRef.current, annFc, showAnnotations);
+  }, [annFc, showAnnotations, mapReady, base]);
+
   // أحياء حقيقية من القطع المرسومة (لفلترة الظهور حسب الحي)
   const neighborhoodOptions = useMemo(
     () =>
@@ -1028,6 +1215,10 @@ export default function InvestmentMap() {
                 الحدود الإدارية
               </label>
               <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                <input type="checkbox" checked={showAnnotations} onChange={(e) => setShowAnnotations(e.target.checked)} className="size-4 accent-primary" />
+                التسميات المحرَّرة
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
                 <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-4 accent-primary" />
                 القطع
               </label>
@@ -1059,7 +1250,7 @@ export default function InvestmentMap() {
                   </div>
                 </>
               ) : null}
-              {hiddenStates.size > 0 || nbhFilter || !showBoundaries || !showParcels ? (
+              {hiddenStates.size > 0 || nbhFilter || !showBoundaries || !showParcels || !showAnnotations ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -1067,6 +1258,7 @@ export default function InvestmentMap() {
                     setNbhFilter("");
                     setShowBoundaries(true);
                     setShowParcels(true);
+                    setShowAnnotations(true);
                   }}
                   className="mt-0.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-border/50 py-1.5 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
                 >
@@ -1080,6 +1272,26 @@ export default function InvestmentMap() {
 
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
+
+      {/* حوارا التسميات المحرَّرة (م7.3) */}
+      {annAnchor ? (
+        <AnnotateCreateDialog
+          saving={annSaving}
+          onPoint={(n, t) => void onAnnotatePoint(n, t)}
+          onArea={onAnnotateArea}
+          onClose={() => setAnnAnchor(null)}
+        />
+      ) : null}
+      {annEdit ? (
+        <AnnotateEditDialog
+          initialName={annEdit.name}
+          initialType={annEdit.type}
+          saving={annSaving}
+          onSave={(n, t) => void onAnnotateSave(n, t)}
+          onDelete={() => void onAnnotateDelete()}
+          onClose={() => setAnnEdit(null)}
+        />
+      ) : null}
     </div>
   );
 }

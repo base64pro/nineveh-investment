@@ -5,7 +5,7 @@
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { BadgeCheck, Building2, Loader2, MapPin, Megaphone, Search, Shapes, X } from "lucide-react";
+import { BadgeCheck, Building2, Loader2, MapPin, MapPinned, Megaphone, Search, Shapes, X } from "lucide-react";
 import { superSearch } from "./actions";
 import type { SearchKind, SearchResult } from "./types";
 import { onOpenSearch } from "./search-store";
@@ -20,6 +20,7 @@ const KIND_META: Record<
   license: { label: "رخصة", Icon: BadgeCheck, cls: "text-state-inprogress", section: "licenses" },
   company: { label: "شركة", Icon: Building2, cls: "text-primary", section: "companies" },
   assumed: { label: "مفترضة", Icon: Shapes, cls: "text-state-assumed", section: "opportunity-design" },
+  annotation: { label: "تسمية", Icon: MapPinned, cls: "text-[#94afd1]" },
   place: { label: "موقع", Icon: MapPin, cls: "text-foreground/70" },
 };
 
@@ -89,7 +90,7 @@ export function SearchOverlay() {
   }, [query]);
 
   function go(r: SearchResult): void {
-    if (r.kind === "place" && r.lng !== null && r.lat !== null) {
+    if ((r.kind === "place" || r.kind === "annotation") && r.lng !== null && r.lat !== null) {
       requestFlyToCoords({ lng: r.lng, lat: r.lat, label: r.label });
     } else if (r.hasGeom && r.mapRef) {
       requestFlyTo(r.mapRef); // مرسوم ← طيران للخريطة
@@ -127,7 +128,13 @@ export function SearchOverlay() {
 
   const q = query.trim();
   const navHint = (r: SearchResult): string =>
-    r.kind === "place" ? "↵ الموقع على الخريطة" : r.hasGeom ? "↵ القطعة على الخريطة" : r.entityId ? "↵ فتح السجلّ" : "↵ فتح القسم";
+    r.kind === "place" || r.kind === "annotation"
+      ? "↵ الموقع على الخريطة"
+      : r.hasGeom
+        ? "↵ القطعة على الخريطة"
+        : r.entityId
+          ? "↵ فتح السجلّ"
+          : "↵ فتح القسم";
 
   return (
     <AnimatePresence>

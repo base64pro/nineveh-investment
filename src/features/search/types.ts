@@ -1,5 +1,5 @@
 // أنواع البحث الفائق — منفصلة عن ملف "use server" (تستوردها الواجهة والخادم).
-export type SearchKind = "opportunity" | "license" | "company" | "assumed" | "place";
+export type SearchKind = "opportunity" | "license" | "company" | "assumed" | "annotation" | "place";
 
 export interface SearchResult {
   kind: SearchKind;

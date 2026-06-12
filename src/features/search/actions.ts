@@ -86,6 +86,8 @@ interface Row {
   map_ref: string | null;
   entity_id: string | null;
   has_geom: boolean;
+  lng: number | null;
+  lat: number | null;
 }
 
 export async function superSearch(query: string): Promise<{ results: SearchResult[] }> {
@@ -118,13 +120,13 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
   const entityResults: SearchResult[] = rows.map((r) => ({
     kind: r.kind,
     label: r.label ?? "—",
-    sublabel: buildSublabel(r.kind, r.sector, r.district, r.status),
+    sublabel: r.kind === "annotation" ? "تسمية محرَّرة — من بياناتك" : buildSublabel(r.kind, r.sector, r.district, r.status),
     parcel_no: r.parcel_no,
     mapRef: r.map_ref,
     entityId: r.entity_id,
     hasGeom: r.has_geom,
-    lng: null,
-    lat: null,
+    lng: r.lng,
+    lat: r.lat,
   }));
 
   // تسميات/مواقع الخريطة (أُحضِرت أعلاه بالتوازي)

@@ -4,11 +4,11 @@
 // زجاجي موحّد ملائم للمس · مساحة حيّة توضيحية أثناء الرسم (المساحة الرسمية من البيانات — قرار سابق).
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Circle, Hexagon, MousePointerSquareDashed, Ruler, Square, SquareDashed, X, type LucideIcon } from "lucide-react";
+import { Check, Circle, Hexagon, MapPinned, MousePointerSquareDashed, Ruler, Square, SquareDashed, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 
-export type DrawModeId = "off" | "polygon" | "rectangle" | "square" | "circle" | "dimensions" | "edit";
+export type DrawModeId = "off" | "polygon" | "rectangle" | "square" | "circle" | "dimensions" | "annotate" | "edit";
 
 const MODES: { id: Exclude<DrawModeId, "off">; label: string; hint: string; Icon: LucideIcon }[] = [
   { id: "polygon", label: "مضلّع", hint: "نقاط حرّة — أغلق على الأولى", Icon: Hexagon },
@@ -16,6 +16,7 @@ const MODES: { id: Exclude<DrawModeId, "off">; label: string; hint: string; Icon
   { id: "square", label: "مربّع", hint: "ارسم مستطيلاً — يُضبَط مربّعاً تلقائياً", Icon: Square },
   { id: "circle", label: "دائرة", hint: "المركز ثم اسحب نصف القطر", Icon: Circle },
   { id: "dimensions", label: "بأبعاد", hint: "انقر الموقع ثم أدخل الأبعاد بالمتر", Icon: Ruler },
+  { id: "annotate", label: "تسمية", hint: "سمِّ معلماً/مبنىً/منطقةً — يظهر بالخريطة والبحث", Icon: MapPinned },
   { id: "edit", label: "تحرير", hint: "انقر قطعة مرسومة لتعديل حدودها", Icon: MousePointerSquareDashed },
 ];
 

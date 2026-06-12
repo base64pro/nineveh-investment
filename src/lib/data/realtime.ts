@@ -38,6 +38,7 @@ export function useRealtimeSync(): void {
         if (COUNTED_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["counts"] });
         if (STATS_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
         if (table === "parcel_insights") void queryClient.invalidateQueries({ queryKey: ["insights"] });
+        if (table === "map_elements") void queryClient.invalidateQueries({ queryKey: ["map_elements_geo"] });
         if (PARCEL_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       });
     }
