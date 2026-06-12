@@ -169,6 +169,7 @@ export function ParcelWindow({
     const fd = new FormData(e.currentTarget);
     const values: Record<string, unknown> = {};
     for (const f of cfg.fields) {
+      if (!fd.has(f.key)) continue; // حقل غير معروض في النافذة (كالحالة — تُدار بمنسدلة النقل) ← لا يُرسَل ولا يُمسح
       const raw = String(fd.get(f.key) ?? "").trim();
       values[f.key] = raw === "" ? null : f.type === "number" ? Number(raw) : raw; // فراغ→null (لا تأليف §ح)
     }
