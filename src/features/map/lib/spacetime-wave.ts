@@ -15,10 +15,10 @@ export const SPACETIME_WAVE_LAYER = "spacetime-wave";
 
 // حضور أقوى (مبهر) مع تخافت بالزوم حفاظاً على قراءة القطع عند التقريب
 const OPACITY_STOPS: ReadonlyArray<readonly [number, number]> = [
-  [5, 0.9],
-  [8, 0.7],
+  [5, 0.42],
+  [8, 0.6],
   [11, 0.45],
-  [13, 0.25],
+  [13, 0.26],
   [15, 0.12],
 ];
 
@@ -74,6 +74,7 @@ uniform float u_time;
 uniform vec2 u_origin;
 uniform vec2 u_extent;
 uniform float u_amp;
+uniform float u_detail;
 varying float v_wave;
 varying float v_sweep;
 varying vec2 v_uv;
@@ -89,11 +90,12 @@ void main() {
   v_wave = h;
   // جبهة مسح هولوكرامية قطرية تعبر نينوى دورياً (~9 ثوانٍ) — نبض الموشن الواضح
   float ph = fract(dot(p, vec2(0.8206, 0.5715)) * 0.55 - t * 0.11);
-  v_sweep = exp(-pow((ph - 0.5) * 13.0, 2.0));
+  float sd = (ph - 0.5) * 13.0; // لا pow بأساس سالب (سلوك غير معرّف → NaN على بعض المعالجات)
+  v_sweep = exp(-sd * sd);
   // الإزاحة «العمودية» للمشهد العلوي: محور Y الميركاتوري + رجفة X مائية طفيفة
   vec2 disp = vec2(0.22, 1.0) * (h * u_amp);
   gl_Position = u_matrix * vec4(a_pos + disp, 0.0, 1.0);
-  gl_PointSize = clamp(2.0 + 3.6 * (0.5 + 0.5 * h) + 5.0 * v_sweep, 2.0, 9.0);
+  gl_PointSize = clamp(2.0 + 3.6 * (0.5 + 0.5 * h) + 5.0 * v_sweep, 2.0, 9.0) * mix(0.5, 1.0, u_detail);
 }
 `;
 
@@ -101,7 +103,8 @@ const FRAGMENT_SRC = /* glsl */ `
 precision mediump float;
 uniform sampler2D u_mask;
 uniform float u_opacity;
-uniform float u_time;
+uniform highp float u_time; // مشترك مع الرأسي — وجوب تطابق الدقّة وإلا فشل الربط
+uniform highp float u_detail; // مشترك مع الرأسي (نفس قاعدة الدقّة)
 uniform int u_mode; // 0 سطح مائي · 1 شبكة سلكية · 2 عقد ضوئية
 varying float v_wave;
 varying float v_sweep;
@@ -132,14 +135,14 @@ void main() {
   } else if (u_mode == 1) {
     // الشبكة: القمم تتوهّج والذرى تلمع وجبهة المسح تشعلها لحظياً
     col = ramp(c01) * (0.9 + 0.3 * c01) + vec3(0.40) * v_sweep + vec3(0.55) * spec;
-    a = u_opacity * m * clamp(0.16 + 0.62 * c01 + 0.50 * v_sweep + 0.55 * spec, 0.0, 1.0);
+    a = u_opacity * m * clamp(0.16 + 0.62 * c01 + 0.50 * v_sweep + 0.55 * spec, 0.0, 1.0) * (0.55 + 0.45 * u_detail);
   } else {
     // عقد ضوئية: قرص ناعم متوهّج يتنفّس مع الموجة
     vec2 d = gl_PointCoord - vec2(0.5);
     float disk = exp(-dot(d, d) * 14.0) - 0.02;
     if (disk <= 0.0) discard;
     col = ramp(c01) + vec3(0.45) * v_sweep + vec3(0.5) * spec;
-    a = u_opacity * m * disk * clamp(0.30 + 0.80 * c01 + 0.80 * v_sweep + spec, 0.0, 1.4);
+    a = u_opacity * m * disk * clamp(0.30 + 0.80 * c01 + 0.80 * v_sweep + spec, 0.0, 1.4) * u_detail;
   }
   gl_FragColor = vec4(col * a, a); // premultiplied
 }
@@ -302,6 +305,7 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
   let uMask: WebGLUniformLocation | null = null;
   let uOpacity: WebGLUniformLocation | null = null;
   let uMode: WebGLUniformLocation | null = null;
+  let uDetail: WebGLUniformLocation | null = null;
   const t0 = performance.now();
 
   return {
@@ -336,19 +340,15 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
       uMask = gl.getUniformLocation(prog, "u_mask");
       uOpacity = gl.getUniformLocation(prog, "u_opacity");
       uMode = gl.getUniformLocation(prog, "u_mode");
+      uDetail = gl.getUniformLocation(prog, "u_detail");
 
       nodeBuf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, nodeBuf);
       gl.bufferData(gl.ARRAY_BUFFER, mesh.nodes, gl.STATIC_DRAW);
       lineBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineBuf);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.lineIdx, gl.STATIC_DRAW);
       triBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triBuf);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.triIdx, gl.STATIC_DRAW);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
-      // VAO خاص بنا (WebGL2) كي لا نلوّث حالة سمات MapLibre
+      // VAO خاص بنا (WebGL2) — ونرفع مخازن العناصر داخله كي لا نلوّث ربط VAO نشط لـMapLibre
       const gl2 = gl as WebGL2RenderingContext;
       if (typeof gl2.createVertexArray === "function") {
         vao = gl2.createVertexArray();
@@ -356,7 +356,17 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
         gl.bindBuffer(gl.ARRAY_BUFFER, nodeBuf);
         gl.enableVertexAttribArray(aPos);
         gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineBuf);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.lineIdx, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triBuf);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.triIdx, gl.STATIC_DRAW);
         gl2.bindVertexArray(null);
+      } else {
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineBuf);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.lineIdx, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triBuf);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.triIdx, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -405,7 +415,10 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
       gl.uniform2f(uOrigin, mesh.origin[0], mesh.origin[1]);
       gl.uniform2f(uExtent, mesh.extent[0], mesh.extent[1]);
       gl.uniform1f(uAmp, mesh.cell * 1.35); // إزاحة بمقياس الخلية — موجة مرئية بوضوح بلا تمزّق
-      gl.uniform1f(uOpacity, zoomOpacity(map.getZoom()));
+      const zoom = map.getZoom();
+      gl.uniform1f(uOpacity, zoomOpacity(zoom));
+      // عامل التفصيل: عند الإبعاد تخفّ الخطوط والعقد (تبقى نينوى «مظلَّلة بخفّة») وعند الاقتراب يكتمل الثراء
+      gl.uniform1f(uDetail, Math.min(1, Math.max(0.3, (zoom - 5.5) / 3)));
 
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, maskTex);
