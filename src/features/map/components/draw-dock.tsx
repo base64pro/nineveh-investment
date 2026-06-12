@@ -42,8 +42,9 @@ export function DrawDock({
   const active = mode !== "off";
   const editingActive = editingLabel !== null;
 
+  // كتلة بلا تموضع ذاتي — تُركَّب داخل عمود الأدوات العائمة (يسار الخريطة، تحت الأزرار)
   return (
-    <div className="absolute start-3 top-16 z-10 flex flex-col items-start gap-2">
+    <div className="flex flex-col items-end gap-2">
       <div className={cn("flex flex-col gap-0.5 rounded-2xl p-1.5", GLASS)}>
         {MODES.map((m) => {
           const isActive = mode === m.id;

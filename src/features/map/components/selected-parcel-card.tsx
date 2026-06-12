@@ -45,11 +45,12 @@ export function SelectedParcelCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 16, scale: 0.97 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className={cn("absolute bottom-8 start-3 z-10 w-72 overflow-hidden rounded-2xl sm:w-80", GLASS)}
+      initial={{ opacity: 0, x: -24, y: "-50%", scale: 0.97 }}
+      animate={{ opacity: 1, x: 0, y: "-50%", scale: 1 }}
+      exit={{ opacity: 0, x: -24, y: "-50%", scale: 0.97 }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
+      // جانب الخريطة (حافتها اليسرى) · وسط الشاشة عمودياً (y عبر framer — يملك transform) · فوق الواجهة المحيطة
+      className={cn("fixed end-4 top-1/2 z-[95] w-72 overflow-hidden rounded-2xl sm:w-80", GLASS)}
     >
       {/* معرض الصور */}
       <div className="relative h-36 w-full bg-[rgba(148,175,209,0.07)] sm:h-40">

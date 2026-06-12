@@ -1172,18 +1172,7 @@ export default function InvestmentMap() {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* استوديو الرسم (م7.1) — يسار الخريطة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
-      <DrawDock
-        mode={drawMode}
-        onMode={enterDrawMode}
-        liveAreaM2={drawMode !== "off" ? liveArea : null}
-        editingLabel={editing?.label ?? null}
-        savingEdit={savingEdit}
-        onSaveEdit={() => void saveEdit()}
-        onCancel={exitDraw}
-      />
-
-      {/* مرسى أدوات الخريطة (م7.1) — يمين: القاعدة · العودة · الطبقات (زجاجي موحّد ملائم للمس §هـ.4) */}
+      {/* عمود الأدوات العائمة (يسار الخريطة): القاعدة · العودة · الطبقات ← ثم استوديو الرسم تحتها */}
       <div className="absolute end-3 top-16 z-10 flex flex-col items-end gap-2">
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           {BASES.map((b) => (
@@ -1298,6 +1287,17 @@ export default function InvestmentMap() {
             </motion.div>
           ) : null}
         </AnimatePresence>
+
+        {/* استوديو الرسم (م7.1) — تحت الأزرار العائمة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
+        <DrawDock
+          mode={drawMode}
+          onMode={enterDrawMode}
+          liveAreaM2={drawMode !== "off" ? liveArea : null}
+          editingLabel={editing?.label ?? null}
+          savingEdit={savingEdit}
+          onSaveEdit={() => void saveEdit()}
+          onCancel={exitDraw}
+        />
       </div>
 
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
