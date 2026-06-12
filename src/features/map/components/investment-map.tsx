@@ -1303,15 +1303,18 @@ export default function InvestmentMap() {
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
 
-      {/* بطاقة القطعة المحدَّدة (م7.4) — صور + بيانات مفتاحية + أزرار سريعة */}
+      {/* البطاقة الهولوكرامية للقطعة المحدَّدة (م7.4+) — تنبثق من الخريطة لوسط الشاشة */}
       <AnimatePresence>
         {selectedProps && drawMode === "off" ? (
           <SelectedParcelCard
             key={selectedProps.ref_id}
             props={selectedProps}
             info={selectedInfo}
-            onView={() => requestOpenParcelDetail({ kind: selectedProps.kind as ParcelKind, id: selectedProps.entity_id, readOnly: true })}
-            onEdit={() => requestOpenParcelDetail({ kind: selectedProps.kind as ParcelKind, id: selectedProps.entity_id, readOnly: false })}
+            onView={() => {
+              // مطابق حرفياً لزرّ «عرض» في نافذة إشارة الخريطة (نافذة القطعة الموحَّدة الكاملة)
+              requestOpenParcelDetail({ kind: (selectedProps.kind as ParcelKind) || "assumed", id: selectedProps.entity_id || "" });
+              setSelectedId(null);
+            }}
             onEditGeometry={onCardEditGeometry}
             onClose={() => setSelectedId(null)}
           />

@@ -63,6 +63,16 @@
     font-variant-numeric: lining-nums tabular-nums;
   }
 
+  /* م7 · لمسات هولوكرامية عامة (§هـ.3): تحديد نص بهوية النظام + حلقة تركيز متوهّجة موحَّدة */
+  ::selection {
+    background: hsl(213 55% 62% / 0.35);
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.65);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
   /* م6.3 · سكرول بار مُثيم عالمياً (كل نوافذ النظام ولوحاته §هـ.3) */
   * {
     scrollbar-width: thin;
