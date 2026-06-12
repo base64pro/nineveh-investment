@@ -464,6 +464,10 @@ export default function InvestmentMap() {
   const [dimAnchor, setDimAnchor] = useState<{ lng: number; lat: number } | null>(null);
   const [nbhFilter, setNbhFilter] = useState("");
   const [showLayers, setShowLayers] = useState(false);
+  const [drawOpen, setDrawOpen] = useState(false); // طيّ/فتح استوديو الرسم — لا يتعارض مع لوحة الطبقات
+  // مرساة شارة القطعة (إسقاط شاشة يتبع الزوم/التنقّل حيّاً)
+  const [calloutPx, setCalloutPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const calloutAnchorRef = useRef<[number, number] | null>(null);
   // التسميات المحرَّرة (م7.3)
   const { fc: annFc } = useMapAnnotations();
   const annFcRef = useRef(annFc);
@@ -796,7 +800,7 @@ export default function InvestmentMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- switchBase مستقر منطقياً (refs)
   }, [settingsData, mapReady]);
 
-  // الانتقال لقطعة من السايدبار (§هـ.2): flyTo + تحديد — بمعرّف المعلم أو معرّف الكيان أو رقم القطعة
+  // الانتقال لقطعة (§هـ.2): طيران فقط — الشارة تنبثق حصراً عند النقر المباشر على القطعة (م7.6)
   useEffect(() => {
     return onFlyTo((refId) => {
       const m = mapRef.current;
@@ -806,8 +810,6 @@ export default function InvestmentMap() {
           (refId !== "" && (ft.properties?.entity_id === refId || ft.properties?.parcel_no === refId)),
       );
       if (m && f?.geometry) {
-        const ref = f.properties?.ref_id;
-        setSelectedId(typeof ref === "string" ? ref : null);
         const b = bbox(f) as [number, number, number, number];
         m.fitBounds(b, { padding: 80, maxZoom: 16, duration: 1000 });
       } else {
@@ -913,6 +915,8 @@ export default function InvestmentMap() {
       setEditing(null);
       setLiveArea(null);
       setDimAnchor(null);
+      setShowLayers(false); // لا تعارض: دخول الرسم يطوي لوحة الطبقات
+      setDrawOpen(true);
       linkTargetRef.current = null; // الوضعيات اليدوية ترسم قطعة جديدة (الربط يأتي من بطاقات الأقسام)
       if (m === "dimensions" || m === "edit" || m === "annotate") {
         d.setMode("static"); // النقر التالي على الخريطة هو المدخل
@@ -1148,6 +1152,43 @@ export default function InvestmentMap() {
     return { sector: a?.sector ?? null, area: a?.area_m2 ?? null, investor: null };
   }, [selectedProps, opps.data, lics.data, assumed.data]);
 
+  // تتبّع مرساة الشارة: مركز القطعة ← إسقاط شاشة يتحدّث مع كل حركة (rAF — سلس بلا إجهاد)
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !selectedProps) {
+      setCalloutPx(null);
+      calloutAnchorRef.current = null;
+      return;
+    }
+    const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === selectedProps.ref_id);
+    if (!f?.geometry) {
+      setCalloutPx(null);
+      return;
+    }
+    calloutAnchorRef.current = centroid(f as Feature).geometry.coordinates as [number, number];
+    let raf = 0;
+    const update = (): void => {
+      raf = 0;
+      const mm = mapRef.current;
+      const a = calloutAnchorRef.current;
+      if (!mm || !a) return;
+      const p = mm.project(a as [number, number]);
+      const el = mm.getContainer();
+      setCalloutPx({ x: p.x, y: p.y, w: el.clientWidth, h: el.clientHeight });
+    };
+    const onMove = (): void => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    m.on("move", onMove);
+    m.on("resize", onMove);
+    return () => {
+      m.off("move", onMove);
+      m.off("resize", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [selectedProps]);
+
   function onCardEditGeometry(): void {
     const p = selectedProps;
     if (!p) return;
@@ -1171,6 +1212,9 @@ export default function InvestmentMap() {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* نسيج الزمكان (م7.6) — شبكة ساحرة منخفضة الشفافية فوق الخريطة، لا تمسّ التفاعل */}
+      <div aria-hidden className="map-spacetime pointer-events-none absolute inset-0 z-[5]" />
 
       {/* عمود الأدوات العائمة (يسار الخريطة): القاعدة · العودة · الطبقات ← ثم استوديو الرسم تحتها */}
       <div className="absolute end-3 top-16 z-10 flex flex-col items-end gap-2">
@@ -1204,7 +1248,13 @@ export default function InvestmentMap() {
           </button>
           <button
             type="button"
-            onClick={() => setShowLayers((v) => !v)}
+            onClick={() =>
+              setShowLayers((v) => {
+                const next = !v;
+                if (next) setDrawOpen(false); // فتح الطبقات يطوي استوديو الرسم (لا تعارض)
+                return next;
+              })
+            }
             title="الطبقات وتحديد الظهور"
             aria-label="الطبقات"
             aria-expanded={showLayers}
@@ -1288,14 +1338,19 @@ export default function InvestmentMap() {
           ) : null}
         </AnimatePresence>
 
-        {/* استوديو الرسم (م7.1) — تحت الأزرار العائمة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
+        {/* استوديو الرسم (م7.1/7.6) — قابل للطي، تحت الأزرار العائمة (خريطة فقط — استثناء الوصول المزدوج §هـ.4) */}
         <DrawDock
+          open={drawOpen}
+          onToggle={() =>
+            setDrawOpen((v) => {
+              const next = !v;
+              if (next) setShowLayers(false); // فتح الاستوديو يطوي لوحة الطبقات
+              return next;
+            })
+          }
           mode={drawMode}
           onMode={enterDrawMode}
           liveAreaM2={drawMode !== "off" ? liveArea : null}
-          editingLabel={editing?.label ?? null}
-          savingEdit={savingEdit}
-          onSaveEdit={() => void saveEdit()}
           onCancel={exitDraw}
         />
       </div>
@@ -1303,13 +1358,15 @@ export default function InvestmentMap() {
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
 
-      {/* البطاقة الهولوكرامية للقطعة المحدَّدة (م7.4+) — تنبثق من الخريطة لوسط الشاشة */}
+      {/* شارة القطعة (م7.6) — تنبثق بجانب القطعة المنقورة بخط رشيق يتبعها مع الزوم/التنقّل */}
       <AnimatePresence>
-        {selectedProps && drawMode === "off" ? (
+        {selectedProps && calloutPx && drawMode === "off" ? (
           <SelectedParcelCard
             key={selectedProps.ref_id}
             props={selectedProps}
             info={selectedInfo}
+            anchor={{ x: calloutPx.x, y: calloutPx.y }}
+            container={{ w: calloutPx.w, h: calloutPx.h }}
             onView={() => {
               // مطابق حرفياً لزرّ «عرض» في نافذة إشارة الخريطة (نافذة القطعة الموحَّدة الكاملة)
               requestOpenParcelDetail({ kind: (selectedProps.kind as ParcelKind) || "assumed", id: selectedProps.entity_id || "" });
@@ -1318,6 +1375,40 @@ export default function InvestmentMap() {
             onEditGeometry={onCardEditGeometry}
             onClose={() => setSelectedId(null)}
           />
+        ) : null}
+      </AnimatePresence>
+
+      {/* شريط حفظ تحرير الحدود (م7.6) — وسط أسفل الخريطة، بمتناول المستخدم */}
+      <AnimatePresence>
+        {editing ? (
+          <motion.div
+            initial={{ y: 28, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 28, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="pointer-events-none absolute inset-x-0 bottom-7 z-20 flex justify-center"
+          >
+            <div className={cn("pointer-events-auto flex items-center gap-2 rounded-2xl px-3 py-2", GLASS)}>
+              <span className="max-w-44 truncate text-[11px] text-muted-foreground" title={editing.label}>
+                تحرير حدود: <b className="text-foreground/90">{editing.label}</b>
+              </span>
+              <button
+                type="button"
+                disabled={savingEdit}
+                onClick={() => void saveEdit()}
+                className="flex h-10 items-center gap-1.5 rounded-xl bg-state-completed/20 px-4 text-xs font-bold text-state-completed ring-1 ring-inset ring-state-completed/50 transition hover:bg-state-completed/30 hover:shadow-[0_0_18px_-6px_rgba(94,151,122,0.9)] active:scale-95 disabled:opacity-50"
+              >
+                {savingEdit ? "يحفظ…" : "حفظ الحدود"}
+              </button>
+              <button
+                type="button"
+                onClick={exitDraw}
+                className="flex h-10 items-center rounded-xl bg-secondary/50 px-3 text-xs font-semibold ring-1 ring-inset ring-border/50 transition hover:bg-accent active:scale-95"
+              >
+                إلغاء
+              </button>
+            </div>
+          </motion.div>
         ) : null}
       </AnimatePresence>
 
