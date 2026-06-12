@@ -330,7 +330,7 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
         paint["text-halo-color"] = NAVY.background;
         layer.paint = paint as never;
       } else if (layer.type === "fill" && layer.id !== "water" && typeof paint["fill-color"] === "string") {
-        paint["fill-color"] = darkenColor(paint["fill-color"], 0.18); // أرضية المضلّعات أغمق (يوحّد غمق نينوى)
+        paint["fill-color"] = darkenColor(paint["fill-color"], 0.26); // أرضية المضلّعات أغمق كحلياً (م7.6++)
         layer.paint = paint as never;
       }
     }

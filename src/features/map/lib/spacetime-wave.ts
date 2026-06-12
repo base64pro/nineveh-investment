@@ -1,10 +1,8 @@
-// م7.6 · نسيج الزمكان الحي v2 — «مياه حية / تضاريس هولوكرامية» بثلاث طبقات من مظلّل واحد:
-// (0) سطح مائي شفّاف بتدرّج ارتفاع + خطوط كنتور طبوغرافية تتدفق عبر الحقل،
-// (1) شبكة سلكية تنحني بالموجة وتتوهّج قممها وتلمع ذراها لمعان الماء،
-// (2) عقد ضوئية نابضة عند التقاطعات تكبر وتسطع مع القمم وجبهة المسح.
-// الحركة: Vertex Shader يزيح العقد «عمودياً» (محور Y الميركاتوري) بثلاث أوكتافات Simplex Noise
-// بسرعات واتجاهات متباينة + جبهة مسح قطرية دورية — الزمن يتقدّم كل إطار (rAF + triggerRepaint)
-// فالموجة لا نهائية لا تتوقّف ولا تنكسر (حقل متّصل)، والقصّ على نينوى بقناع ألفا ناعم لا يقطع التدفّق.
+// م7.6 · نسيج الزمكان الحي v3 — «شبكة شعرية مات»: خطوط دقيقة جداً خفيفة بلا لمعان ولا بياض حاد،
+// تتموّج بحركة مائية بطيئة سلسة فوق سطح ارتفاع كحلي مكتوم بخطوط كنتور خافتة تنساب —
+// ويتلاشى النسيج كلياً مع التقريب (يختفي عند z≥12) لوضوح عملي مريح، وتتوقف حلقة الرسم حينها.
+// Vertex Shader يزيح عقد الشبكة «عمودياً» (محور Y الميركاتوري) بثلاث أوكتافات Simplex Noise
+// مع زمن متقدّم كل إطار (rAF) — حقل متّصل لا ينكسر، والقصّ على نينوى بقناع ألفا ناعم.
 // CustomLayerInterface = نفس خط WebGL الذي تغلّفه Three.js/ShaderMaterial — ضمن الحزمة الثابتة.
 
 import { MercatorCoordinate } from "maplibre-gl";
@@ -13,14 +11,14 @@ import type { FeatureCollection, MultiPolygon, Polygon, Position } from "geojson
 
 export const SPACETIME_WAVE_LAYER = "spacetime-wave";
 
-// حضور أقوى (مبهر) مع تخافت بالزوم حفاظاً على قراءة القطع عند التقريب
+// حضور خفيف يتلاشى للصفر مع التقريب (تجربة عملية: التفاصيل تتقدّم والنسيج ينسحب)
 const OPACITY_STOPS: ReadonlyArray<readonly [number, number]> = [
-  [5, 0.42],
-  [8, 0.6],
-  [11, 0.45],
-  [13, 0.26],
-  [15, 0.12],
+  [5, 0.5],
+  [8, 0.38],
+  [10, 0.18],
+  [12, 0],
 ];
+const FADE_END_ZOOM = 12.2; // بعده لا رسم ولا إعادة إطارات — راحة وأداء
 
 function zoomOpacity(z: number): number {
   const first = OPACITY_STOPS[0];
@@ -74,28 +72,21 @@ uniform float u_time;
 uniform vec2 u_origin;
 uniform vec2 u_extent;
 uniform float u_amp;
-uniform float u_detail;
 varying float v_wave;
-varying float v_sweep;
 varying vec2 v_uv;
 ${SNOISE_GLSL}
 void main() {
   v_uv = (a_pos - u_origin) / u_extent;
   vec2 p = (a_pos - u_origin) / u_extent.x; // مقياس موحّد = موجات متجانسة الاتجاهات
   float t = u_time;
-  // ثلاث أوكتافات بسرعات واتجاهات متباينة — تداخل حيّ يتجدّد باستمرار (ماء حي)
-  float h = snoise(p * 7.0  + vec2( 0.30,  0.20) * t) * 0.55
-          + snoise(p * 16.0 + vec2(-0.42,  0.28) * t) * 0.30
-          + snoise(p * 33.0 + vec2( 0.26, -0.55) * t) * 0.15;
+  // ثلاث أوكتافات بطيئة هادئة بسرعات واتجاهات متباينة — تموّج مائي سلس متجدّد بلا توقف
+  float h = snoise(p * 7.0  + vec2( 0.135,  0.090) * t) * 0.55
+          + snoise(p * 16.0 + vec2(-0.190,  0.126) * t) * 0.30
+          + snoise(p * 33.0 + vec2( 0.117, -0.247) * t) * 0.15;
   v_wave = h;
-  // جبهة مسح هولوكرامية قطرية تعبر نينوى دورياً (~9 ثوانٍ) — نبض الموشن الواضح
-  float ph = fract(dot(p, vec2(0.8206, 0.5715)) * 0.55 - t * 0.11);
-  float sd = (ph - 0.5) * 13.0; // لا pow بأساس سالب (سلوك غير معرّف → NaN على بعض المعالجات)
-  v_sweep = exp(-sd * sd);
   // الإزاحة «العمودية» للمشهد العلوي: محور Y الميركاتوري + رجفة X مائية طفيفة
   vec2 disp = vec2(0.22, 1.0) * (h * u_amp);
   gl_Position = u_matrix * vec4(a_pos + disp, 0.0, 1.0);
-  gl_PointSize = clamp(2.0 + 3.6 * (0.5 + 0.5 * h) + 5.0 * v_sweep, 2.0, 9.0) * mix(0.5, 1.0, u_detail);
 }
 `;
 
@@ -105,44 +96,31 @@ uniform sampler2D u_mask;
 uniform float u_opacity;
 uniform highp float u_time; // مشترك مع الرأسي — وجوب تطابق الدقّة وإلا فشل الربط
 uniform highp float u_detail; // مشترك مع الرأسي (نفس قاعدة الدقّة)
-uniform int u_mode; // 0 سطح مائي · 1 شبكة سلكية · 2 عقد ضوئية
+uniform int u_mode; // 0 سطح الارتفاع · 1 الشبكة الشعرية
 varying float v_wave;
-varying float v_sweep;
 varying vec2 v_uv;
 
-// تدرّج تضاريس هولوكرامي: أزرق عميق ← ثلجي معتمد rgb(196,219,247) ← أبيض القمم
+// تدرّج كحلي مكتوم ← ثلجي مطفأ — مات بالكامل: لا أبيض ولا لمعان
 vec3 ramp(float c) {
-  vec3 deep = vec3(0.16, 0.30, 0.52);
-  vec3 ice  = vec3(0.769, 0.859, 0.969);
-  vec3 peak = vec3(1.0, 1.0, 1.0);
-  if (c < 0.62) return mix(deep, ice, c / 0.62);
-  return mix(ice, peak, (c - 0.62) / 0.38);
+  vec3 deep = vec3(0.15, 0.24, 0.42);
+  vec3 ice  = vec3(0.62, 0.73, 0.87);
+  return mix(deep, ice, c);
 }
 
 void main() {
   float m = texture2D(u_mask, v_uv).a; // قناع نينوى الناعم — يقصّ الظهور لا الحقل
   if (m < 0.004) discard;
   float c01 = clamp(0.5 + 0.5 * v_wave, 0.0, 1.0);
-  float spec = pow(c01, 8.0); // لمعان ذرى الماء
-  vec3 col;
+  vec3 col = ramp(c01);
   float a;
   if (u_mode == 0) {
-    // سطح مائي: تدرّج ارتفاع + خطوط كنتور طبوغرافية تتدفق صعوداً عبر الحقل
-    float iso = abs(fract(c01 * 6.0 - u_time * 0.16) - 0.5);
-    float contour = smoothstep(0.085, 0.02, iso);
-    col = ramp(c01) + vec3(0.30) * v_sweep + vec3(0.22) * contour;
-    a = u_opacity * m * (0.045 + 0.14 * c01 + 0.10 * v_sweep + 0.12 * contour);
-  } else if (u_mode == 1) {
-    // الشبكة: القمم تتوهّج والذرى تلمع وجبهة المسح تشعلها لحظياً
-    col = ramp(c01) * (0.9 + 0.3 * c01) + vec3(0.40) * v_sweep + vec3(0.55) * spec;
-    a = u_opacity * m * clamp(0.16 + 0.62 * c01 + 0.50 * v_sweep + 0.55 * spec, 0.0, 1.0) * (0.55 + 0.45 * u_detail);
+    // سطح ارتفاع خافت جداً + كنتور طبوغرافي شبحي ينساب ببطء (عمق هولوكرامي مات)
+    float iso = abs(fract(c01 * 5.0 - u_time * 0.06) - 0.5);
+    float contour = smoothstep(0.09, 0.025, iso);
+    a = u_opacity * m * (0.018 + 0.065 * c01 + 0.035 * contour);
   } else {
-    // عقد ضوئية: قرص ناعم متوهّج يتنفّس مع الموجة
-    vec2 d = gl_PointCoord - vec2(0.5);
-    float disk = exp(-dot(d, d) * 14.0) - 0.02;
-    if (disk <= 0.0) discard;
-    col = ramp(c01) + vec3(0.45) * v_sweep + vec3(0.5) * spec;
-    a = u_opacity * m * disk * clamp(0.30 + 0.80 * c01 + 0.80 * v_sweep + spec, 0.0, 1.4) * u_detail;
+    // الشبكة الشعرية: خطوط خفيفة جداً تتنفّس بهدوء مع الموجة — بلا أي وميض
+    a = u_opacity * m * (0.07 + 0.26 * c01) * (0.55 + 0.45 * u_detail);
   }
   gl_FragColor = vec4(col * a, a); // premultiplied
 }
@@ -178,7 +156,7 @@ function collectRings(gov: FeatureCollection): Position[][][] {
 }
 
 interface Mesh {
-  nodes: Float32Array; // عقد الشبكة (COLS+1)×(ROWS+1)
+  nodes: Float32Array;
   nodeCount: number;
   lineIdx: Uint16Array | Uint32Array;
   triIdx: Uint16Array | Uint32Array;
@@ -187,7 +165,7 @@ interface Mesh {
   cell: number;
 }
 
-// شبكة عقد مفهرسة في فضاء ميركاتور: مثلّثات للسطح + أزواج للخطوط + العقد نفسها كنقاط
+// شبكة عقد مفهرسة دقيقة (شعرية) في فضاء ميركاتور: مثلّثات للسطح + أزواج للخطوط
 function buildMesh(polys: Position[][][]): Mesh | null {
   let minX = Infinity;
   let minY = Infinity;
@@ -212,9 +190,9 @@ function buildMesh(polys: Position[][][]): Mesh | null {
 
   const extX = maxX - minX;
   const extY = maxY - minY;
-  const COLS = 120;
+  const COLS = 160; // أدقّ — خطوط شعرية
   const cell = extX / COLS;
-  const ROWS = Math.min(170, Math.max(8, Math.round(extY / cell)));
+  const ROWS = Math.min(200, Math.max(8, Math.round(extY / cell)));
   const cellY = extY / ROWS;
 
   const nodes = new Float32Array((COLS + 1) * (ROWS + 1) * 2);
@@ -379,10 +357,11 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.bindTexture(gl.TEXTURE_2D, null);
 
-      // حلقة التحريك المضمونة: rAF يطلب إطاراً جديداً دوماً (يتوقّف تلقائياً بخفاء التبويب)
+      // حلقة التحريك: إطارات مستمرة ما دام النسيج ظاهراً؛ تتوقف بعد عتبة التلاشي (أداء عملي)
       const tick = (): void => {
         rafId = requestAnimationFrame(tick);
-        map?.triggerRepaint();
+        const mm = map;
+        if (mm && mm.getZoom() < FADE_END_ZOOM) mm.triggerRepaint();
       };
       rafId = requestAnimationFrame(tick);
     },
@@ -408,16 +387,18 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
 
     render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: CustomRenderMethodInput): void {
       if (!program || !nodeBuf || !lineBuf || !triBuf || !maskTex || !map) return;
-      gl.useProgram(program);
+      const zoom = map.getZoom();
+      const op = zoomOpacity(zoom);
+      if (op <= 0.004) return; // متلاشٍ — لا رسم
 
+      gl.useProgram(program);
       gl.uniformMatrix4fv(uMatrix, false, options.defaultProjectionData.mainMatrix as Float32Array);
       gl.uniform1f(uTime, (performance.now() - t0) / 1000);
       gl.uniform2f(uOrigin, mesh.origin[0], mesh.origin[1]);
       gl.uniform2f(uExtent, mesh.extent[0], mesh.extent[1]);
-      gl.uniform1f(uAmp, mesh.cell * 1.35); // إزاحة بمقياس الخلية — موجة مرئية بوضوح بلا تمزّق
-      const zoom = map.getZoom();
-      gl.uniform1f(uOpacity, zoomOpacity(zoom));
-      // عامل التفصيل: عند الإبعاد تخفّ الخطوط والعقد (تبقى نينوى «مظلَّلة بخفّة») وعند الاقتراب يكتمل الثراء
+      gl.uniform1f(uAmp, mesh.cell * 1.5); // سعة بمقياس الخلية الشعرية — تموّج ظاهر ناعم بلا تمزّق
+      gl.uniform1f(uOpacity, op);
+      // عامل التفصيل: عند الإبعاد تخفّ الخطوط أكثر (نينوى مظلَّلة بخفّة) وتكتمل العين القريبة
       gl.uniform1f(uDetail, Math.min(1, Math.max(0.3, (zoom - 5.5) / 3)));
 
       gl.activeTexture(gl.TEXTURE0);
@@ -438,21 +419,16 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
       }
       const IDX = idxType === "uint32" ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
 
-      gl.uniform1i(uMode, 0); // السطح المائي
+      gl.uniform1i(uMode, 0); // سطح الارتفاع الخافت
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triBuf);
       gl.drawElements(gl.TRIANGLES, mesh.triIdx.length, IDX, 0);
 
-      gl.uniform1i(uMode, 1); // الشبكة السلكية
+      gl.uniform1i(uMode, 1); // الشبكة الشعرية
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineBuf);
       gl.drawElements(gl.LINES, mesh.lineIdx.length, IDX, 0);
 
-      gl.uniform1i(uMode, 2); // العقد الضوئية
-      gl.drawArrays(gl.POINTS, 0, mesh.nodeCount);
-
       if (useVao) gl2.bindVertexArray(null);
       else gl.disableVertexAttribArray(aPos);
-
-      map.triggerRepaint(); // ضمان مزدوج لاستمرار الحركة
     },
   };
 }
