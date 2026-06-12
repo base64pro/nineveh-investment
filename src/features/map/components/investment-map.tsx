@@ -37,6 +37,7 @@ import { TerraDraw, TerraDrawCircleMode, TerraDrawPolygonMode, TerraDrawRectangl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { updateParcelGeometry } from "../lib/geometry-actions";
 import { useMapAnnotations } from "../lib/use-map-annotations";
+import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
 import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
 import { DrawDock, type DrawModeId } from "./draw-dock";
 import { DimensionDialog, type DimShape } from "./dimension-dialog";
@@ -378,52 +379,15 @@ function mixColor(color: string, amt: number, toWhite: boolean): string {
 const lightenColor = (c: string, a: number): string => mixColor(c, a, true);
 const darkenColor = (c: string, a: number): string => mixColor(c, a, false);
 
-// م7.6 · نسيج الزمكان داخل حدود نينوى حصراً: نمط بلاطي دقيق (شبكة 4px + 16px) كطبقة fill-pattern،
-// شفافية أعلى قليلاً تتخافت مع الزوم، وتدفّق قُطري بطيء ساحر عبر fill-translate (GPU، حجم ثابت بالشاشة).
-const SPACETIME_LAYER = "spacetime-grid";
-function spacetimePatternData(): { width: number; height: number; data: Uint8Array } | null {
-  if (typeof document === "undefined") return null;
-  const s = 32;
-  const c = document.createElement("canvas");
-  c.width = s;
-  c.height = s;
-  const g = c.getContext("2d");
-  if (!g) return null;
-  g.clearRect(0, 0, s, s);
-  // شبكة واحدة متساوية رشيقة (4px) — أنصع وأكثر حدّة، بلا تقسيمات كبرى
-  g.strokeStyle = "rgba(196,219,247,0.27)";
-  g.lineWidth = 1;
-  for (let i = 0; i <= s; i += 4) {
-    g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, s); g.stroke();
-    g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(s, i + 0.5); g.stroke();
-  }
-  const img = g.getImageData(0, 0, s, s);
-  return { width: s, height: s, data: new Uint8Array(img.data.buffer) };
-}
-
+// م7.6 · نسيج الزمكان الحي: طبقة مخصّصة بمظلّل رأسي (Simplex Noise + زمن) — التنفيذ في lib/spacetime-wave.ts.
 function applySpacetime(map: GLMap | null, gov: FeatureCollection | null): void {
   if (!map || !gov) return;
   try {
-    if (!map.hasImage("spacetime-tile")) {
-      const p = spacetimePatternData();
-      if (p) map.addImage("spacetime-tile", p);
-    }
-    if (!map.getSource("spacetime")) map.addSource("spacetime", { type: "geojson", data: gov as never });
-    if (!map.getLayer(SPACETIME_LAYER)) {
+    if (!map.getLayer(SPACETIME_WAVE_LAYER)) {
+      const layer = createSpacetimeWave(gov);
+      if (!layer) return;
       const before = map.getLayer("bnd-districts-line") ? "bnd-districts-line" : undefined;
-      map.addLayer(
-        {
-          id: SPACETIME_LAYER,
-          type: "fill",
-          source: "spacetime",
-          paint: {
-            "fill-pattern": "spacetime-tile",
-            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.58, 8, 0.42, 11, 0.24, 13, 0.13, 15, 0.06] as never,
-          },
-        },
-        before,
-      );
-      map.setPaintProperty(SPACETIME_LAYER, "fill-translate-transition", { duration: 150, delay: 0 });
+      map.addLayer(layer, before);
     }
   } catch {
     // النمط قيد التبديل — تُعاد عند idle
@@ -1251,25 +1215,6 @@ export default function InvestmentMap() {
     const a = (assumed.data ?? []).find((x) => x.id === p.entity_id);
     return { sector: a?.sector ?? null, area: a?.area_m2 ?? null, investor: null };
   }, [selectedProps, opps.data, lics.data, assumed.data]);
-
-  // تموّج النسيج: حركة مائية ثلاثية الإحساس (Lissajous) — اهتزاز بطيء منسجم مستمر، لا انزياح خطّي
-  useEffect(() => {
-    if (!mapReady) return;
-    let t = 0;
-    const id = window.setInterval(() => {
-      const m = mapRef.current;
-      if (!m) return;
-      t += 0.15;
-      const x = 7 * Math.sin(t * 0.55);
-      const y = 5 * Math.sin(t * 0.38 + 1.25);
-      try {
-        if (m.getLayer(SPACETIME_LAYER)) m.setPaintProperty(SPACETIME_LAYER, "fill-translate", [x, y]);
-      } catch {
-        // النمط قيد التبديل
-      }
-    }, 150);
-    return () => window.clearInterval(id);
-  }, [mapReady]);
 
   // تتبّع مرساة الشارة: مركز القطعة ← إسقاط شاشة يتحدّث مع كل حركة (rAF — سلس بلا إجهاد)
   useEffect(() => {
