@@ -11,9 +11,9 @@ import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { requestOpenSection } from "@/features/shell/shell-store";
 
-// إطار متدرّج هولوكرامي (ثلجي ← بنفسجي) حول جسم زجاجي
-const FRAME = "rounded-2xl p-px bg-[linear-gradient(150deg,rgba(148,175,209,0.55),rgba(139,111,176,0.4),rgba(148,175,209,0.2))] shadow-[0_12px_36px_-12px_rgba(0,0,0,0.8),0_0_28px_-8px_rgba(148,175,209,0.55)]";
-const BODY = "relative overflow-hidden rounded-[calc(1rem-1px)] bg-[hsl(221_40%_10%_/_0.92)] backdrop-blur-xl";
+// إطار هولوكرامي بقاعدة متدرّجة خافتة + توهّج سحري يدور حول الحدّ باستمرار (م7.11)
+const FRAME = "relative overflow-hidden rounded-2xl p-px bg-[linear-gradient(150deg,rgba(148,175,209,0.3),rgba(139,111,176,0.24),rgba(148,175,209,0.14))] shadow-[0_12px_36px_-12px_rgba(0,0,0,0.8),0_0_30px_-8px_rgba(148,175,209,0.5)]";
+const BODY = "relative z-[1] overflow-hidden rounded-[calc(1rem-1px)] bg-[hsl(221_40%_10%_/_0.92)] backdrop-blur-xl";
 
 const BARS = [
   { key: "announced", label: "فرص", color: "#C7A24E", section: "opportunities" },
@@ -86,6 +86,17 @@ export function HoloStatsChart({ hidden = false }: { hidden?: boolean }) {
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
       className={cn("absolute bottom-9 end-3 z-10 hidden md:block", hidden && "pointer-events-none", FRAME)}
     >
+      {/* توهّج سحري يدور حول إطار الجارت باستمرار (قوس ضوئي ناعم يجري على الحدّ) */}
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[175%] -translate-x-1/2 -translate-y-1/2 blur-[1.5px]"
+        style={{
+          background:
+            "conic-gradient(from 0deg, transparent 0deg 205deg, rgba(159,192,232,0.12) 250deg, rgba(207,227,255,0.92) 300deg, rgba(139,111,176,0.6) 334deg, transparent 360deg)",
+        }}
+        animate={{ rotate: 360 }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+      />
       <div className={cn(BODY, "px-3 pb-2 pt-2")}>
         {/* خط مسح خافت */}
         <motion.span
@@ -107,14 +118,8 @@ export function HoloStatsChart({ hidden = false }: { hidden?: boolean }) {
             className="size-1 rounded-full bg-[#9fc0e8] shadow-[0_0_6px_1px_rgba(159,192,232,0.8)]"
           />
         </div>
-        {/* فاصل حيّ: لمعة تجري عليه باستمرار */}
-        <span aria-hidden className="relative mb-2 block h-px overflow-visible bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.5)] to-transparent">
-          <motion.span
-            className="absolute -top-px h-[3px] w-8 rounded-full bg-gradient-to-r from-transparent via-[#cfe3ff] to-transparent blur-[1px]"
-            animate={{ left: ["-12%", "104%"] }}
-            transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.6 }}
-          />
-        </span>
+        {/* فاصل ثابت أنيق (اللمعة انتقلت إلى إطار الجارت) */}
+        <span aria-hidden className="mb-2 block h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.5)] to-transparent" />
         <div className="flex items-end gap-1.5">
           {BARS.map((b, i) => (
             <Bar

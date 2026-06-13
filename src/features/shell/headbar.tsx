@@ -36,14 +36,17 @@ const CHIPS: ChipDef[] = [
 // رقم بتدرّج ضوئي (أبيض ← أزرق ثلجي) — التوقيع البصري الهولوكرامي
 const NUM_GRADIENT = "bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-transparent";
 
-function Chip({ def, value, index }: { def: ChipDef; value: number; index: number }) {
+function Chip({ def, value, index, full = false }: { def: ChipDef; value: number; index: number; full?: boolean }) {
   const display = useCountUp(value);
   return (
     <button
       type="button"
       onClick={() => requestOpenSection(def.section, def.status)}
       title={`${def.label} — انتقل للقسم`}
-      className="group relative flex min-w-0 flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 transition hover:bg-white/6 active:scale-95 md:px-2.5 md:py-2 lg:px-3 xl:px-4 2xl:px-6"
+      className={cn(
+        "group relative flex min-w-0 flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 transition hover:bg-white/6 active:scale-95 md:px-2.5 md:py-2 lg:px-3 xl:px-4 2xl:px-6",
+        full && "flex-1 basis-0",
+      )}
     >
       <span className="flex items-center gap-1 md:gap-1.5">
         <motion.span
@@ -71,10 +74,13 @@ function Chip({ def, value, index }: { def: ChipDef; value: number; index: numbe
   );
 }
 
-function AreaChip({ value }: { value: number }) {
+function AreaChip({ value, full = false }: { value: number; full?: boolean }) {
   const display = useCountUp(Math.round(value), 1.1);
   return (
-    <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 md:px-2 lg:px-3 xl:px-4 2xl:px-6" title="إجمالي المساحات (مساحة القطعة المشتركة تُحسب مرّة)">
+    <div
+      className={cn("flex min-w-0 flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 md:px-2 lg:px-3 xl:px-4 2xl:px-6", full && "flex-1 basis-0")}
+      title="إجمالي المساحات (مساحة القطعة المشتركة تُحسب مرّة)"
+    >
       <span className="flex items-center gap-1 md:gap-1.5">
         <Ruler className="size-3 shrink-0 text-[#9fc0e8]/80 md:size-3.5" />
         <span className={cn("text-sm font-extrabold tabular-nums leading-none tracking-tight md:text-[15px] lg:text-base xl:text-lg 2xl:text-2xl", NUM_GRADIENT)}>
@@ -86,11 +92,16 @@ function AreaChip({ value }: { value: number }) {
   );
 }
 
-/** شريط الأرقام الزجاجي — شرائح بفواصل ضوئية، يتمدّد بفخامة مع اتساع الشاشة. */
-function CountersBar({ stats }: { stats: DashboardStats | undefined }) {
+/** شريط الأرقام الزجاجي — شرائح بفواصل ضوئية، يملأ العرض على الجوال ويتمدّد بفخامة على الشاشات الأوسع. */
+function CountersBar({ stats, full = false }: { stats: DashboardStats | undefined; full?: boolean }) {
   const z = (n: number | undefined): number => n ?? 0;
   return (
-    <div className="relative flex max-w-full items-stretch divide-x divide-[rgba(148,175,209,0.16)] overflow-hidden rounded-2xl border border-[rgba(148,175,209,0.4)] bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_28px_-14px_rgba(0,0,0,0.7),0_0_22px_-10px_rgba(148,175,209,0.5)]">
+    <div
+      className={cn(
+        "relative flex items-stretch divide-x divide-[rgba(148,175,209,0.16)] overflow-hidden rounded-2xl border border-[rgba(148,175,209,0.4)] bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_28px_-14px_rgba(0,0,0,0.7),0_0_22px_-10px_rgba(148,175,209,0.5)]",
+        full ? "w-full" : "max-w-full",
+      )}
+    >
       {/* لمعة ضوئية واضحة تعبر الشريط باستمرار (موشن حيّ) */}
       <motion.span
         aria-hidden
@@ -100,23 +111,23 @@ function CountersBar({ stats }: { stats: DashboardStats | undefined }) {
         className="pointer-events-none absolute inset-y-0 w-24 -skew-x-12 bg-gradient-to-l from-transparent via-white/[0.12] to-transparent"
       />
       {CHIPS.map((c, i) => (
-        <Chip key={c.key} def={c} value={z(stats?.[c.key])} index={i} />
+        <Chip key={c.key} def={c} value={z(stats?.[c.key])} index={i} full={full} />
       ))}
-      <AreaChip value={z(stats?.total_area_m2)} />
+      <AreaChip value={z(stats?.total_area_m2)} full={full} />
     </div>
   );
 }
 
-function DirectorAvatar() {
+function DirectorAvatar({ className }: { className?: string }) {
   const [ok, setOk] = useState(true);
   return (
-    <div className="relative size-9 shrink-0 overflow-hidden rounded-full ring-2 ring-[rgba(148,175,209,0.6)] shadow-[0_0_18px_-3px_rgba(148,175,209,0.8)] lg:size-10 2xl:size-12">
+    <div className={cn("relative shrink-0 overflow-hidden rounded-full ring-2 ring-[rgba(148,175,209,0.6)] shadow-[0_0_18px_-3px_rgba(148,175,209,0.8)]", className)}>
       {ok ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src="/director.jpeg" alt="السيد رئيس الهيئة" onError={() => setOk(false)} className="size-full object-cover" />
       ) : (
         <span className="grid size-full place-items-center bg-[rgba(148,175,209,0.14)] text-muted-foreground">
-          <User className="size-5" />
+          <User className="size-1/2" />
         </span>
       )}
       <span className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
@@ -145,41 +156,27 @@ export function Headbar() {
         className="pointer-events-none absolute -bottom-[2px] h-[4px] w-32 -translate-x-1/2 rounded-full bg-gradient-to-l from-transparent via-[#cfe3ff]/85 to-transparent blur-[1.5px]"
       />
 
-      {/* المستوى الأفقي الواحد (md+): بحث · الأرقام · العنوان · الصورة */}
-      {/* ارتفاع أكبر على التابلت (8–13″): عناصر واضحة بارتفاع منطقي متّسق */}
-      <div className="relative flex h-12 items-center gap-2 px-2.5 md:h-[68px] md:gap-2.5 md:px-3 xl:h-[68px] 2xl:h-20 2xl:gap-4 2xl:px-6">
-        {/* البحث: دائري على الجوال · حقل بارز من md */}
+      {/* ===== md+ (لوحي 8–13″ + لابتوب): مستوى أفقي واحد — بحث · الأرقام · فاصل · الهوية ===== */}
+      <div className="relative hidden h-[68px] items-center gap-2.5 px-3 md:flex 2xl:h-20 2xl:gap-4 2xl:px-6">
         <button
           type="button"
           onClick={openSearch}
           title="بحث فائق (Ctrl K)"
-          aria-label="بحث فائق"
-          className="grid size-9 shrink-0 place-items-center rounded-full border border-[rgba(148,175,209,0.45)] bg-white/5 text-muted-foreground transition hover:border-[rgba(148,175,209,0.85)] hover:bg-white/10 hover:text-foreground active:scale-95 md:hidden"
-        >
-          <Search className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={openSearch}
-          title="بحث فائق (Ctrl K)"
-          className="hidden h-9 shrink-0 items-center gap-2 rounded-xl border border-[rgba(148,175,209,0.45)] bg-white/5 px-2.5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.9)] hover:bg-white/10 hover:text-foreground hover:shadow-[0_0_18px_-6px_rgba(148,175,209,0.8)] md:flex md:w-36 lg:w-44 xl:w-56 2xl:h-11 2xl:w-72 2xl:px-3"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-xl border border-[rgba(148,175,209,0.45)] bg-white/5 px-2.5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.9)] hover:bg-white/10 hover:text-foreground hover:shadow-[0_0_18px_-6px_rgba(148,175,209,0.8)] md:w-36 lg:w-44 xl:w-56 2xl:h-11 2xl:w-72 2xl:px-3"
         >
           <Search className="size-4 shrink-0" />
           <span className="flex-1 truncate text-right text-[11px] lg:text-xs 2xl:text-sm">ابحث في نينوى…</span>
           <kbd className="hidden rounded bg-black/25 px-1.5 py-0.5 text-[9px] lg:inline">Ctrl K</kbd>
         </button>
 
-        {/* الأرقام — على نفس المستوى من md فأعلى */}
-        <div className="hidden min-w-0 flex-1 justify-center md:flex">
+        <div className="flex min-w-0 flex-1 justify-center">
           <CountersBar stats={stats} />
         </div>
 
-        {/* فاصل ضوئي قبل الهوية */}
-        <span aria-hidden className="hidden h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.45)] to-transparent md:block 2xl:h-10" />
+        <span aria-hidden className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.45)] to-transparent 2xl:h-10" />
 
-        {/* عنوان رئيس الهيئة + الصورة */}
-        <div className="ms-auto flex shrink-0 items-center gap-2 md:ms-0 md:gap-2.5">
-          <div className="hidden text-right leading-tight md:block">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <div className="text-right leading-tight">
             <div className="whitespace-nowrap text-[11px] font-bold tracking-tight text-foreground lg:text-xs xl:text-sm 2xl:text-base">
               هيئة استثمار نينوى
             </div>
@@ -187,13 +184,33 @@ export function Headbar() {
               مكتب السيد رئيس الهيئة الأستاذ حارث البخو
             </div>
           </div>
-          <DirectorAvatar />
+          <DirectorAvatar className="size-10 2xl:size-12" />
         </div>
       </div>
 
-      {/* صفّ الأرقام للجوال فقط (<md) */}
-      <div className="relative flex justify-center px-2 pb-2 md:hidden">
-        <CountersBar stats={stats} />
+      {/* ===== الجوال (<md): طبقتان رصينتان مملوءتان للشاشة ===== */}
+      <div className="md:hidden">
+        {/* طبقة الهوية والبحث — على مستوى أفقي واحد */}
+        <div className="flex h-14 items-center gap-2.5 px-3">
+          <DirectorAvatar className="size-10" />
+          <div className="min-w-0 flex-1 text-right leading-tight">
+            <div className="truncate text-[13px] font-bold tracking-tight text-foreground">هيئة استثمار نينوى</div>
+            <div className="truncate text-[9px] text-muted-foreground">مكتب السيد رئيس الهيئة الأستاذ حارث البخو</div>
+          </div>
+          <button
+            type="button"
+            onClick={openSearch}
+            title="بحث فائق"
+            aria-label="بحث فائق"
+            className="grid size-10 shrink-0 place-items-center rounded-full border border-[rgba(148,175,209,0.45)] bg-white/5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.85)] hover:bg-white/10 hover:text-foreground active:scale-95"
+          >
+            <Search className="size-[18px]" />
+          </button>
+        </div>
+        {/* طبقة الأرقام — تملأ عرض الشاشة كاملاً */}
+        <div className="px-2.5 pb-2.5">
+          <CountersBar stats={stats} full />
+        </div>
       </div>
     </div>
   );
