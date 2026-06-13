@@ -49,8 +49,9 @@ export function esc(s: unknown): string {
 const STYLES = `
 * { box-sizing: border-box; }
 body { font-family: 'Readex Pro', system-ui, sans-serif; color: #1b2740; margin: 0; font-size: 11.5px; line-height: 1.65; }
-.title { border-bottom: 2px solid #233355; padding-bottom: 8px; margin-bottom: 14px; }
-.title h1 { font-size: 18px; color: #233355; margin: 0 0 3px; }
+.title { position: relative; border-bottom: 2px solid #233355; padding: 0 0 9px; margin-bottom: 15px; }
+.title::after { content: ""; position: absolute; right: 0; bottom: -2px; width: 90px; height: 2px; background: linear-gradient(90deg, #C7A24E, #5775A8); }
+.title h1 { font-size: 19px; font-weight: 700; color: #233355; margin: 0 0 3px; letter-spacing: -0.01em; }
 .title .meta { color: #6b7a99; font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .badge { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 10px; font-weight: 600; color: #fff; }
 section { border: 1px solid #d8dee9; border-radius: 8px; padding: 9px 12px; margin-bottom: 9px; break-inside: avoid; }
@@ -72,15 +73,24 @@ section h2 { font-size: 12px; color: #2a3a5c; margin: 0 0 7px; border-right: 3px
 .needs_input { color: #3f5c8a; } .not_applicable { color: #8b94a6; }
 .gaps { color: #51607a; font-size: 10.5px; margin-top: 6px; }
 .subtitle { color: #6b7a99; font-size: 10.5px; margin: -8px 0 10px; }
-table.rpt { width: 100%; border-collapse: collapse; font-size: 9.5px; }
-table.rpt th { background: #233355; color: #fff; padding: 4px 6px; text-align: right; font-weight: 600; }
-table.rpt td { border-bottom: 1px solid #e3e8f0; padding: 3px 6px; vertical-align: top; }
+table.rpt { width: 100%; border-collapse: collapse; font-size: 9.5px; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 0 #e3e8f0; }
+table.rpt th { background: linear-gradient(180deg, #2a3a5c, #233355); color: #fff; padding: 6px 7px; text-align: right; font-weight: 600; letter-spacing: 0.01em; }
+table.rpt td { border-bottom: 1px solid #e8edf4; padding: 4px 7px; vertical-align: top; }
 table.rpt tr:nth-child(even) td { background: #f4f6fa; }
-.qa-q { background: #eef2f9; border-right: 3px solid #5775A8; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; }
-.qa-q .lbl { font-size: 10px; font-weight: 700; color: #33518a; margin-bottom: 3px; }
-.qa-a p { margin: 0 0 6px; }
-.qa-a ul { margin: 0 0 6px; padding-right: 18px; }
-.qa-a h3 { font-size: 12.5px; color: #2a3a5c; margin: 8px 0 4px; }
+table.rpt tr:hover td { background: #eef2f9; }
+table.rpt thead { break-inside: avoid; }
+table.rpt tr { break-inside: avoid; }
+/* م7.10 · تقرير الاستشارة — تدفّق متّسق بلا فراغات صفحات غير مبرّرة (السؤال + الإجابة كتلة واحدة منسابة) */
+.consult { font-size: 11.5px; line-height: 1.7; }
+.qa-q { background: #eef2f9; border-right: 3px solid #5775A8; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; font-size: 11.5px; break-inside: avoid; }
+.qa-q .lbl { font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; color: #33518a; margin-bottom: 4px; }
+.qa-a { margin: 0; } /* لا حدود/إطار ولا break-inside:avoid — النصّ ينساب طبيعياً عبر الصفحات */
+.qa-a > h2 { font-size: 13px; color: #233355; margin: 0 0 8px; padding-right: 7px; border-right: 3px solid #C7A24E; break-after: avoid; }
+.qa-a p { margin: 0 0 7px; text-align: justify; orphans: 2; widows: 2; }
+.qa-a ul { margin: 0 0 8px; padding-right: 20px; }
+.qa-a li { margin: 0 0 3px; }
+.qa-a h3 { font-size: 12px; font-weight: 700; color: #2a3a5c; margin: 11px 0 5px; break-after: avoid; }
+.qa-a .cite { display: inline; color: #33518a; font-weight: 600; background: #eef2f9; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 /* م7.5 · غلاف التقرير + الرسوم */
 .cover { height: 245mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; page-break-after: always; }
 .cover .org { font-size: 15px; font-weight: 600; color: #33518a; letter-spacing: 0.04em; }

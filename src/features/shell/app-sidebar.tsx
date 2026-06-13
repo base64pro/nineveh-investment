@@ -127,10 +127,8 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
                 setActive(isActive ? null : s.id);
               }}
               className={cn(
-                "group relative flex h-[58px] w-[68px] flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200",
-                isActive
-                  ? "bg-[linear-gradient(160deg,rgba(148,175,209,0.2),rgba(148,175,209,0.06))] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_22px_-6px_rgba(148,175,209,0.8)] ring-1 ring-inset ring-[rgba(148,175,209,0.5)]"
-                  : "text-foreground/65 hover:bg-white/6 hover:text-foreground",
+                "group relative flex h-[64px] w-[72px] flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200",
+                isActive ? "text-foreground" : "text-foreground/65 hover:text-foreground",
               )}
             >
               {/* المؤشّر الضوئي الأحادي (ثلجي) — ينزلق بنعومة زنبركية بين الأقسام */}
@@ -138,21 +136,31 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
                 <motion.span
                   layoutId="rail-active"
                   transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.7 }}
-                  className="absolute inset-y-3 left-1 w-1 rounded-full bg-[#9fc0e8] shadow-[0_0_12px_2px_rgba(159,192,232,0.85)]"
+                  className="absolute inset-y-2.5 left-1 w-1 rounded-full bg-[#9fc0e8] shadow-[0_0_12px_2px_rgba(159,192,232,0.85)]"
                 />
               ) : null}
-              <Icon
+              {/* بلاطة الأيقونة الزجاجية المتقدّمة — تتوهّج عند النشاط/المرور */}
+              <span
                 className={cn(
-                  "size-[22px] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:scale-110",
-                  isActive ? "text-[#cfe3ff] drop-shadow-[0_0_8px_rgba(159,192,232,0.9)]" : "",
+                  "grid size-9 place-items-center rounded-[11px] transition-all duration-200",
+                  isActive
+                    ? "bg-[linear-gradient(155deg,rgba(159,192,232,0.28),rgba(139,111,176,0.16))] ring-1 ring-inset ring-[rgba(159,192,232,0.55)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_16px_-4px_rgba(159,192,232,0.85)]"
+                    : "bg-white/[0.03] ring-1 ring-inset ring-white/8 group-hover:bg-white/[0.07] group-hover:ring-[rgba(148,175,209,0.4)]",
                 )}
-                strokeWidth={1.8}
-              />
+              >
+                <Icon
+                  className={cn(
+                    "size-[25px] transition-all duration-200 group-hover:scale-110",
+                    isActive ? "text-[#cfe3ff] drop-shadow-[0_0_8px_rgba(159,192,232,0.95)]" : "",
+                  )}
+                  strokeWidth={1.7}
+                />
+              </span>
               <span className={cn("text-[9.5px] font-semibold leading-none tracking-tight", isActive ? "text-foreground" : "text-foreground/60 group-hover:text-foreground/85")}>
                 {s.short}
               </span>
               {typeof count === "number" && count > 0 ? (
-                <span className="absolute end-1 top-1 rounded-full bg-[hsl(220_36%_11%/0.92)] px-1.5 text-[8.5px] font-bold leading-snug text-[#cfe3ff] ring-1 ring-inset ring-[rgba(148,175,209,0.45)]">
+                <span className="absolute end-0.5 top-0.5 rounded-full bg-[hsl(220_36%_11%/0.94)] px-1.5 text-[8.5px] font-bold leading-snug text-[#cfe3ff] ring-1 ring-inset ring-[rgba(148,175,209,0.45)]">
                   {formatNumber(count)}
                 </span>
               ) : null}
@@ -165,9 +173,11 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
             type="submit"
             title={userEmail ? `تسجيل الخروج · ${userEmail}` : "تسجيل الخروج"}
             aria-label="تسجيل الخروج"
-            className="group flex h-[54px] w-[68px] flex-col items-center justify-center gap-1 rounded-xl text-muted-foreground transition hover:bg-[rgba(181,97,106,0.12)] hover:text-[#e2a9b0]"
+            className="group flex h-[60px] w-[72px] flex-col items-center justify-center gap-1 rounded-xl text-muted-foreground transition hover:text-[#e2a9b0]"
           >
-            <LogOut className="size-[22px] transition-transform duration-200 group-hover:-translate-y-0.5" strokeWidth={1.8} />
+            <span className="grid size-9 place-items-center rounded-[11px] bg-white/[0.03] ring-1 ring-inset ring-white/8 transition-all duration-200 group-hover:bg-[rgba(181,97,106,0.14)] group-hover:ring-[rgba(181,97,106,0.4)]">
+              <LogOut className="size-[25px] transition-transform duration-200 group-hover:scale-110" strokeWidth={1.7} />
+            </span>
             <span className="text-[9.5px] font-semibold leading-none tracking-tight">خروج</span>
           </button>
         </form>

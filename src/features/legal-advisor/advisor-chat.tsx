@@ -4,10 +4,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, Scale, Send, Sparkles, User } from "lucide-react";
+import { BookmarkPlus, Copy, Scale, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { askLegalAdvisor } from "./actions";
 import { saveConsultation } from "./consultation-actions";
+import { copyConsultation } from "./copy-consultation";
 import { AdvisorAnswer } from "./advisor-answer";
 import type { ChatMessage } from "@/lib/ai/anthropic";
 
@@ -91,15 +92,25 @@ export function AdvisorChat() {
                 <p className="flex items-center gap-1.5 text-[11px] font-bold text-primary/70">
                   <Sparkles className="size-3.5" /> المستشار القانوني
                 </p>
-                <button
-                  type="button"
-                  onClick={() => void saveOne(i)}
-                  disabled={savingIdx === i}
-                  title="حفظ في مكتبة الاستشارات"
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary disabled:opacity-50"
-                >
-                  <BookmarkPlus className="size-3.5" /> {savingIdx === i ? "…" : "حفظ"}
-                </button>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => void copyConsultation(messages[i - 1]?.content ?? "", m.content)}
+                    title="نسخ السؤال والإجابة"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary"
+                  >
+                    <Copy className="size-3.5" /> نسخ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveOne(i)}
+                    disabled={savingIdx === i}
+                    title="حفظ في مكتبة الاستشارات"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary disabled:opacity-50"
+                  >
+                    <BookmarkPlus className="size-3.5" /> {savingIdx === i ? "…" : "حفظ"}
+                  </button>
+                </div>
               </div>
               <AdvisorAnswer text={m.content} />
             </div>

@@ -37,13 +37,28 @@ function Bar({ value, max, label, color, delay, onClick }: { value: number; max:
         ))}
         <motion.span
           className="relative w-full rounded-full"
-          style={{ background: `linear-gradient(to top, ${color}, ${color}44)`, boxShadow: `0 0 12px 0 ${color}77` }}
+          style={{ background: `linear-gradient(to top, ${color}, ${color}44)` }}
           initial={{ height: "0%" }}
-          animate={{ height: `${pct}%` }}
-          transition={{ duration: 1.1, ease: "easeOut", delay }}
+          // تنبّض حيّ مستمر حول الارتفاع الفعلي + توهّج يتنفّس — انطباع لوحة حيّة (م7.10)
+          animate={{ height: [`${pct}%`, `${Math.min(100, pct + 4)}%`, `${pct}%`], boxShadow: [`0 0 10px 0 ${color}66`, `0 0 18px 1px ${color}aa`, `0 0 10px 0 ${color}66`] }}
+          transition={{ height: { duration: 3.6, repeat: Infinity, ease: "easeInOut", delay: delay * 3 }, boxShadow: { duration: 3.6, repeat: Infinity, ease: "easeInOut", delay: delay * 3 } }}
         >
-          {/* قمّة متوهّجة */}
-          <span aria-hidden className="absolute inset-x-0 top-0 h-1 rounded-full" style={{ background: color, boxShadow: `0 0 8px 1px ${color}` }} />
+          {/* قمّة متوهّجة نابضة */}
+          <motion.span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-1 rounded-full"
+            style={{ background: color }}
+            animate={{ opacity: [0.7, 1, 0.7], boxShadow: [`0 0 6px 1px ${color}`, `0 0 12px 2px ${color}`, `0 0 6px 1px ${color}`] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut", delay: delay * 2 }}
+          />
+          {/* شرارة ضوئية تصعد داخل العمود باستمرار */}
+          <motion.span
+            aria-hidden
+            className="absolute inset-x-0 h-3 rounded-full"
+            style={{ background: `linear-gradient(to top, transparent, ${color}cc, transparent)` }}
+            animate={{ bottom: ["-12%", "108%"], opacity: [0, 0.9, 0] }}
+            transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", delay: delay * 1.5, repeatDelay: 0.5 }}
+          />
         </motion.span>
         {/* تنفّس ضوئي بطيء منسجم (متعاقب الأطوار) */}
         <motion.span
@@ -81,16 +96,25 @@ export function HoloStatsChart({ hidden = false }: { hidden?: boolean }) {
           className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.08)] to-transparent"
         />
         <div className="mb-1.5 flex items-center gap-1.5 text-[9px] tracking-[0.16em] text-[#9fc0e8]/85">
-          <Activity className="size-3" />
+          <motion.span animate={{ scale: [1, 1.18, 1] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}>
+            <Activity className="size-3" />
+          </motion.span>
           مؤشّر الحالات · مباشر
           <motion.span
             aria-hidden
-            animate={{ opacity: [1, 0.3, 1] }}
+            animate={{ opacity: [1, 0.3, 1], scale: [1, 1.4, 1] }}
             transition={{ duration: 1.8, repeat: Infinity }}
             className="size-1 rounded-full bg-[#9fc0e8] shadow-[0_0_6px_1px_rgba(159,192,232,0.8)]"
           />
         </div>
-        <span aria-hidden className="mb-2 block h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.5)] to-transparent" />
+        {/* فاصل حيّ: لمعة تجري عليه باستمرار */}
+        <span aria-hidden className="relative mb-2 block h-px overflow-visible bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.5)] to-transparent">
+          <motion.span
+            className="absolute -top-px h-[3px] w-8 rounded-full bg-gradient-to-r from-transparent via-[#cfe3ff] to-transparent blur-[1px]"
+            animate={{ left: ["-12%", "104%"] }}
+            transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.6 }}
+          />
+        </span>
         <div className="flex items-end gap-1.5">
           {BARS.map((b, i) => (
             <Bar

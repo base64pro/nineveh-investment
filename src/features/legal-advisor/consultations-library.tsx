@@ -5,12 +5,13 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, FileDown, Library, Trash2 } from "lucide-react";
+import { CalendarDays, Copy, FileDown, Library, Trash2 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/display";
 import { AdvisorAnswer } from "./advisor-answer";
+import { copyConsultation } from "./copy-consultation";
 import { deleteConsultation } from "./consultation-actions";
 import type { Consultation } from "@/types/entities";
 
@@ -76,6 +77,9 @@ export function ConsultationsLibrary() {
                   <p className="mt-1 line-clamp-2 text-xs text-foreground/70">{c.excerpt}</p>
                 </button>
                 <div className="flex shrink-0 flex-col gap-0.5">
+                  <Button size="icon" variant="ghost" onClick={() => void copyConsultation(c.question ?? "", c.answer ?? "", c.title)} aria-label="نسخ" title="نسخ السؤال والإجابة">
+                    <Copy className="size-3.5 text-primary/70" />
+                  </Button>
                   <Button size="icon" variant="ghost" disabled={exporting === c.id} onClick={() => void onExport(c)} aria-label="تصدير PDF" title="تصدير PDF">
                     <FileDown className="size-3.5 text-primary/70" />
                   </Button>
@@ -100,9 +104,14 @@ export function ConsultationsLibrary() {
               <p className="mb-2 text-[11px] font-bold text-primary/70">الإجابة</p>
               <AdvisorAnswer text={open.answer ?? ""} />
             </div>
-            <Button type="button" size="sm" variant="outline" disabled={exporting === open.id} onClick={() => void onExport(open)} className="gap-1.5">
-              <FileDown className="size-4" /> {exporting === open.id ? "جارٍ التصدير…" : "تصدير PDF"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => void copyConsultation(open.question ?? "", open.answer ?? "", open.title)} className="gap-1.5">
+                <Copy className="size-4" /> نسخ
+              </Button>
+              <Button type="button" size="sm" variant="outline" disabled={exporting === open.id} onClick={() => void onExport(open)} className="gap-1.5">
+                <FileDown className="size-4" /> {exporting === open.id ? "جارٍ التصدير…" : "تصدير PDF"}
+              </Button>
+            </div>
           </div>
         ) : null}
       </Dialog>
