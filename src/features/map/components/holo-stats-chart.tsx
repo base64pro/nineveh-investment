@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 import { requestOpenSection } from "@/features/shell/shell-store";
 
 // إطار هولوكرامي بقاعدة متدرّجة خافتة + توهّج سحري يدور حول الحدّ باستمرار (م7.11)
-const FRAME = "relative overflow-hidden rounded-2xl p-px bg-[linear-gradient(150deg,rgba(148,175,209,0.3),rgba(139,111,176,0.24),rgba(148,175,209,0.14))] shadow-[0_12px_36px_-12px_rgba(0,0,0,0.8),0_0_30px_-8px_rgba(148,175,209,0.5)]";
+// ملاحظة: لا نضع "relative" هنا — تموضع الجارت "absolute" يوفّر سياق التموضع للتوهّج،
+// وإضافة relative كانت تتعارض مع absolute (twMerge يُبقي الأخير) فيختلّ مكان الجارت.
+const FRAME = "overflow-hidden rounded-2xl p-px bg-[linear-gradient(150deg,rgba(148,175,209,0.3),rgba(139,111,176,0.24),rgba(148,175,209,0.14))] shadow-[0_12px_36px_-12px_rgba(0,0,0,0.8),0_0_30px_-8px_rgba(148,175,209,0.5)]";
 const BODY = "relative z-[1] overflow-hidden rounded-[calc(1rem-1px)] bg-[hsl(221_40%_10%_/_0.92)] backdrop-blur-xl";
 
 const BARS = [
