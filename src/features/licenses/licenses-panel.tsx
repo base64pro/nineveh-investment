@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Download,
   Eye,
+  FileText,
   FilterX,
   Home,
   Landmark,
@@ -33,6 +34,7 @@ import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
 import { exportTable } from "@/lib/export-table";
+import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, formatDate, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
@@ -111,7 +113,7 @@ export function LicensesPanel({
   const [editing, setEditing] = useState<License | null>(null);
   const [visitsFor, setVisitsFor] = useState<License | null>(null);
 
-  const all = useMemo(() => data ?? [], [data]);
+  const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.record_id ?? 0) - (a.record_id ?? 0)), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
   const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
@@ -402,6 +404,9 @@ export function LicensesPanel({
                       ) : null}
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("license", o.record_id, o.title)} title="تصدير بطاقة القطعة PDF">
+                        <FileText className="size-3.5" /> PDF
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف

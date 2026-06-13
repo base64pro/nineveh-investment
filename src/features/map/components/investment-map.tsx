@@ -38,6 +38,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { deleteParcelGeometry, updateParcelGeometry } from "../lib/geometry-actions";
 import { useMapAnnotations } from "../lib/use-map-annotations";
 import { useFieldOptions } from "@/lib/data/use-field-options";
+import { sfxFly } from "@/lib/sfx";
 import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
 import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
 import { DrawDock, type DrawModeId } from "./draw-dock";
@@ -46,7 +47,6 @@ import { AnnotateCreateDialog, AnnotateEditDialog } from "./annotate-dialogs";
 import { SelectedParcelCard, type SelectedEntityInfo } from "./selected-parcel-card";
 import { MarkerCallout } from "./marker-callout";
 import { HoloStatsChart } from "./holo-stats-chart";
-import { FilterCombo } from "@/components/ui/filter-combo";
 import { useEscClose } from "@/components/ui/use-esc-close";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -530,6 +530,7 @@ export default function InvestmentMap() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [dimAnchor, setDimAnchor] = useState<{ lng: number; lat: number } | null>(null);
   const [nbhFilter, setNbhFilter] = useState("");
+  const [nbhQuery, setNbhQuery] = useState(""); // بحث قائمة الأحياء المدمجة (م7.9 — لا منسدلة منبثقة بعد اليوم)
   const [showLayers, setShowLayers] = useState(false);
   const [drawOpen, setDrawOpen] = useState(false); // طيّ/فتح استوديو الرسم — لا يتعارض مع لوحة الطبقات
   // مرساة شارة القطعة (إسقاط شاشة يتبع الزوم/التنقّل حيّاً)
@@ -836,6 +837,7 @@ export default function InvestmentMap() {
           (refId !== "" && (ft.properties?.entity_id === refId || ft.properties?.parcel_no === refId)),
       );
       if (m && f?.geometry) {
+        sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
         m.fitBounds(b, { padding: 80, maxZoom: 16, duration: 1000 });
       } else {
@@ -849,6 +851,7 @@ export default function InvestmentMap() {
     return onFlyToCoords(({ lng, lat, label }) => {
       const m = mapRef.current;
       if (!m) return;
+      sfxFly(); // أثر طيران تقني ناعم (م7.9)
       m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400 });
       if (label) toast.info(label);
     });
@@ -1423,8 +1426,54 @@ export default function InvestmentMap() {
                     ))}
                   </div>
                   <div className="border-t border-border/50 pt-1.5">
-                    <div className="mb-1 text-[10px] text-muted-foreground">حسب الحي</div>
-                    <FilterCombo value={nbhFilter} onChange={setNbhFilter} options={neighborhoodOptions} placeholder="كل الأحياء" />
+                    {/* م7.9: قائمة أحياء مدمجة قابلة للتمرير — واضحة دائماً، لا منسدلة منبثقة (حُلّت علّة عدم الظهور) */}
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground">حسب الحي</span>
+                      {nbhFilter ? (
+                        <span className="max-w-24 truncate rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary ring-1 ring-inset ring-primary/40" title={nbhFilter}>
+                          {nbhFilter}
+                        </span>
+                      ) : null}
+                    </div>
+                    <input
+                      value={nbhQuery}
+                      onChange={(e) => setNbhQuery(e.target.value)}
+                      placeholder="ابحث عن حي…"
+                      className="mb-1 w-full rounded-lg border border-input bg-background/60 px-2 py-1 text-[11px] outline-none transition focus:ring-2 focus:ring-ring"
+                    />
+                    <div className="scroll-slim max-h-36 space-y-0.5 overflow-y-auto pe-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setNbhFilter("")}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-lg px-2 py-1 text-right text-[11px] transition",
+                          !nbhFilter ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
+                        )}
+                      >
+                        كل الأحياء
+                      </button>
+                      {neighborhoodOptions
+                        .filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim()))
+                        .map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setNbhFilter(nbhFilter === n ? "" : n)}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1 text-right text-[11px] transition",
+                              nbhFilter === n ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
+                            )}
+                          >
+                            <span className="truncate" title={n}>{n}</span>
+                            {nbhFilter === n ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_6px_1px_rgba(148,175,209,0.9)]" /> : null}
+                          </button>
+                        ))}
+                      {neighborhoodOptions.length === 0 ? (
+                        <p className="px-2 py-2 text-[10px] text-muted-foreground">لا أحياء معرّفة بعد — تُضاف من نوافذ القطع</p>
+                      ) : neighborhoodOptions.filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim())).length === 0 ? (
+                        <p className="px-2 py-2 text-[10px] text-muted-foreground">لا تطابق</p>
+                      ) : null}
+                    </div>
                   </div>
                 </>
               ) : null}

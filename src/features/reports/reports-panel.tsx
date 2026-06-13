@@ -35,6 +35,7 @@ import {
   totals,
 } from "./report-aggregations";
 import { CategoryBar, StatePie, YearLine } from "./report-charts";
+import { VisitsReport } from "./visits-report";
 
 const STATE_META: Record<string, { label: string; color: string; section: string; status?: string }> = {
   announced: { label: "معلَنة", color: "#C7A24E", section: "opportunities" },
@@ -127,12 +128,38 @@ function Section({ icon: Icon, title, children, extra }: { icon: typeof Ruler; t
   );
 }
 
+// تبويبا التقارير (م7.9): التحليلات · تقارير الزيارات
+function ReportsTabs({ view, onView }: { view: "analytics" | "visits"; onView: (v: "analytics" | "visits") => void }) {
+  const TAB = "flex-1 rounded-xl py-1.5 text-xs font-bold transition active:scale-[0.98]";
+  return (
+    <div className="shrink-0 border-b border-border/60 p-2">
+      <div className="flex gap-1 rounded-2xl bg-background/40 p-1 ring-1 ring-inset ring-border/50">
+        <button
+          type="button"
+          onClick={() => onView("analytics")}
+          className={cn(TAB, view === "analytics" ? "bg-primary/20 text-primary ring-1 ring-inset ring-primary/40 shadow-[0_0_14px_-5px_rgba(148,175,209,0.9)]" : "text-muted-foreground hover:bg-white/6 hover:text-foreground")}
+        >
+          لوحة التحليلات
+        </button>
+        <button
+          type="button"
+          onClick={() => onView("visits")}
+          className={cn(TAB, view === "visits" ? "bg-primary/20 text-primary ring-1 ring-inset ring-primary/40 shadow-[0_0_14px_-5px_rgba(148,175,209,0.9)]" : "text-muted-foreground hover:bg-white/6 hover:text-foreground")}
+        >
+          تقارير الزيارات
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ReportsPanel() {
   const { data: oppsData } = useTable<Opportunity>("opportunities");
   const { data: licsData } = useTable<License>("licenses");
   const { data: asmData } = useTable<AssumedParcel>("assumed_parcels");
   const { data: compData } = useTable<Company>("companies");
 
+  const [view, setView] = useState<"analytics" | "visits">("analytics");
   const [filters, setFilters] = useState<ReportFilters>(EMPTY_FILTERS);
 
   const all = useMemo(() => normalize(oppsData ?? [], licsData ?? [], asmData ?? []), [oppsData, licsData, asmData]);
@@ -217,8 +244,20 @@ export function ReportsPanel() {
     });
   }
 
+  if (view === "visits") {
+    return (
+      <div className="flex h-full flex-col">
+        <ReportsTabs view={view} onView={setView} />
+        <div className="scroll-slim min-h-0 flex-1 overflow-y-auto">
+          <VisitsReport />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
+      <ReportsTabs view={view} onView={setView} />
       {/* الفلاتر المتقدّمة — تنعكس لحظياً */}
       <div className="space-y-2 border-b border-border p-3">
         <div className="grid grid-cols-3 gap-1.5 text-xs">

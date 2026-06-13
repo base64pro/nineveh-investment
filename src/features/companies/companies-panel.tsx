@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileText,
   FilterX,
   Globe,
   Hash,
@@ -332,6 +333,9 @@ export function CompaniesPanel() {
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void exportTable("pdf", "company.csv", `بطاقة شركة — ${o.name ?? ""}`, [o as unknown as Record<string, unknown>], [...COMPANY_EXPORT_COLUMNS])} title="تصدير بطاقة الشركة PDF">
+                        <FileText className="size-3.5" /> PDF
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف

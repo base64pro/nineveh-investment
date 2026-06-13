@@ -4,10 +4,12 @@
 // خط ربط رشيق متوهّج من الإشارة + زجاج متدرّج، تتبع الإشارة حيّاً مع الزوم/التنقّل،
 // وتُرسم فوق كل شيء (z فوق طبقات deck) فلا تختفي خلف الإشارات المتجمّعة.
 
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Eye, Navigation, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { orNA } from "@/lib/display";
+import { sfxOpen } from "@/lib/sfx";
 
 const CARD_W = 216;
 const CARD_H = 132;
@@ -28,6 +30,10 @@ export function MarkerCallout({
   onLocate: () => void;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    sfxOpen(); // ومضة انبثاق هولوكرامية (م7.9)
+  }, []);
+
   const flip = anchor.x > container.w / 2; // الإشارة يميناً ← البطاقة يساراً
   const cardX = flip ? Math.max(8, anchor.x - GAP - CARD_W) : Math.min(container.w - CARD_W - 8, anchor.x + GAP);
   const cardY = Math.min(Math.max(anchor.y - CARD_H / 2, 8), Math.max(8, container.h - CARD_H - 8));

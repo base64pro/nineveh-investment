@@ -3,8 +3,9 @@
 // م5.2 · لوحة البحث الفائق (§هـ.2.ج) — مدخل واحد قوي: بياناتنا أولاً ثم مواقع نينوى.
 // النتائج حقيقية حصراً؛ النقر ينتقل لمصدرها (قطعة على الخريطة · قسم · موقع جغرافي).
 
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, Building2, Loader2, MapPin, MapPinned, Megaphone, Search, Shapes, X } from "lucide-react";
 import { superSearch } from "./actions";
 import type { SearchKind, SearchResult } from "./types";
@@ -24,6 +25,28 @@ const KIND_META: Record<
   place: { label: "موقع", Icon: MapPin, cls: "text-foreground/70" },
 };
 
+// تطبيع عربي محلي (مرآة ar_normalize في القاعدة): أ/إ/آ←ا · ة←ه · ى←ي · ؤ←و · ئ←ي · حذف التشكيل والتطويل
+function normAr(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي");
+}
+
+interface ParcelFeatureProps {
+  ref_id?: string;
+  entity_id?: string | null;
+  kind?: string;
+  label?: string | null;
+  parcel_no?: string | null;
+  neighborhood?: string | null;
+  district?: string | null;
+}
+
 export function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -33,6 +56,37 @@ export function SearchOverlay() {
   const [sel, setSel] = useState(0);
   const reqId = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+
+  // م7.9 · الطبقة الفورية: القطع المرسومة من ذاكرة الخريطة — أولوية مطلقة وبلا انتظار خادم،
+  // مطابقة احتوائية على أي جزء (عنوان/رقم قطعة/حي/قضاء) بتطبيع عربي.
+  const localMatches = useCallback(
+    (qq: string): SearchResult[] => {
+      const fc = queryClient.getQueryData<{ features?: { properties?: ParcelFeatureProps }[] }>(["map_parcels"]);
+      const needle = normAr(qq.trim());
+      if (!needle || !fc?.features?.length) return [];
+      const out: SearchResult[] = [];
+      for (const f of fc.features) {
+        const p = f.properties ?? {};
+        const hay = normAr([p.label, p.parcel_no, p.neighborhood, p.district].filter(Boolean).join(" "));
+        if (!hay.includes(needle)) continue;
+        out.push({
+          kind: (p.kind as SearchKind) ?? "assumed",
+          label: p.label ?? p.parcel_no ?? "قطعة",
+          sublabel: "قطعة مرسومة — انتقال فوري للخريطة",
+          parcel_no: p.parcel_no ?? null,
+          mapRef: p.ref_id ?? null,
+          entityId: p.entity_id ?? null,
+          hasGeom: true,
+          lng: null,
+          lat: null,
+        });
+        if (out.length >= 8) break;
+      }
+      return out;
+    },
+    [queryClient],
+  );
 
   // فتح من الهيدبار + اختصار Ctrl/⌘+K
   useEffect(() => onOpenSearch(() => setOpen(true)), []);
@@ -71,26 +125,34 @@ export function SearchOverlay() {
       setLoading(false);
       return undefined;
     }
+    // فوري: القطع المرسومة من الذاكرة تظهر مع كل حرف (أولوية §هـ.4) — ثم نتائج الخادم تُدمج خلفها
+    const local = localMatches(q);
+    if (local.length) {
+      setResults(local);
+      setSel(0);
+    }
     setLoading(true);
     const id = ++reqId.current;
     const t = setTimeout(() => {
       void superSearch(q)
         .then((r) => {
           if (id === reqId.current) {
-            setResults(r.results);
+            const seen = new Set(local.map((x) => x.mapRef ?? `e:${x.entityId ?? ""}`));
+            const merged = [...local, ...r.results.filter((x) => !seen.has(x.mapRef ?? `e:${x.entityId ?? ""}`))].slice(0, 18);
+            setResults(merged);
             setWarning(r.warning ?? null);
             setSel(0);
           }
         })
         .catch(() => {
-          if (id === reqId.current) setResults([]);
+          if (id === reqId.current) setResults(local);
         })
         .finally(() => {
           if (id === reqId.current) setLoading(false);
         });
-    }, 350);
+    }, 200);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, localMatches]);
 
   function go(r: SearchResult): void {
     if ((r.kind === "place" || r.kind === "annotation") && r.lng !== null && r.lat !== null) {

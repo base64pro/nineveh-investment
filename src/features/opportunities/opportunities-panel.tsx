@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileText,
   FilterX,
   Home,
   ListChecks,
@@ -27,6 +28,7 @@ import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
 import { exportTable } from "@/lib/export-table";
+import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { Button } from "@/components/ui/button";
@@ -83,7 +85,7 @@ export function OpportunitiesPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Opportunity | null>(null);
 
-  const all = useMemo(() => data ?? [], [data]);
+  const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.record_id ?? 0) - (a.record_id ?? 0)), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
   const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
@@ -346,6 +348,9 @@ export function OpportunitiesPanel() {
                       ) : null}
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "opportunity", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("opportunity", o.record_id, o.title)} title="تصدير بطاقة القطعة PDF">
+                        <FileText className="size-3.5" /> PDF
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف

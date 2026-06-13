@@ -5,6 +5,7 @@ import { Headbar } from "@/features/shell/headbar";
 import { SearchOverlay } from "@/features/search/search-overlay";
 import { SettingsApplier } from "@/features/settings/settings-applier";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
+import { SfxEvents } from "@/components/ui/sfx-events";
 import InvestmentMap from "@/features/map/components/investment-map";
 
 export default async function Home() {
@@ -29,6 +30,7 @@ export default async function Home() {
         <SearchOverlay />
         <SettingsApplier />
         <ConnectivityBanner />
+        <SfxEvents />
       </div>
     </main>
   );

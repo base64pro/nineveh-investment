@@ -3,7 +3,7 @@
 // نافذة القطعة الموحّدة (§هـ.4) — للأنواع الثلاثة (فرصة/رخصة/مفترضة).
 // رأس ثابت (عنوان + بيانات مفتاحية + إجراءات) · تمرير عمودي · تحرير مباشر لكل حقل · لا كشف تحقّق (§ح).
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, Layers, Ruler, Tag, X } from "lucide-react";
@@ -28,6 +28,7 @@ import type { Company, ParcelState } from "@/types/entities";
 import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "@/features/opportunities/fields";
 import { LICENSE_FORM_FIELDS, LICENSE_OPTION_FIELDS } from "@/features/licenses/fields";
 import { ASSUMED_FORM_FIELDS, ASSUMED_OPTION_FIELDS } from "@/features/assumed/fields";
+import { sfxOpen } from "@/lib/sfx";
 import { saveOpportunity } from "@/features/opportunities/actions";
 import { saveLicense } from "@/features/licenses/actions";
 import { saveAssumed } from "@/features/assumed/actions";
@@ -151,6 +152,10 @@ export function ParcelWindow({
   const { data: companiesData } = useTable<Company>("companies");
   const companyOptions = useMemo(() => (companiesData ?? []).map((c) => ({ id: c.id, name: c.name })), [companiesData]);
   const [companyRef, setCompanyRef] = useState<string | null>((entity.company_ref as string | null) ?? null);
+
+  useEffect(() => {
+    sfxOpen(); // ومضة انبثاق (م7.9)
+  }, []);
 
   const state = parcelState(kind, entity);
   const missingHints = HINTS[kind].filter((h) => !field(entity, h.key));

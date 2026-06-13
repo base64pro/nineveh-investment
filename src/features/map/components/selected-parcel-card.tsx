@@ -4,7 +4,7 @@
 // وتتبعها حيّاً مع الزوم والتنقّل — الصورة تهيمن على البطاقة (~80%) والقراءات شريط زجاجي فوقها،
 // مع عارض كبير (Lightbox) للتكبير، وزر «حذف الرسمة» (فكّ الارتباط §هـ.4).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, ChevronLeft, Eye, ImageOff, Maximize2, PencilRuler, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { sectorLabel } from "@/lib/sectors";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { useParcelPhotos } from "@/features/parcels/photos/photo-lib";
 import { PhotoLightbox } from "@/features/parcels/photos/photo-lightbox";
+import { sfxOpen } from "@/lib/sfx";
 import type { ParcelKind } from "../lib/map-nav-store";
 import type { ParcelProps } from "../lib/use-map-parcels";
 import type { ParcelState } from "@/types/entities";
@@ -71,6 +72,10 @@ export function SelectedParcelCard({
   const [lightbox, setLightbox] = useState(false);
   const safeIdx = photos.length ? Math.min(idx, photos.length - 1) : 0;
   const accent = STATE_HEX[props.state] ?? "#94afd1";
+
+  useEffect(() => {
+    sfxOpen(); // ومضة انبثاق هولوكرامية (م7.9)
+  }, []);
 
   // البطاقة على الجهة الأرحب من نقطة القطعة + حجب داخل الخريطة
   const flip = anchor.x > container.w / 2; // القطعة يميناً ← البطاقة يساراً

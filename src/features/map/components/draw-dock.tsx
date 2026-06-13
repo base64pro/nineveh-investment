@@ -81,17 +81,20 @@ export function DrawDock({
               transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
               className="flex flex-col gap-0.5"
             >
-              {MODES.map((m) => {
+              {MODES.map((m, i) => {
                 const isActive = mode === m.id;
                 return (
-                  <button
+                  <motion.button
                     key={m.id}
                     type="button"
                     onClick={() => onMode(m.id)}
                     title={`${m.label} — ${m.hint}`}
                     aria-label={m.label}
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.04 + i * 0.035, duration: 0.18, ease: "easeOut" }}
                     className={cn(
-                      "flex size-11 flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95",
+                      "flex size-11 flex-col items-center justify-center gap-0.5 rounded-xl transition-colors active:scale-95",
                       isActive
                         ? "bg-state-assumed/25 text-state-assumed shadow-[0_0_16px_-4px_rgba(139,111,176,0.9)] ring-1 ring-inset ring-state-assumed/60"
                         : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
@@ -99,7 +102,7 @@ export function DrawDock({
                   >
                     <m.Icon style={{ width: 18, height: 18 }} />
                     <span className="text-[8px] leading-none">{m.label}</span>
-                  </button>
+                  </motion.button>
                 );
               })}
               {active ? (

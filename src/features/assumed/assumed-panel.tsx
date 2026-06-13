@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileText,
   FilterX,
   Home,
   Landmark,
@@ -29,6 +30,7 @@ import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
 import { exportTable } from "@/lib/export-table";
+import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
@@ -87,7 +89,7 @@ export function AssumedPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AssumedParcel | null>(null);
 
-  const all = useMemo(() => data ?? [], [data]);
+  const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
   const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
@@ -293,6 +295,9 @@ export function AssumedPanel() {
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "assumed", id: o.id, readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("assumed", o.id, o.name ?? o.parcel_no)} title="تصدير بطاقة القطعة PDF">
+                        <FileText className="size-3.5" /> PDF
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
