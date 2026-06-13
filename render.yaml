@@ -1,0 +1,24 @@
+# م6.5 · إعداد Render (Blueprint) — خدمة ويب واحدة عبر Docker.
+# القيم السرّية تُملأ من لوحة Render (sync:false) لا من المستودع.
+services:
+  - type: web
+    name: nineveh-investment
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    branch: main
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: MAPTILER_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false

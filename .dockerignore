@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.github
+*.log
+.env*
+npm-debug.log*
+tmp-*
+**/*.tsbuildinfo
+# ملف الخارطة الكبير (27MB) غير مستخدم وقت التشغيل
+data/*.pdf
+README*.md
