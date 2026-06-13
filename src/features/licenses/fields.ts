@@ -26,6 +26,23 @@ export function licenseStatusLabel(value: unknown): string {
   return STATUS_LABEL[String(value ?? "")] ?? "";
 }
 
+/**
+ * تطبيع حالة الرخصة عند الحفظ (دالّة نقية مُختبرة):
+ * إنشاء بلا حالة ← الافتراضي «قيد الإنجاز» (العمود إلزامي)؛
+ * تحديث بلا حالة ← يُحذف المفتاح فلا تُمسّ الحالة المخزّنة (تغييرها حصراً عبر نقل الحالة §هـ.2).
+ */
+export function normalizeLicenseStatusForSave(
+  values: Record<string, unknown>,
+  isUpdate: boolean,
+): Record<string, unknown> {
+  const v = { ...values };
+  if (!v.status) {
+    if (isUpdate) delete v.status;
+    else v.status = "in-progress";
+  }
+  return v;
+}
+
 // حقول التحرير (§هـ.5 «أيّ حقل»). company_ref/opportunity_ref مؤجَّلة لمحرّك الربط (م3).
 export const LICENSE_FORM_FIELDS: readonly FieldDef[] = [
   { key: "license_number", label: "رقم الرخصة", type: "text" },

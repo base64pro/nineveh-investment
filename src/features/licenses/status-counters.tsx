@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { animate, motion } from "framer-motion";
+import { useMemo } from "react";
+import { motion } from "framer-motion";
 import { useTable } from "@/lib/data/use-table";
+import { useCountUp } from "@/components/ui/use-count-up";
 import { cn } from "@/lib/utils";
 import type { License } from "@/types/entities";
 
@@ -13,24 +14,6 @@ const COUNTERS = [
   { value: "completed", label: "منجزة" },
   { value: "withdrawn", label: "مسحوبة" },
 ] as const;
-
-/** رقم يتحرّك تصاعدياً من القيمة السابقة إلى الجديدة (موشن سلس) عند الفتح. */
-function useCountUp(value: number): number {
-  const [display, setDisplay] = useState(0);
-  const from = useRef(0);
-  useEffect(() => {
-    const controls = animate(from.current, value, {
-      duration: 0.9,
-      ease: "easeOut",
-      onUpdate: (v) => setDisplay(Math.round(v)),
-      onComplete: () => {
-        from.current = value; // يُضبط عند الاكتمال فقط — يصمد أمام Strict Mode (يبقى يتحرّك من 0)
-      },
-    });
-    return () => controls.stop();
-  }, [value]);
-  return display;
-}
 
 function CounterOrb({
   label,
@@ -95,7 +78,9 @@ export function LicenseStatusCounters({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 44 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="absolute right-[547px] top-3 z-10 flex flex-col gap-2.5"
+      // تموضع نسبي لحافة اللوحة (480px أو 92vw الأصغر + شريط 80px) — وتُخفى دون md (التبويبات داخل اللوحة تغني عنها لمساً)
+      className="absolute top-3 z-10 hidden flex-col gap-2.5 md:flex"
+      style={{ right: "calc(min(480px, 92vw) + 67px)" }}
       aria-label="عدّادات حالات الرخص"
     >
       {COUNTERS.map((c) => (

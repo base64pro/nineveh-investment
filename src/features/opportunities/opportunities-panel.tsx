@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileText,
   FilterX,
   Home,
   ListChecks,
@@ -23,8 +24,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
+import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { Button } from "@/components/ui/button";
@@ -37,6 +41,7 @@ import { OpportunityForm } from "./opportunity-form";
 import { deleteOpportunity } from "./actions";
 import { OPPORTUNITY_EXPORT_COLUMNS } from "./fields";
 import type { Opportunity } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const isAvailable = (o: Opportunity): boolean => !(Array.isArray(o.license_ref) && o.license_ref.length > 0);
 const distinct = (values: (string | null)[]): string[] =>
@@ -67,6 +72,7 @@ function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
 export function OpportunitiesPanel() {
   const { data, isLoading, isError, refetch } = useTable<Opportunity>("opportunities");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
@@ -81,26 +87,27 @@ export function OpportunitiesPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Opportunity | null>(null);
 
-  const all = useMemo(() => data ?? [], [data]);
-  const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.record_id ?? 0) - (a.record_id ?? 0)), [data]); // الأحدث أولاً (افتراضي معتمد)
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
+  const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
-  const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
+  const districts = useMemo(() => distinct([...all.map((o) => o.district), ...(fo?.district ?? [])]), [all, fo]);
   const muqataas = useMemo(() => distinct(all.map((o) => o.muqataa_no)), [all]);
-  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const neighborhoods = useMemo(() => distinct([...all.map((o) => o.neighborhood), ...(fo?.neighborhood ?? [])]), [all, fo]);
   const statuses = useMemo(() => distinct(all.map((o) => o.opp_status)), [all]);
   const availableCount = useMemo(() => all.filter(isAvailable).length, [all]);
 
   const optionSets = useMemo(
     () => ({
       sector: sectors,
-      project_type: distinct(all.map((o) => o.project_type)),
+      project_type: distinct([...all.map((o) => o.project_type), ...(fo?.project_type ?? [])]),
       district: districts,
       neighborhood: neighborhoods,
-      muqataa_name: distinct(all.map((o) => o.muqataa_name)),
+      muqataa_name: distinct([...all.map((o) => o.muqataa_name), ...(fo?.muqataa_name ?? [])]),
       announcement_type: distinct(all.map((o) => o.announcement_type)),
       opp_status: statuses,
     }),
-    [all, sectors, districts, neighborhoods, statuses],
+    [all, fo, sectors, districts, neighborhoods, statuses],
   );
 
   const filtered = useMemo(() => {
@@ -156,9 +163,12 @@ export function OpportunitiesPanel() {
     setOppStatus("");
     setAvailableOnly(false);
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.record_id)) : filtered;
-    exportCsv("opportunities.csv", rows as unknown as Record<string, unknown>[], [...OPPORTUNITY_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "opportunities.csv", "تقرير الفرص الاستثمارية", rows as unknown as Record<string, unknown>[], [...OPPORTUNITY_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   async function onDelete(o: Opportunity) {
     if (!window.confirm(`حذف الفرصة «${o.title ?? "بلا عنوان"}»؟`)) return;
@@ -202,9 +212,10 @@ export function OpportunitiesPanel() {
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             متاحة {availableCount} · {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
+          {!isViewer ? (
           <button
             type="button"
             onClick={() => { setEditing(null); setFormOpen(true); }}
@@ -214,6 +225,7 @@ export function OpportunitiesPanel() {
           >
             <Plus className="size-5" />
           </button>
+          ) : null}
           <button
             type="button"
             onClick={toggleAll}
@@ -260,7 +272,7 @@ export function OpportunitiesPanel() {
             return (
               <li
                 key={o.record_id}
-                className="group relative overflow-hidden rounded-xl border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-state-announced/60 hover:ring-state-announced/25 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
+                className="group relative overflow-hidden rounded-xl [content-visibility:auto] [contain-intrinsic-size:auto_120px] border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-state-announced/60 hover:ring-state-announced/25 hover:shadow-[0_12px_34px_-14px] hover:shadow-state-announced/40"
               >
                 {/* شريط الحالة الجانبي (معلَنة) */}
                 <span
@@ -333,17 +345,24 @@ export function OpportunitiesPanel() {
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "opportunity", id: String(o.record_id), readOnly: true })} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
-                      {o.parcel_no ? (
+                      {!isViewer && o.parcel_no ? (
                         <Button size="sm" variant="outline" onClick={() => { if (o.parcel_no) requestStartDraw({ parcel_no: o.parcel_no, muqataa_no: o.muqataa_no, label: o.title ?? "القطعة" }); }} title="ارسم حدودها واربطها على الخريطة">
                           <PenTool className="size-3.5" /> ارسم
                         </Button>
                       ) : null}
+                      {!isViewer ? (
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "opportunity", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
+                      ) : null}
+                      <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("opportunity", o.record_id, o.title)} title="تصدير بطاقة القطعة PDF">
+                        <FileText className="size-3.5" /> PDF
+                      </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

@@ -3,8 +3,11 @@
 // التاب 4 — التقرير (عرض داخلي غنيّ §هـ.4). يعرض بيانات القطعة (وفق حالتها) + ملخّص الفحص القانوني.
 // تصدير PDF أنيق موحّد الهوية = م6 (طبقة المخرجات §ح). لا كشف تحقّق داخلي.
 
+import { useState } from "react";
 import { FileDown, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Combo } from "@/components/ui/combo";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { formatArea, formatDate, NOT_AVAILABLE, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
@@ -111,6 +114,36 @@ export function ReportTab({ kind, entity }: { kind: ParcelKind; entity: Record<s
     .map((f) => ({ f, n: all.filter((it) => it.fulfillment === f).length }))
     .filter((x) => x.n > 0);
 
+  // نطاق التصدير (§هـ.4): قطعة / تاب بعينه / شامل
+  const [exporting, setExporting] = useState(false);
+  const [scope, setScope] = useState("full");
+  const entityId = String(entity[kind === "assumed" ? "id" : "record_id"] ?? "");
+  const SCOPE_OPTIONS = [
+    { value: "full", label: "شامل" },
+    { value: "parcel", label: "بيانات القطعة" },
+    { value: "controls", label: "الضوابط القانونية" },
+    { value: "recommendations", label: "التوصيات الذكية" },
+    { value: "criteria", label: "المعايير المولّدة" },
+  ];
+  async function exportPdf(): Promise<void> {
+    if (exporting || !entityId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/pdf/parcel?kind=${kind}&id=${encodeURIComponent(entityId)}&scope=${scope}`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${SCOPE_OPTIONS.find((s) => s.value === scope)?.label ?? "تقرير"} — ${title}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* رأس التقرير */}
@@ -121,9 +154,12 @@ export function ReportTab({ kind, entity }: { kind: ParcelKind; entity: Record<s
         <span className="text-xs text-muted-foreground">
           {sectorLabel(entity.sector as string | null)} · {formatArea(entity[areaKey] as number | null)}
         </span>
-        <Button type="button" size="sm" variant="outline" disabled className="ms-auto gap-1.5 opacity-60">
-          <FileDown className="size-4" /> تصدير PDF (م6)
-        </Button>
+        <span className="ms-auto flex items-center gap-1.5">
+          <span className="w-36"><Combo value={scope} onChange={setScope} options={SCOPE_OPTIONS} ariaLabel="نطاق التقرير" disabled={exporting} /></span>
+          <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={() => void exportPdf()} className="gap-1.5">
+            <FileDown className="size-4" /> {exporting ? "جارٍ التصدير…" : "تصدير PDF"}
+          </Button>
+        </span>
       </div>
 
       <Section title="الهوية والموقع" fields={LOCATION} entity={entity} />

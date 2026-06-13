@@ -3,6 +3,7 @@
 // طفرات الرخص عبر Server Action (§ج.4) ← Postgres ← Realtime ← انعكاس فوري.
 import { createClient } from "@/lib/supabase/server";
 import { sectorCode } from "@/lib/sectors";
+import { normalizeLicenseStatusForSave } from "./fields";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -11,16 +12,19 @@ export async function saveLicense(
   id?: number,
 ): Promise<ActionResult> {
   const supabase = await createClient();
-  const record_id = id ?? Date.now();
-  const normalized: Record<string, unknown> = { ...values, record_id, kind: "license" };
+  // الحالة: افتراضي «قيد الإنجاز» عند الإنشاء فقط؛ التحديث بلا حالة لا يمسّها (إصلاح انقلاب الحالة).
+  const normalized: Record<string, unknown> = normalizeLicenseStatusForSave(values, id !== undefined);
   // توحيد القطاع: التسمية العربية ← رمز ثابت للتخزين (لا تنقسم القيم).
   if ("sector" in values) normalized.sector = sectorCode(values.sector as string | null);
-  // الحالة إلزامية (not null): الافتراضي «قيد الإنجاز».
-  if (!normalized.status) normalized.status = "in-progress";
-  const { error } = await supabase
-    .from("licenses")
-    .upsert(normalized, { onConflict: "record_id" });
-  if (error) return { ok: false, error: error.message };
+  // فصل صريح: تحديث يضبط الأعمدة المرسلة فقط (upsert كان يفجّر NOT NULL للأعمدة الغائبة — 23502)،
+  // وإنشاء يفشل بصوت عند تصادم معرّف بدل الدمج الصامت.
+  if (id !== undefined) {
+    const { error } = await supabase.from("licenses").update(normalized).eq("record_id", id);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from("licenses").insert({ ...normalized, record_id: Date.now(), kind: "license" });
+    if (error) return { ok: false, error: error.message };
+  }
   return { ok: true };
 }
 

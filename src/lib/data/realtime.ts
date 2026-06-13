@@ -16,10 +16,15 @@ const TABLES = [
   "assumed_parcels",
   "parcel_geometry",
   "field_options",
+  "parcel_insights",
+  "parcel_photos",
 ] as const;
 
 // جداول تؤثّر في طبقة قطع الخريطة (view map_parcels) ← إبطالها أيضاً.
 const PARCEL_TABLES = new Set<string>(["opportunities", "licenses", "assumed_parcels", "parcel_geometry"]);
+// إبطال مضيَّق: العدّادات لجداولها المعدودة فقط · إحصاءات الهيدبار لجداولها الأربعة فقط (لا ضجيج).
+const COUNTED_TABLES = new Set<string>(["opportunities", "licenses", "companies", "criteria", "consultations", "assumed_parcels"]);
+const STATS_TABLES = new Set<string>(["opportunities", "licenses", "companies", "assumed_parcels"]);
 
 export function useRealtimeSync(): void {
   const queryClient = useQueryClient();
@@ -31,9 +36,16 @@ export function useRealtimeSync(): void {
     for (const table of TABLES) {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
         void queryClient.invalidateQueries({ queryKey: ["table", table] });
-        void queryClient.invalidateQueries({ queryKey: ["counts"] });
-        void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
-        if (PARCEL_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
+        if (COUNTED_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["counts"] });
+        if (STATS_TABLES.has(table)) void queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+        if (table === "parcel_insights") void queryClient.invalidateQueries({ queryKey: ["insights"] });
+        if (table === "map_elements") void queryClient.invalidateQueries({ queryKey: ["map_elements_geo"] });
+        if (table === "parcel_photos") void queryClient.invalidateQueries({ queryKey: ["parcel_photos"] });
+        if (PARCEL_TABLES.has(table)) {
+          void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
+          // القاموس الموحّد (view م7.7) يستمدّ من هذه الجداول ← قيمة جديدة تظهر فوراً في كل المنسدلات
+          void queryClient.invalidateQueries({ queryKey: ["table", "field_options"] });
+        }
       });
     }
     channel.subscribe();

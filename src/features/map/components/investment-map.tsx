@@ -1,13 +1,18 @@
 "use client";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import bbox from "@turf/bbox";
 import mask from "@turf/mask";
 import centroid from "@turf/centroid";
-import type { GeoJSONSource, Map as GLMap, Popup, StyleSpecification } from "maplibre-gl";
-import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
-import { Maximize2, PenTool } from "lucide-react";
+import turfArea from "@turf/area";
+import turfCircle from "@turf/circle";
+import destination from "@turf/destination";
+import distance from "@turf/distance";
+import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
+import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
+import { ChevronDown, FilterX, Layers, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -25,11 +30,25 @@ import {
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { GeoJsonLayer, IconLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
-import { useMapParcels } from "../lib/use-map-parcels";
+import { type ParcelProps, useMapParcels } from "../lib/use-map-parcels";
 import { fillRgba, glowRgba, lineRgba } from "../lib/parcel-colors";
 import { getPinIcons } from "../lib/parcel-markers";
-import { TerraDraw, TerraDrawPolygonMode } from "terra-draw";
+import { TerraDraw, TerraDrawCircleMode, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
+import { deleteParcelGeometry, updateParcelGeometry } from "../lib/geometry-actions";
+import { useMapAnnotations } from "../lib/use-map-annotations";
+import { useFieldOptions } from "@/lib/data/use-field-options";
+import { useRole } from "@/features/auth/role-context";
+import { sfxFly } from "@/lib/sfx";
+import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
+import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
+import { DrawDock, type DrawModeId } from "./draw-dock";
+import { DimensionDialog, type DimShape } from "./dimension-dialog";
+import { AnnotateCreateDialog, AnnotateEditDialog } from "./annotate-dialogs";
+import { SelectedParcelCard, type SelectedEntityInfo } from "./selected-parcel-card";
+import { MarkerCallout } from "./marker-callout";
+import { HoloStatsChart } from "./holo-stats-chart";
+import { useEscClose } from "@/components/ui/use-esc-close";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -37,6 +56,7 @@ import { inferName } from "../lib/spatial-inference";
 import { onFlyTo, onFlyToCoords, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
 type MapData = {
@@ -266,6 +286,7 @@ function applyVisibility(m: GLMap | null, show: boolean): void {
  */
 async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecification> {
   const res = await fetch(styleUrl(base), { cache: "no-store" });
+  if (!res.ok) throw new Error(`تعذّر جلب نمط القاعدة (${res.status})`); // switchBase يلتقطه ويعرض تنبيهاً (§ز)
   const style = (await res.json()) as StyleJson;
   const origin = window.location.origin;
   const abs = (u: string | undefined): string | undefined =>
@@ -295,6 +316,8 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   }
 
   // تعريب التسميات (name:ar) + ضبط القاعدة الداكنة نحو الكحلي المات
+  // م7.6 · حدّة المعالم: أرضية أغمق + خطوط (طرق/ممرات/تضاريس) أفتح قليلاً + نصوص أنصع بهالة أغمق —
+  // معالجة لونية صرفة (mix نحو الأبيض/الأسود) دون أي تغيير في المعالم نفسها.
   for (const layer of style.layers ?? []) {
     if (layer.type === "symbol" && layer.layout && "text-field" in layer.layout) {
       layer.layout["text-field"] = ARABIC_LABEL;
@@ -302,6 +325,18 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
     if (base === "dark") {
       if (layer.id === "background") layer.paint = { ...layer.paint, "background-color": NAVY.background };
       if (layer.id === "water") layer.paint = { ...layer.paint, "fill-color": NAVY.water };
+      const paint = (layer.paint ?? {}) as Record<string, unknown>;
+      if (layer.type === "line" && typeof paint["line-color"] === "string") {
+        paint["line-color"] = lightenColor(paint["line-color"], 0.3); // طرق/ممرات أكثر حدّة وبياضاً
+        layer.paint = paint as never;
+      } else if (layer.type === "symbol") {
+        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.35);
+        paint["text-halo-color"] = NAVY.background;
+        layer.paint = paint as never;
+      } else if (layer.type === "fill" && layer.id !== "water" && typeof paint["fill-color"] === "string") {
+        paint["fill-color"] = darkenColor(paint["fill-color"], 0.34); // أرضية المضلّعات أعمق غموقاً تحت الشبكة (م7.6+++)
+        layer.paint = paint as never;
+      }
     }
   }
 
@@ -317,6 +352,52 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   return style as unknown as StyleSpecification;
 }
 
+/** مزج لون نحو الأبيض/الأسود — يدعم hex/rgb(a)/hsl(a)؛ التعبيرات تُترَك كما هي (لا تغيير معالم). */
+function mixColor(color: string, amt: number, toWhite: boolean): string {
+  const c = color.trim();
+  const target = toWhite ? 255 : 0;
+  const mix = (v: number): number => Math.round(v + (target - v) * amt);
+  const mHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+  if (mHex) {
+    let h = mHex[1]!;
+    if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+  }
+  const mRgb = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(c);
+  if (mRgb) {
+    const a = mRgb[4];
+    return `rgba(${mix(Number(mRgb[1]))},${mix(Number(mRgb[2]))},${mix(Number(mRgb[3]))},${a ?? "1"})`;
+  }
+  const mHsl = /^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(c);
+  if (mHsl) {
+    const l = Number(mHsl[3]);
+    const nl = toWhite ? l + (100 - l) * amt : l * (1 - amt);
+    const a = mHsl[4];
+    return a !== undefined ? `hsla(${mHsl[1]},${mHsl[2]}%,${nl.toFixed(1)}%,${a})` : `hsl(${mHsl[1]},${mHsl[2]}%,${nl.toFixed(1)}%)`;
+  }
+  return color;
+}
+const lightenColor = (c: string, a: number): string => mixColor(c, a, true);
+const darkenColor = (c: string, a: number): string => mixColor(c, a, false);
+
+// م7.6 · نسيج الزمكان الحي: طبقة مخصّصة بمظلّل رأسي (Simplex Noise + زمن) — التنفيذ في lib/spacetime-wave.ts.
+function applySpacetime(map: GLMap | null, gov: FeatureCollection | null): void {
+  if (!map || !gov) return;
+  try {
+    if (!map.getLayer(SPACETIME_WAVE_LAYER)) {
+      const layer = createSpacetimeWave(gov);
+      if (!layer) return;
+      const before = map.getLayer("bnd-districts-line") ? "bnd-districts-line" : undefined;
+      map.addLayer(layer, before);
+    }
+  } catch {
+    // النمط قيد التبديل — تُعاد عند idle
+  }
+}
+
 // مربّعات إظهار القطع حسب الحالة (§هـ.4): قيمة الحالة ← {تسمية · لون accent}.
 const STATE_TOGGLES = [
   { value: "announced", label: "معلَنة", accent: "accent-state-announced" },
@@ -326,6 +407,106 @@ const STATE_TOGGLES = [
   { value: "assumed", label: "مفترضة", accent: "accent-state-assumed" },
 ] as const;
 
+// مستطيل مضبوط جغرافياً حول مركز (متر) — turf حتمي (لوضعَي «بأبعاد» و«مربّع»).
+function buildRectPolygon(lng: number, lat: number, widthM: number, heightM: number): Feature<Polygon> {
+  const km = (m: number) => m / 1000;
+  const n = destination([lng, lat], km(heightM / 2), 0).geometry.coordinates;
+  const s = destination([lng, lat], km(heightM / 2), 180).geometry.coordinates;
+  const e = destination([lng, lat], km(widthM / 2), 90).geometry.coordinates;
+  const w = destination([lng, lat], km(widthM / 2), 270).geometry.coordinates;
+  const [minX, maxX, minY, maxY] = [w[0]!, e[0]!, s[1]!, n[1]!];
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [[[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY]]] },
+  };
+}
+
+/** ضبط مستطيل مرسوم يدوياً إلى مربّع (وضع «مربّع»): الضلع = متوسط البعدين، حول نفس المركز. */
+function regularizeSquare(polygon: Feature<Polygon>): Feature<Polygon> {
+  const [minX, minY, maxX, maxY] = bbox(polygon);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const widthM = distance([minX, cy], [maxX, cy]) * 1000;
+  const heightM = distance([cx, minY], [cx, maxY]) * 1000;
+  const side = (widthM + heightM) / 2;
+  return buildRectPolygon(cx, cy, side, side);
+}
+
+const GLASS = "border border-[rgba(148,175,209,0.45)] bg-[hsl(220_36%_15%_/_0.92)] shadow-[0_8px_28px_-10px_rgba(0,0,0,0.7),0_0_22px_-8px_rgba(148,175,209,0.5)] backdrop-blur";
+
+// طبقة التسميات المحرَّرة (م7.3 · §هـ.4 «السكتش الهولوكرامي»): مضلّعات متقطّعة + نقاط متوهّجة + أسماء عربية (RTL سليم عبر maplibre).
+const ANN_SOURCE = "annotations";
+const ANN_CLICK_LAYERS = ["ann-symbol", "ann-point", "ann-fill"];
+function applyAnnotations(map: GLMap | null, fc: FeatureCollection, visible: boolean): void {
+  if (!map) return;
+  try {
+    const src = map.getSource(ANN_SOURCE) as GeoJSONSource | undefined;
+    if (!src) {
+      map.addSource(ANN_SOURCE, { type: "geojson", data: fc });
+      map.addLayer({
+        id: "ann-fill",
+        type: "fill",
+        source: ANN_SOURCE,
+        filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+        paint: { "fill-color": "#94afd1", "fill-opacity": 0.07 },
+      });
+      map.addLayer({
+        id: "ann-line",
+        type: "line",
+        source: ANN_SOURCE,
+        filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+        paint: { "line-color": "#94afd1", "line-width": 1.6, "line-dasharray": [2.5, 2] },
+      });
+      map.addLayer({
+        id: "ann-point",
+        type: "circle",
+        source: ANN_SOURCE,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 4.5,
+          "circle-color": "#94afd1",
+          "circle-stroke-color": "#0b1220",
+          "circle-stroke-width": 1.5,
+          "circle-blur": 0.15,
+        },
+      });
+      map.addLayer({
+        id: "ann-symbol",
+        type: "symbol",
+        source: ANN_SOURCE,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 13,
+          "text-offset": [0, 0.9],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#cfe3ff",
+          "text-halo-color": "#0b1220",
+          "text-halo-width": 1.4,
+        },
+      });
+    } else {
+      src.setData(fc as never);
+    }
+    const vis = visible ? "visible" : "none";
+    for (const id of ["ann-fill", "ann-line", "ann-point", "ann-symbol"]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    }
+  } catch {
+    // النمط قيد التبديل — ستُعاد عند idle
+  }
+}
+
+interface EditingRef {
+  kind: string;
+  refId: string;
+  label: string;
+}
+
 export default function InvestmentMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GLMap | null>(null);
@@ -333,13 +514,40 @@ export default function InvestmentMap() {
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
   const overlayRef = useRef<MapboxOverlay | null>(null);
-  const popupRef = useRef<Popup | null>(null);
+  // نافذة إشارة القطعة (م7.8): بطاقة هولوكرامية بخط ربط تتبع الإشارة حيّاً — بدل Popup (كانت تختفي خلف طبقة الإشارات)
+  const [mkSel, setMkSel] = useState<{ refId: string; label: string | null; kind: ParcelKind; entityId: string; lngLat: [number, number] } | null>(null);
+  const [mkPx, setMkPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const { fc } = useMapParcels();
   const fcRef = useRef<FeatureCollection>(fc);
   fcRef.current = fc;
   const drawRef = useRef<TerraDraw | null>(null);
   const linkTargetRef = useRef<DrawTarget | null>(null);
-  const [drawing, setDrawing] = useState(false);
+  // استوديو الرسم (م7.1): وضعية الرسم + مساحة حيّة + تحرير قائم + مرسى الأبعاد + فلترة الحي + لوحة الطبقات
+  const [drawMode, setDrawMode] = useState<DrawModeId>("off");
+  const drawModeRef = useRef<DrawModeId>(drawMode);
+  drawModeRef.current = drawMode;
+  const [liveArea, setLiveArea] = useState<number | null>(null);
+  const [editing, setEditing] = useState<EditingRef | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [dimAnchor, setDimAnchor] = useState<{ lng: number; lat: number } | null>(null);
+  const [nbhFilter, setNbhFilter] = useState("");
+  const [nbhQuery, setNbhQuery] = useState(""); // بحث قائمة الأحياء المدمجة (م7.9 — لا منسدلة منبثقة بعد اليوم)
+  const [showLayers, setShowLayers] = useState(false);
+  const [drawOpen, setDrawOpen] = useState(false); // طيّ/فتح استوديو الرسم — لا يتعارض مع لوحة الطبقات
+  // مرساة شارة القطعة (إسقاط شاشة يتبع الزوم/التنقّل حيّاً)
+  const [calloutPx, setCalloutPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const calloutAnchorRef = useRef<[number, number] | null>(null);
+  // التسميات المحرَّرة (م7.3)
+  const { fc: annFc } = useMapAnnotations();
+  const annFcRef = useRef(annFc);
+  annFcRef.current = annFc;
+  const [showAnnotations, setShowAnnotations] = useState(true);
+  const showAnnotationsRef = useRef(showAnnotations);
+  showAnnotationsRef.current = showAnnotations;
+  const [annAnchor, setAnnAnchor] = useState<{ lng: number; lat: number } | null>(null);
+  const annPendingRef = useRef<{ name: string; type: string } | null>(null);
+  const [annEdit, setAnnEdit] = useState<{ id: string; name: string; type: string } | null>(null);
+  const [annSaving, setAnnSaving] = useState(false);
   const queryClient = useQueryClient();
   const qcRef = useRef(queryClient);
   qcRef.current = queryClient;
@@ -349,6 +557,9 @@ export default function InvestmentMap() {
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
   const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
+  const [mapReady, setMapReady] = useState(false);
+  const { data: settingsData } = useSettings();
+  const startApplied = useRef(false);
   const showBoundariesRef = useRef(showBoundaries);
   showBoundariesRef.current = showBoundaries;
   const opps = useTable<Opportunity>("opportunities");
@@ -401,6 +612,17 @@ export default function InvestmentMap() {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
+      // §ز.5 · فشل الخريطة (الشبكة): تنبيه مخفَّف (مرّة/60 ثانية) — البيانات والأقسام تبقى متاحة من السايدبار
+      let lastMapErrorAt = 0;
+      map.on("error", (e) => {
+        const msg = e?.error?.message ?? "";
+        if (!/fetch|network|http|upstream|tile|source|style|failed/i.test(msg)) return; // أخطاء الشبكة/المصادر (لا ضجيج حميد)
+        const now = Date.now();
+        if (now - lastMapErrorAt < 60_000 || !navigator.onLine) return; // لافتة الانقطاع تغطّي حالة الأوفلاين
+        lastMapErrorAt = now;
+        toast.error("تعذّر تحميل بعض طبقات الخريطة — تُعاد المحاولة تلقائياً");
+      });
+
       // صورة شفّافة بديلة لأي صورة مفقودة (تمنع المربّعات السوداء وتُسكت التحذيرات)
       map.on("styleimagemissing", (e) => {
         const m = mapRef.current;
@@ -433,138 +655,120 @@ export default function InvestmentMap() {
         m.on("click", (e) => {
           const ov = overlayRef.current;
           if (!ov) return;
+          // استوديو الرسم (م7.1): الوضعيات تستهلك النقر قبل التحديد/النوافذ
+          const dm = drawModeRef.current;
+          if (dm === "dimensions") {
+            setMkSel(null);
+            setDimAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+            return;
+          }
+          if (dm === "annotate") {
+            setMkSel(null);
+            setAnnAnchor({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+            return;
+          }
+          if (dm === "edit") {
+            const picked = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 6, layerIds: ["parcels"] });
+            const props = picked?.object?.properties as ParcelProps | undefined;
+            if (props?.ref_id) editStartRef.current?.(props);
+            return;
+          }
+          if (dm !== "off") return; // أثناء الإنشاء: terra-draw يتكفّل بالنقر
+          // نقر تسمية محرَّرة ← تحرير/حذف (م7.3)
+          const annLayers = ANN_CLICK_LAYERS.filter((l) => m.getLayer(l));
+          if (annLayers.length && showAnnotationsRef.current) {
+            const hit = m.queryRenderedFeatures(e.point, { layers: annLayers })[0];
+            const ap = hit?.properties as { id?: string; name?: string; element_type?: string } | undefined;
+            if (ap?.id) {
+              setMkSel(null);
+              setAnnEdit({ id: ap.id, name: ap.name ?? "", type: ap.element_type ?? "landmark" });
+              return;
+            }
+          }
           const mk = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 10, layerIds: ["parcel-markers"] });
           const mkObj = mk?.object as
             | { ref_id?: string; position?: [number, number]; label?: string; kind?: string; entity_id?: string }
             | undefined;
           if (mkObj?.ref_id) {
-            const refId = mkObj.ref_id;
-            popupRef.current?.remove();
-            // بطاقة عمودية أنيقة بهوية النظام: العنوان أعلى، ثم «عرض» ثم «الموقع»
-            const el = document.createElement("div");
-            el.style.fontFamily = "var(--font-readex), system-ui, sans-serif";
-            el.className =
-              "flex w-48 flex-col gap-2 rounded-2xl border border-border/70 bg-gradient-to-b from-card to-card/90 p-2.5 text-foreground shadow-2xl shadow-primary/25 ring-1 ring-inset ring-foreground/10 backdrop-blur-md";
-            const titleEl = document.createElement("div");
-            titleEl.className = "truncate border-b border-border/60 px-1 pb-2 text-center text-[13px] font-bold tracking-tight text-foreground";
-            titleEl.textContent = mkObj.label || "قطعة";
-            titleEl.title = mkObj.label ?? "";
-            el.appendChild(titleEl);
-            const EYE =
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>';
-            const NAV =
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>';
-            const mkBtn = (text: string, icon: string, cls: string, fn: () => void): HTMLButtonElement => {
-              const b = document.createElement("button");
-              b.type = "button";
-              b.className =
-                "flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95 " + cls;
-              b.innerHTML = icon + "<span>" + text + "</span>";
-              b.addEventListener("click", () => {
-                fn();
-                popupRef.current?.remove();
-              });
-              return b;
-            };
-            el.appendChild(
-              mkBtn("عرض", EYE, "bg-primary/15 text-primary ring-1 ring-inset ring-primary/30 hover:bg-primary/25", () =>
-                requestOpenParcelDetail({ kind: (mkObj.kind as ParcelKind) || "assumed", id: mkObj.entity_id || "" }),
-              ),
-            );
-            el.appendChild(
-              mkBtn("الموقع", NAV, "bg-secondary/60 text-foreground ring-1 ring-inset ring-border/50 hover:bg-accent", () => requestFlyTo(refId)),
-            );
-            // تنبثق بجانب القرص (يمين/يسار حسب الموضع) فلا تتداخل
-            const onRight = e.point.x > m.getContainer().clientWidth / 2;
-            popupRef.current = new maplibregl.Popup({
-              className: "parcel-popup",
-              closeButton: false,
-              anchor: onRight ? "right" : "left",
-              offset: onRight ? [-18, -42] : [18, -42],
-              maxWidth: "none",
-            })
-              .setLngLat(mkObj.position ?? e.lngLat)
-              .setDOMContent(el)
-              .addTo(m);
+            // م7.8: بطاقة هولوكرامية بخط ربط تتبع الإشارة حيّاً — فوق كل الطبقات (بدل Popup التي كانت تختفي خلف الإشارات)
+            setMkSel({
+              refId: mkObj.ref_id,
+              label: mkObj.label ?? null,
+              kind: (mkObj.kind as ParcelKind) || "assumed",
+              entityId: mkObj.entity_id ?? "",
+              lngLat: (mkObj.position ?? [e.lngLat.lng, e.lngLat.lat]) as [number, number],
+            });
             return;
           }
           const info = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 5, layerIds: ["parcels"] });
           const ref = info?.object?.properties?.ref_id;
           setSelectedId(typeof ref === "string" ? ref : null);
-          popupRef.current?.remove();
+          setMkSel(null);
         });
 
-        // أداة الرسم (terra-draw) — قطعة مفترضة + استنتاج مكاني
+        // استوديو الرسم (terra-draw · م7.1): مضلّع · مستطيل · دائرة · تحرير (select) — بنمط بنفسجي موحّد
+        const SHAPE_STYLE = {
+          fillColor: "#8B6FB0",
+          fillOpacity: 0.25,
+          outlineColor: "#8B6FB0",
+          outlineWidth: 2,
+        } as const;
         const draw = new TerraDraw({
           adapter: new TerraDrawMapLibreGLAdapter({ map: m }),
           modes: [
             new TerraDrawPolygonMode({
+              styles: { ...SHAPE_STYLE, closingPointColor: "#C7A24E", closingPointWidth: 5 },
+              snapping: { toCoordinate: true }, // جذب لرؤوس القطع المجاورة — رسم متلاصق نظيف
+            }),
+            new TerraDrawRectangleMode({ styles: SHAPE_STYLE }),
+            new TerraDrawCircleMode({ styles: SHAPE_STYLE }),
+            new TerraDrawSelectMode({
               styles: {
-                fillColor: "#8B6FB0",
-                fillOpacity: 0.25,
-                outlineColor: "#8B6FB0",
-                outlineWidth: 2,
-                closingPointColor: "#C7A24E",
-                closingPointWidth: 5,
+                selectedPolygonColor: "#C7A24E",
+                selectedPolygonFillOpacity: 0.18,
+                selectedPolygonOutlineColor: "#C7A24E",
+                selectedPolygonOutlineWidth: 2.5,
+                selectionPointColor: "#C7A24E",
+                selectionPointWidth: 6,
+                selectionPointOutlineColor: "#0b1220",
+                selectionPointOutlineWidth: 1.5,
+                midPointColor: "#94afd1",
+                midPointWidth: 4,
+              },
+              flags: {
+                polygon: {
+                  feature: { draggable: true, coordinates: { draggable: true, deletable: true, midpoints: true } },
+                },
               },
             }),
           ],
         });
         draw.start();
+        // مساحة حيّة توضيحية أثناء الرسم/التحرير (المساحة الرسمية من البيانات)
+        draw.on("change", () => {
+          try {
+            const f = draw.getSnapshot().find((sf) => sf.geometry?.type === "Polygon");
+            setLiveArea(f ? turfArea(f as unknown as Feature<Polygon>) : null);
+          } catch {
+            // تجاهل ومضات إعادة التحميل
+          }
+        });
         draw.on("finish", (id) => {
+          if (drawModeRef.current === "edit") return; // التحرير يُحفَظ صراحةً بزرّ «حفظ الحدود»
           const d = drawRef.current;
-          const data = dataRef.current;
-          if (!d || !data) return;
+          if (!d) return;
           const feat = d.getSnapshot().find((f) => f.id === id);
           if (!feat || feat.geometry?.type !== "Polygon") return;
-          const polygon = feat as unknown as Feature<Polygon>;
-          const target = linkTargetRef.current;
-          linkTargetRef.current = null;
-          void (async () => {
-            const supabase = createClient();
-            let createdId: string | null = null;
-            let failed = false;
-            if (target) {
-              // ربط الهندسة بقطعة موجودة (فرصة/رخصة)
-              const { error } = await supabase.rpc("create_parcel_geometry", {
-                p_geom: polygon.geometry,
-                p_parcel_no: target.parcel_no,
-                p_muqataa_no: target.muqataa_no,
-              });
-              failed = Boolean(error);
-            } else {
-              // قطعة مفترضة جديدة + استنتاج مكاني
-              const district = inferName(polygon, data.districts);
-              const subdistrict = inferName(polygon, data.subdistricts);
-              const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
-                p_geom: polygon.geometry,
-                p_district: district,
-                p_subdistrict: subdistrict,
-              });
-              failed = Boolean(error);
-              if (typeof newId === "string") createdId = newId;
-            }
-            d.clear();
-            d.setMode("static");
-            setDrawing(false);
-            if (failed) {
-              toast.error("تعذّر حفظ الحدود");
-              return;
-            }
-            toast.success(target ? `رُبطت الحدود بـ${target.label ?? "القطعة"}` : "أُنشئت قطعة مفترضة");
-            void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
-            void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
-            void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
-            void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
-            // قطعة مفترضة جديدة ← انبثاق نموذج بياناتها (اسم + باقي الحقول)
-            if (createdId) requestOpenParcelForm(createdId);
-          })();
+          void persistRef.current?.(feat as unknown as Feature<Polygon>);
         });
         drawRef.current = draw;
+        setMapReady(true);
 
-        // مقاييس م2.3 + إظهار الحدود (بعد جهوز المصادر)
+        // مقاييس م2.3 + إظهار الحدود + التسميات المحرَّرة (بعد جهوز المصادر)
         applyStats(m, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
         applyVisibility(m, showBoundariesRef.current);
+        applyAnnotations(m, annFcRef.current, showAnnotationsRef.current);
+        applySpacetime(m, dataRef.current?.gov ?? null);
 
         m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
         m.once("moveend", lockView);
@@ -579,21 +783,28 @@ export default function InvestmentMap() {
         /* تجاهل */
       }
       drawRef.current = null;
-      popupRef.current?.remove();
-      popupRef.current = null;
       map?.remove();
       mapRef.current = null;
       overlayRef.current = null;
     };
   }, []);
 
-  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار/الحالات (انعكاس لحظي)
+  // تحديث طبقات القطع عند تغيّر البيانات/التحديد/الإظهار/الحالات/الحي/التحرير (انعكاس لحظي)
   useEffect(() => {
     const vis = showParcels
-      ? { ...fc, features: fc.features.filter((f) => !hiddenStates.has(String(f.properties?.state ?? ""))) }
+      ? {
+          ...fc,
+          features: fc.features.filter((f) => {
+            const p = f.properties ?? {};
+            if (hiddenStates.has(String(p.state ?? ""))) return false;
+            if (nbhFilter && p.neighborhood !== nbhFilter) return false;
+            if (editing && p.ref_id === editing.refId) return false; // نسخته تُحرَّر في terra-draw
+            return true;
+          }),
+        }
       : null;
     overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
-  }, [fc, selectedId, showParcels, hiddenStates]);
+  }, [fc, selectedId, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {
@@ -605,16 +816,29 @@ export default function InvestmentMap() {
     applyVisibility(mapRef.current, showBoundaries);
   }, [showBoundaries]);
 
-  // الانتقال لقطعة من السايدبار (§هـ.2): flyTo + تحديد — بالمعرّف أو رقم القطعة
+  // إعدادات البدء (§هـ.5 العرض): أساس الخريطة الافتراضي + الطبقات الظاهرة — مرّة عند جهوز الخريطة والإعدادات معاً
+  useEffect(() => {
+    const s = settingsData?.settings;
+    if (!s || !mapReady || startApplied.current) return;
+    startApplied.current = true;
+    setShowBoundaries(s.start_layers.boundaries !== false);
+    setShowParcels(s.start_layers.parcels !== false);
+    const base = s.default_base as BaseStyle;
+    if (base && base !== baseRef.current && ["dark", "light", "satellite"].includes(base)) void switchBase(base);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- switchBase مستقر منطقياً (refs)
+  }, [settingsData, mapReady]);
+
+  // الانتقال لقطعة (§هـ.2): طيران فقط — الشارة تنبثق حصراً عند النقر المباشر على القطعة (م7.6)
   useEffect(() => {
     return onFlyTo((refId) => {
       const m = mapRef.current;
       const f = fcRef.current.features.find(
-        (ft) => ft.properties?.ref_id === refId || (refId !== "" && ft.properties?.parcel_no === refId),
+        (ft) =>
+          ft.properties?.ref_id === refId ||
+          (refId !== "" && (ft.properties?.entity_id === refId || ft.properties?.parcel_no === refId)),
       );
       if (m && f?.geometry) {
-        const ref = f.properties?.ref_id;
-        setSelectedId(typeof ref === "string" ? ref : null);
+        sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
         m.fitBounds(b, { padding: 80, maxZoom: 16, duration: 1000 });
       } else {
@@ -628,6 +852,7 @@ export default function InvestmentMap() {
     return onFlyToCoords(({ lng, lat, label }) => {
       const m = mapRef.current;
       if (!m) return;
+      sfxFly(); // أثر طيران تقني ناعم (م7.9)
       m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400 });
       if (label) toast.info(label);
     });
@@ -639,8 +864,15 @@ export default function InvestmentMap() {
       linkTargetRef.current = target;
       const d = drawRef.current;
       if (d) {
-        d.setMode("polygon");
-        setDrawing(true);
+        try {
+          if (!d.enabled) d.start(); // شفاء ذاتي بعد تبديل القاعدة
+          d.clear();
+          d.setMode("polygon");
+          setEditing(null);
+          setDrawMode("polygon");
+        } catch {
+          toast.error("تعذّر بدء الرسم — أعد المحاولة");
+        }
       }
     });
   }, []);
@@ -649,12 +881,45 @@ export default function InvestmentMap() {
     const map = mapRef.current;
     const data = dataRef.current;
     if (!map || !data || next === baseRef.current) return;
+    const prev = baseRef.current;
     baseRef.current = next;
     setBase(next);
-    map.setStyle(await buildStyle(next, data)); // النمط الجديد يحوي طبقاتنا → فوري
+    let style: StyleSpecification;
+    try {
+      style = await buildStyle(next, data);
+    } catch {
+      baseRef.current = prev; // §ز: فشل الجلب لا يُعلّق الزر على قاعدة لم تُحمَّل
+      setBase(prev);
+      toast.error("تعذّر تحميل قاعدة الخريطة — تحقّق من الاتصال وأعد المحاولة");
+      return;
+    }
+    // إيقاف أداة الرسم **قبل** setStyle: مصادرها ما تزال قائمة فيمرّ unregister بنظافة.
+    // (كان stop داخل idle يرمي بعد مسح المصادر فلا يصل start أبداً — جذر «لا يمكن الرسم بعد التبديل»)
+    const d = drawRef.current;
+    if (drawModeRef.current !== "off") toast.info("أُلغي الرسم الجاري بسبب تبديل قاعدة الخريطة");
+    try {
+      d?.stop();
+    } catch {
+      // يُعاد تشغيلها بعد idle على كل حال
+    }
+    linkTargetRef.current = null;
+    setDrawMode("off");
+    setEditing(null);
+    setLiveArea(null);
+    setMkSel(null);
+    map.setStyle(style); // النمط الجديد يحوي طبقاتنا → فوري
     map.once("idle", () => {
       applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
       applyVisibility(mapRef.current, showBoundariesRef.current);
+      applyAnnotations(mapRef.current, annFcRef.current, showAnnotationsRef.current); // النمط الجديد مسح المصدر
+      applySpacetime(mapRef.current, dataRef.current?.gov ?? null);
+      // إعادة تشغيل أداة الرسم على النمط الجديد — حارس مستقل كي لا يُسقطها أي فشل آخر
+      try {
+        if (d && !d.enabled) d.start();
+        d?.setMode("static");
+      } catch {
+        // تُشفى ذاتياً عند أول دخول للرسم (enterDrawMode يعيد التشغيل)
+      }
     });
   }
 
@@ -665,107 +930,702 @@ export default function InvestmentMap() {
     map.fitBounds(data.bounds, { padding: 48, duration: 1200 });
   }
 
-  function toggleDraw(): void {
-    const draw = drawRef.current;
-    if (!draw) return;
+  // ===== استوديو الرسم (م7.1) =====
+
+  /** خروج كامل من أي وضعية رسم/تحرير (Esc أو زرّ الإلغاء). */
+  function exitDraw(): void {
     try {
-      if (drawing) {
-        draw.setMode("static");
-        draw.clear();
-        linkTargetRef.current = null;
-        setDrawing(false);
-      } else {
-        linkTargetRef.current = null; // رسم قطعة مفترضة جديدة (بلا ربط)
-        draw.setMode("polygon");
-        setDrawing(true);
-      }
+      drawRef.current?.setMode("static");
+      drawRef.current?.clear();
     } catch {
-      // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء وأعد الضبط
-      linkTargetRef.current = null;
-      setDrawing(false);
+      // terra-draw قد تفقد طبقاتها بعد إعادة تحميل النمط/HMR — تجاهل بهدوء
+    }
+    linkTargetRef.current = null;
+    annPendingRef.current = null;
+    setDrawMode("off");
+    setEditing(null);
+    setLiveArea(null);
+    setDimAnchor(null);
+    setAnnAnchor(null);
+  }
+  useEscClose(drawMode !== "off", exitDraw);
+
+  /** تفعيل وضعية رسم — اختيار الوضعية نفسها يلغيها. */
+  function enterDrawMode(m: Exclude<DrawModeId, "off">): void {
+    if (drawMode === m) {
+      exitDraw();
+      return;
+    }
+    const d = drawRef.current;
+    if (!d) return;
+    if (!d.enabled) {
+      // شفاء ذاتي: إن تعطّلت الأداة بعد تبديل قاعدة سابق تُعاد للعمل هنا فوراً
+      try {
+        d.start();
+      } catch {
+        toast.error("تعذّرت تهيئة أداة الرسم — أعد تحميل الصفحة");
+        return;
+      }
+    }
+    try {
+      d.clear();
+      setEditing(null);
+      setLiveArea(null);
+      setDimAnchor(null);
+      setShowLayers(false); // لا تعارض: دخول الرسم يطوي لوحة الطبقات
+      setDrawOpen(true);
+      linkTargetRef.current = null; // الوضعيات اليدوية ترسم قطعة جديدة (الربط يأتي من بطاقات الأقسام)
+      if (m === "dimensions" || m === "edit" || m === "annotate") {
+        d.setMode("static"); // النقر التالي على الخريطة هو المدخل
+        toast.info(
+          m === "dimensions"
+            ? "انقر موقع الشكل على الخريطة ثم أدخل الأبعاد"
+            : m === "annotate"
+              ? "انقر الموقع المراد تسميته على الخريطة"
+              : "انقر قطعة مرسومة لتعديل حدودها",
+        );
+      } else if (m === "square") {
+        d.setMode("rectangle"); // يُضبَط مربّعاً عند الإنهاء
+      } else {
+        d.setMode(m);
+      }
+      setDrawMode(m);
+    } catch {
+      exitDraw();
+      toast.error("تعذّر تفعيل وضعية الرسم — حاول مجدداً");
     }
   }
+
+  // حفظ شكل منتهٍ (كل وضعيات الإنشاء + «بأبعاد») — يحترم هدف الربط من بطاقات الأقسام.
+  const persistRef = useRef<((polygon: Feature<Polygon>) => Promise<void>) | null>(null);
+  persistRef.current = async (raw) => {
+    // مضلّع تسمية منطقة (م7.3) — يُحفَظ عنصراً محرَّراً لا قطعة
+    if (drawModeRef.current === "annotate" && annPendingRef.current) {
+      const meta = annPendingRef.current;
+      annPendingRef.current = null;
+      const res = await createMapElement(meta.name, meta.type, raw.geometry);
+      if (!res.ok) {
+        annPendingRef.current = meta; // الاسم يبقى — أعد إغلاق المضلّع للمحاولة مجدداً (§ز: لا فقدان مدخلات)
+        toast.error("تعذّر حفظ التسمية", { description: res.error });
+        return;
+      }
+      exitDraw();
+      toast.success(`سُمِّيت المنطقة «${meta.name}» — تظهر بالخريطة والبحث`);
+      void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+      return;
+    }
+    const data = dataRef.current;
+    if (!data) return;
+    const polygon = drawModeRef.current === "square" ? regularizeSquare(raw) : raw;
+    const target = linkTargetRef.current;
+    linkTargetRef.current = null;
+    const supabase = createClient();
+    let createdId: string | null = null;
+    let errMsg: string | null = null;
+    if (target) {
+      // ربط الهندسة بقطعة موجودة (فرصة/رخصة)
+      const { error } = await supabase.rpc("create_parcel_geometry", {
+        p_geom: polygon.geometry,
+        p_parcel_no: target.parcel_no,
+        p_muqataa_no: target.muqataa_no,
+      });
+      errMsg = error?.message ?? null;
+    } else {
+      // قطعة مفترضة جديدة + استنتاج مكاني
+      const district = inferName(polygon, data.districts);
+      const subdistrict = inferName(polygon, data.subdistricts);
+      const { data: newId, error } = await supabase.rpc("create_assumed_parcel", {
+        p_geom: polygon.geometry,
+        p_district: district,
+        p_subdistrict: subdistrict,
+      });
+      errMsg = error?.message ?? null;
+      if (typeof newId === "string") createdId = newId;
+    }
+    if (errMsg) {
+      linkTargetRef.current = target; // إبقاء هدف الربط والشكل المرسوم — أعد المحاولة أو Esc (§ز: لا فقدان عمل)
+      toast.error("تعذّر حفظ الحدود", { description: errMsg });
+      return;
+    }
+    exitDraw();
+    toast.success(target ? `رُبطت الحدود بـ${target.label ?? "القطعة"}` : "أُنشئت قطعة مفترضة");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["counts"] });
+    if (createdId) requestOpenParcelForm(createdId);
+  };
+
+  /** «بأبعاد»: بناء الشكل المضبوط حول الموقع المنقور ثم الحفظ المعتاد. */
+  function onDimensionSubmit(shape: DimShape, a: number, b: number): void {
+    const anchor = dimAnchor;
+    if (!anchor) return;
+    setDimAnchor(null);
+    const polygon =
+      shape === "circle"
+        ? (turfCircle([anchor.lng, anchor.lat], a / 1000, { steps: 64, units: "kilometers" }) as Feature<Polygon>)
+        : buildRectPolygon(anchor.lng, anchor.lat, a, shape === "square" ? a : b);
+    void persistRef.current?.(polygon);
+  }
+
+  // «تحرير»: تحميل هندسة القطعة المنقورة في terra-draw (وضع select: سحب رؤوس/نقاط وسطى/تحريك).
+  const editStartRef = useRef<((props: ParcelProps) => void) | null>(null);
+  editStartRef.current = (props) => {
+    const d = drawRef.current;
+    if (!d) return;
+    const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === props.ref_id);
+    const geom = f?.geometry;
+    if (!geom) return;
+    const polyGeom: Polygon | null =
+      geom.type === "Polygon"
+        ? geom
+        : geom.type === "MultiPolygon"
+          ? { type: "Polygon", coordinates: (geom as MultiPolygon).coordinates[0] ?? [] }
+          : null;
+    if (!polyGeom || !polyGeom.coordinates.length) {
+      toast.error("هندسة غير قابلة للتحرير");
+      return;
+    }
+    try {
+      d.clear();
+      d.addFeatures([{ type: "Feature", properties: { mode: "polygon" }, geometry: polyGeom } as never]);
+      d.setMode("select");
+      setSelectedId(null);
+      setMkSel(null);
+      setEditing({ kind: props.kind, refId: props.ref_id, label: props.label || props.parcel_no || "قطعة" });
+      toast.info("اسحب الرؤوس أو النقاط الوسطى لتعديل الحدود، ثم «حفظ الحدود»");
+    } catch {
+      toast.error("تعذّر فتح التحرير");
+    }
+  };
+
+  /** حفظ الحدود المعدَّلة في القاعدة (RPC update_parcel_geom) — انعكاس فوري في كل المواضع. */
+  async function saveEdit(): Promise<void> {
+    const d = drawRef.current;
+    const ed = editing;
+    if (!d || !ed || savingEdit) return;
+    const f = d.getSnapshot().find((sf) => sf.geometry?.type === "Polygon");
+    if (!f) {
+      toast.error("لا شكل للحفظ");
+      return;
+    }
+    setSavingEdit(true);
+    const res = await updateParcelGeometry(ed.kind, ed.refId, f.geometry as Geometry);
+    setSavingEdit(false);
+    if (!res.ok) {
+      toast.error(`تعذّر حفظ الحدود — ${res.error}`);
+      return;
+    }
+    exitDraw();
+    toast.success("حُدِّثت حدود القطعة");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+    void qcRef.current.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
+  }
+
+  // ===== التسميات المحرَّرة (م7.3) =====
+
+  async function onAnnotatePoint(name: string, type: string): Promise<void> {
+    const anchor = annAnchor;
+    if (!anchor || annSaving) return;
+    setAnnSaving(true);
+    const res = await createMapElement(name, type, { type: "Point", coordinates: [anchor.lng, anchor.lat] });
+    setAnnSaving(false);
+    if (!res.ok) {
+      toast.error("تعذّر حفظ التسمية", { description: res.error }); // الحوار والموقع يبقيان — أعد المحاولة (§ز)
+      return;
+    }
+    exitDraw();
+    toast.success(`أُضيفت التسمية «${name}» — تظهر بالخريطة والبحث`);
+    void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+  }
+
+  function onAnnotateArea(name: string, type: string): void {
+    const d = drawRef.current;
+    if (!d) return;
+    annPendingRef.current = { name: name.trim(), type };
+    setAnnAnchor(null);
+    try {
+      d.setMode("polygon"); // drawMode يبقى "annotate" — الحفظ يفرّق
+      toast.info(`ارسم حدود «${name.trim()}» وأغلق المضلّع`);
+    } catch {
+      exitDraw();
+    }
+  }
+
+  async function onAnnotateSave(name: string, type: string): Promise<void> {
+    const ed = annEdit;
+    if (!ed || annSaving) return;
+    setAnnSaving(true);
+    const res = await renameMapElement(ed.id, name, type);
+    setAnnSaving(false);
+    if (!res.ok) {
+      toast.error(`تعذّر الحفظ — ${res.error}`);
+      return;
+    }
+    setAnnEdit(null);
+    toast.success("حُدِّثت التسمية");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+  }
+
+  async function onAnnotateDelete(): Promise<void> {
+    const ed = annEdit;
+    if (!ed || annSaving) return;
+    if (!window.confirm(`حذف التسمية «${ed.name}»؟`)) return;
+    setAnnSaving(true);
+    const res = await deleteMapElement(ed.id);
+    setAnnSaving(false);
+    if (!res.ok) {
+      toast.error("تعذّر الحذف", { description: res.error });
+      return;
+    }
+    setAnnEdit(null);
+    toast.success("حُذِفت التسمية");
+    void qcRef.current.invalidateQueries({ queryKey: ["map_elements_geo"] });
+  }
+
+  // انعكاس التسميات لحظياً (بيانات/إظهار/قاعدة)
+  useEffect(() => {
+    if (!mapReady) return;
+    applyAnnotations(mapRef.current, annFc, showAnnotations);
+  }, [annFc, showAnnotations, mapReady, base]);
+
+  // ===== بطاقة القطعة المحدَّدة (م7.4) =====
+  const selectedProps = useMemo<ParcelProps | null>(() => {
+    if (!selectedId) return null;
+    const f = fc.features.find((ft) => ft.properties?.ref_id === selectedId);
+    return (f?.properties as ParcelProps | undefined) ?? null;
+  }, [fc, selectedId]);
+
+  const selectedInfo = useMemo<SelectedEntityInfo>(() => {
+    const p = selectedProps;
+    if (!p) return { sector: null, area: null, investor: null };
+    if (p.kind === "opportunity") {
+      const o = (opps.data ?? []).find((x) => String(x.record_id) === p.entity_id);
+      return { sector: o?.sector ?? null, area: o?.area_total_m2 ?? null, investor: null };
+    }
+    if (p.kind === "license") {
+      const l = (lics.data ?? []).find((x) => String(x.record_id) === p.entity_id);
+      return { sector: l?.sector ?? null, area: l?.area_total_m2 ?? null, investor: l?.investor_name ?? null };
+    }
+    const a = (assumed.data ?? []).find((x) => x.id === p.entity_id);
+    return { sector: a?.sector ?? null, area: a?.area_m2 ?? null, investor: null };
+  }, [selectedProps, opps.data, lics.data, assumed.data]);
+
+  // تتبّع مرساة الشارة: مركز القطعة ← إسقاط شاشة يتحدّث مع كل حركة (rAF — سلس بلا إجهاد)
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !selectedProps) {
+      setCalloutPx(null);
+      calloutAnchorRef.current = null;
+      return;
+    }
+    const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === selectedProps.ref_id);
+    if (!f?.geometry) {
+      setCalloutPx(null);
+      return;
+    }
+    calloutAnchorRef.current = centroid(f as Feature).geometry.coordinates as [number, number];
+    let raf = 0;
+    const update = (): void => {
+      raf = 0;
+      const mm = mapRef.current;
+      const a = calloutAnchorRef.current;
+      if (!mm || !a) return;
+      const p = mm.project(a as [number, number]);
+      const el = mm.getContainer();
+      setCalloutPx({ x: p.x, y: p.y, w: el.clientWidth, h: el.clientHeight });
+    };
+    const onMove = (): void => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    m.on("move", onMove);
+    m.on("resize", onMove);
+    return () => {
+      m.off("move", onMove);
+      m.off("resize", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [selectedProps]);
+
+  // تتبّع بطاقة الإشارة (م7.8): إسقاط شاشة حيّ لموقع الإشارة مع كل حركة/تكبير — كالشارة تماماً
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !mkSel) {
+      setMkPx(null);
+      return;
+    }
+    let raf = 0;
+    const update = (): void => {
+      raf = 0;
+      const mm = mapRef.current;
+      if (!mm) return;
+      const p = mm.project(mkSel.lngLat);
+      const el = mm.getContainer();
+      setMkPx({ x: p.x, y: p.y, w: el.clientWidth, h: el.clientHeight });
+    };
+    const onMove = (): void => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    m.on("move", onMove);
+    m.on("resize", onMove);
+    return () => {
+      m.off("move", onMove);
+      m.off("resize", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mkSel]);
+
+  function onCardEditGeometry(): void {
+    const p = selectedProps;
+    if (!p) return;
+    if (drawModeRef.current !== "edit") enterDrawMode("edit");
+    editStartRef.current?.(p);
+  }
+
+  // حذف الرسمة من الخريطة (فكّ الارتباط §هـ.4) — بيانات القطعة لا تُمسّ
+  async function onCardDeleteGeometry(): Promise<void> {
+    const p = selectedProps;
+    if (!p) return;
+    const msg =
+      p.kind === "assumed"
+        ? `إزالة حدود «${p.label}» من الخريطة؟ يبقى سجلّها محفوظاً في «تصميم فرصة».`
+        : `إزالة رسمة «${p.label}» من الخريطة؟ بيانات القطعة تبقى محفوظة في قسمها.`;
+    if (!window.confirm(msg)) return;
+    const res = await deleteParcelGeometry(p.kind, p.ref_id);
+    if (!res.ok) {
+      toast.error(`تعذّرت إزالة الرسمة: ${res.error}`);
+      return;
+    }
+    setSelectedId(null);
+    setMkSel(null);
+    void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
+    void queryClient.invalidateQueries({ queryKey: ["table", "assumed_parcels"] });
+    void queryClient.invalidateQueries({ queryKey: ["table", "parcel_geometry"] });
+    void queryClient.invalidateQueries({ queryKey: ["counts"] });
+    toast.success("أُزيلت الرسمة من الخريطة — البيانات محفوظة");
+  }
+
+  const { isViewer } = useRole(); // الثاني: لا رسم ولا تعديل/حذف حدود (م8.1)
+  // أحياء فلترة الظهور: القطع المرسومة ∪ القاموس الموحّد (م7.7 — نفس القيم في كل منسدلات النظام)
+  const { data: fieldOpts } = useFieldOptions();
+  const neighborhoodOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...fc.features
+            .map((f) => (typeof f.properties?.neighborhood === "string" ? f.properties.neighborhood : null))
+            .filter((v): v is string => Boolean(v)),
+          ...(fieldOpts?.neighborhood ?? []),
+        ]),
+      ).sort(),
+    [fc, fieldOpts],
+  );
 
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* مبدّل القاعدة (§هـ.4) */}
-      <div className="absolute end-3 top-16 z-10 flex gap-1 rounded-md border border-border bg-card/85 p-1 backdrop-blur">
-        {BASES.map((b) => (
+      {/* عمود الأدوات العائمة: القاعدة · العودة · الطبقات ← ثم استوديو الرسم — فوق الجارت دائماً (z-20) */}
+      <div className="absolute end-3 top-16 z-20 flex flex-col items-end gap-2">
+        <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
+          {BASES.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => void switchBase(b.id)}
+              className={cn(
+                "rounded-xl px-2.5 py-2 text-[11px] font-semibold transition active:scale-95",
+                base === b.id
+                  ? "bg-primary text-primary-foreground shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)]"
+                  : "text-foreground/75 hover:bg-white/8 hover:text-foreground",
+              )}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           <button
-            key={b.id}
             type="button"
-            onClick={() => void switchBase(b.id)}
+            onClick={resetView}
+            title="إعادة العرض إلى كامل نينوى"
+            aria-label="كامل نينوى"
+            className="grid size-10 place-items-center rounded-xl text-foreground/80 transition hover:bg-white/8 hover:text-foreground active:scale-95"
+          >
+            <Maximize2 className="size-4 text-primary/80" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setShowLayers((v) => {
+                const next = !v;
+                if (next) setDrawOpen(false); // فتح الطبقات يطوي استوديو الرسم (لا تعارض)
+                return next;
+              })
+            }
+            title="الطبقات وتحديد الظهور"
+            aria-label="الطبقات"
+            aria-expanded={showLayers}
             className={cn(
-              "rounded px-2 py-1 text-xs transition",
-              base === b.id ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+              "flex size-10 flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95",
+              showLayers
+                ? "bg-primary/20 text-primary shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)] ring-1 ring-inset ring-primary/40"
+                : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
             )}
           >
-            {b.label}
+            <Layers style={{ width: 15, height: 15 }} aria-hidden />
+            <ChevronDown style={{ width: 10, height: 10 }} className={cn("transition-transform", showLayers && "rotate-180")} aria-hidden />
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* العودة لكامل نينوى (§هـ.4) — يسار الخريطة، تحت مبدّل القاعدة */}
-      <button
-        type="button"
-        onClick={resetView}
-        title="إعادة العرض إلى كامل نينوى"
-        className="absolute end-3 top-28 z-10 inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/85 px-2.5 py-1.5 text-xs font-medium text-foreground/90 shadow-[0_0_18px_-6px_rgba(148,175,209,0.55)] ring-1 ring-inset ring-foreground/5 backdrop-blur transition hover:bg-accent hover:text-foreground"
-      >
-        <Maximize2 className="size-3.5 text-primary/70" aria-hidden />
-        كامل نينوى
-      </button>
-
-      {/* أداة الرسم (م2.4) — قطعة مفترضة، خريطة فقط (استثناء الوصول المزدوج §هـ.4) */}
-      <button
-        type="button"
-        onClick={toggleDraw}
-        title={drawing ? "إلغاء الرسم" : "رسم قطعة مفترضة"}
-        className={cn(
-          "absolute end-3 top-40 z-10 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium backdrop-blur transition",
-          drawing
-            ? "border-state-assumed/60 bg-state-assumed/20 text-state-assumed shadow-[0_0_18px_-6px_rgba(139,111,176,0.8)]"
-            : "border-border/70 bg-card/85 text-foreground/90 ring-1 ring-inset ring-foreground/5 hover:bg-accent hover:text-foreground",
-        )}
-      >
-        <PenTool className="size-3.5" aria-hidden /> {drawing ? "إلغاء الرسم" : "رسم قطعة"}
-      </button>
-
-      {/* تبديل الطبقات (م2.4) */}
-      <div className="absolute end-3 top-52 z-10 flex flex-col gap-1 rounded-lg border border-border/70 bg-card/85 p-2 text-xs text-foreground/90 backdrop-blur">
-        <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-3.5 accent-primary" />
-          الحدود
-        </label>
-        <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-3.5 accent-primary" />
-          القطع
-        </label>
-        {showParcels ? (
-          <div className="mt-0.5 flex flex-col gap-1 border-t border-border/50 ps-1 pt-1.5">
-            {STATE_TOGGLES.map((st) => (
-              <label key={st.value} className="inline-flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={!hiddenStates.has(st.value)}
-                  onChange={() =>
-                    setHiddenStates((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(st.value)) next.delete(st.value);
-                      else next.add(st.value);
-                      return next;
-                    })
-                  }
-                  className={`size-3.5 ${st.accent}`}
-                />
-                {st.label}
+        {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس · الحي — انسدال بسلاسة استوديو الرسم (م7.6) */}
+        <AnimatePresence initial={false}>
+          {showLayers ? (
+            <motion.div
+              key="layers-panel"
+              initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+              animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+              exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className={cn("flex w-48 flex-col gap-1.5 rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
+            >
+              <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                <input type="checkbox" checked={showBoundaries} onChange={(e) => setShowBoundaries(e.target.checked)} className="size-4 accent-primary" />
+                الحدود الإدارية
               </label>
-            ))}
-          </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                <input type="checkbox" checked={showAnnotations} onChange={(e) => setShowAnnotations(e.target.checked)} className="size-4 accent-primary" />
+                التسميات المحرَّرة
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                <input type="checkbox" checked={showParcels} onChange={(e) => setShowParcels(e.target.checked)} className="size-4 accent-primary" />
+                القطع
+              </label>
+              {showParcels ? (
+                <>
+                  <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+                    {STATE_TOGGLES.map((st) => (
+                      <label key={st.value} className="inline-flex cursor-pointer items-center gap-2 py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={!hiddenStates.has(st.value)}
+                          onChange={() =>
+                            setHiddenStates((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(st.value)) next.delete(st.value);
+                              else next.add(st.value);
+                              return next;
+                            })
+                          }
+                          className={`size-4 ${st.accent}`}
+                        />
+                        {st.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="border-t border-border/50 pt-1.5">
+                    {/* م7.9: قائمة أحياء مدمجة قابلة للتمرير — واضحة دائماً، لا منسدلة منبثقة (حُلّت علّة عدم الظهور) */}
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground">حسب الحي</span>
+                      {nbhFilter ? (
+                        <span className="max-w-24 truncate rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary ring-1 ring-inset ring-primary/40" title={nbhFilter}>
+                          {nbhFilter}
+                        </span>
+                      ) : null}
+                    </div>
+                    <input
+                      value={nbhQuery}
+                      onChange={(e) => setNbhQuery(e.target.value)}
+                      placeholder="ابحث عن حي…"
+                      className="mb-1 w-full rounded-lg border border-input bg-background/60 px-2 py-1 text-[11px] outline-none transition focus:ring-2 focus:ring-ring"
+                    />
+                    <div className="scroll-slim max-h-36 space-y-0.5 overflow-y-auto pe-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setNbhFilter("")}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-lg px-2 py-1 text-right text-[11px] transition",
+                          !nbhFilter ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
+                        )}
+                      >
+                        كل الأحياء
+                      </button>
+                      {neighborhoodOptions
+                        .filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim()))
+                        .map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setNbhFilter(nbhFilter === n ? "" : n)}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1 text-right text-[11px] transition",
+                              nbhFilter === n ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
+                            )}
+                          >
+                            <span className="truncate" title={n}>{n}</span>
+                            {nbhFilter === n ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_6px_1px_rgba(148,175,209,0.9)]" /> : null}
+                          </button>
+                        ))}
+                      {neighborhoodOptions.length === 0 ? (
+                        <p className="px-2 py-2 text-[10px] text-muted-foreground">لا أحياء معرّفة بعد — تُضاف من نوافذ القطع</p>
+                      ) : neighborhoodOptions.filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim())).length === 0 ? (
+                        <p className="px-2 py-2 text-[10px] text-muted-foreground">لا تطابق</p>
+                      ) : null}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+              {hiddenStates.size > 0 || nbhFilter || !showBoundaries || !showParcels || !showAnnotations ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHiddenStates(new Set());
+                    setNbhFilter("");
+                    setShowBoundaries(true);
+                    setShowParcels(true);
+                    setShowAnnotations(true);
+                  }}
+                  className="mt-0.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-border/50 py-1.5 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                >
+                  <FilterX className="size-3.5" /> إظهار الكل
+                </button>
+              ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        {/* استوديو الرسم (م7.1/7.6) — للمدير فقط (الرسم محظور على المستخدم الثاني · م8.1) */}
+        {!isViewer ? (
+          <DrawDock
+            open={drawOpen}
+            onToggle={() =>
+              setDrawOpen((v) => {
+                const next = !v;
+                if (next) setShowLayers(false); // فتح الاستوديو يطوي لوحة الطبقات
+                return next;
+              })
+            }
+            mode={drawMode}
+            onMode={enterDrawMode}
+            liveAreaM2={drawMode !== "off" ? liveArea : null}
+            onCancel={exitDraw}
+          />
         ) : null}
       </div>
+
+      {/* الجارت الهولوكرامي (م7.6) — ينزاح بأناقة عند انشغال الأدوات العائمة (طبقات/رسم) فلا تداخل */}
+      <HoloStatsChart hidden={showLayers || drawOpen || drawMode !== "off"} />
+
+      {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
+      {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
+
+      {/* شارة القطعة (م7.6) — تنبثق بجانب القطعة المنقورة بخط رشيق يتبعها مع الزوم/التنقّل */}
+      <AnimatePresence>
+        {selectedProps && calloutPx && drawMode === "off" ? (
+          <SelectedParcelCard
+            key={selectedProps.ref_id}
+            props={selectedProps}
+            info={selectedInfo}
+            anchor={{ x: calloutPx.x, y: calloutPx.y }}
+            container={{ w: calloutPx.w, h: calloutPx.h }}
+            onView={() => {
+              // مطابق حرفياً لزرّ «عرض» في بطاقة إشارة الخريطة (نافذة القطعة الموحَّدة الكاملة)
+              if (!selectedProps.entity_id) {
+                toast.error("لا كيان بياني مرتبط بهذه الرسمة بعد", { description: "اربطها من بطاقة قسمها أو احذف الرسمة" });
+                return;
+              }
+              requestOpenParcelDetail({ kind: (selectedProps.kind as ParcelKind) || "assumed", id: selectedProps.entity_id });
+              setSelectedId(null);
+            }}
+            onEditGeometry={onCardEditGeometry}
+            onDeleteGeometry={() => void onCardDeleteGeometry()}
+            onClose={() => setSelectedId(null)}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      {/* بطاقة إشارة القطعة (م7.8) — هولوكرامية بخط ربط، فوق كل الإشارات، تتبع الإشارة حيّاً */}
+      <AnimatePresence>
+        {mkSel && mkPx && drawMode === "off" ? (
+          <MarkerCallout
+            key={mkSel.refId}
+            label={mkSel.label}
+            anchor={{ x: mkPx.x, y: mkPx.y }}
+            container={{ w: mkPx.w, h: mkPx.h }}
+            onView={() => {
+              if (!mkSel.entityId) {
+                toast.error("لا كيان بياني مرتبط بهذه الرسمة بعد", { description: "اربطها من بطاقة قسمها أو احذف الرسمة من شارة القطعة" });
+                return;
+              }
+              requestOpenParcelDetail({ kind: mkSel.kind, id: mkSel.entityId });
+              setMkSel(null);
+            }}
+            onLocate={() => {
+              requestFlyTo(mkSel.refId);
+              setMkSel(null);
+            }}
+            onClose={() => setMkSel(null)}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      {/* شريط حفظ تحرير الحدود (م7.6) — وسط أسفل الخريطة، بمتناول المستخدم */}
+      <AnimatePresence>
+        {editing ? (
+          <motion.div
+            initial={{ y: 28, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 28, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="pointer-events-none absolute inset-x-0 bottom-7 z-20 flex justify-center"
+          >
+            <div className={cn("pointer-events-auto flex items-center gap-2 rounded-2xl px-3 py-2", GLASS)}>
+              <span className="max-w-44 truncate text-[11px] text-muted-foreground" title={editing.label}>
+                تحرير حدود: <b className="text-foreground/90">{editing.label}</b>
+              </span>
+              <button
+                type="button"
+                disabled={savingEdit}
+                onClick={() => void saveEdit()}
+                className="flex h-10 items-center gap-1.5 rounded-xl bg-state-completed/20 px-4 text-xs font-bold text-state-completed ring-1 ring-inset ring-state-completed/50 transition hover:bg-state-completed/30 hover:shadow-[0_0_18px_-6px_rgba(94,151,122,0.9)] active:scale-95 disabled:opacity-50"
+              >
+                {savingEdit ? "يحفظ…" : "حفظ الحدود"}
+              </button>
+              <button
+                type="button"
+                onClick={exitDraw}
+                className="flex h-10 items-center rounded-xl bg-secondary/50 px-3 text-xs font-semibold ring-1 ring-inset ring-border/50 transition hover:bg-accent active:scale-95"
+              >
+                إلغاء
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {/* حوارا التسميات المحرَّرة (م7.3) */}
+      {annAnchor ? (
+        <AnnotateCreateDialog
+          saving={annSaving}
+          onPoint={(n, t) => void onAnnotatePoint(n, t)}
+          onArea={onAnnotateArea}
+          onClose={() => setAnnAnchor(null)}
+        />
+      ) : null}
+      {annEdit ? (
+        <AnnotateEditDialog
+          initialName={annEdit.name}
+          initialType={annEdit.type}
+          saving={annSaving}
+          onSave={(n, t) => void onAnnotateSave(n, t)}
+          onDelete={() => void onAnnotateDelete()}
+          onClose={() => setAnnEdit(null)}
+        />
+      ) : null}
     </div>
   );
 }

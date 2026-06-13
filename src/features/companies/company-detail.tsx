@@ -1,13 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
-import { Banknote, FileText, Landmark, MapPin, Phone, Tag, Users } from "lucide-react";
+import { Banknote, Check, FileText, Globe, Landmark, Loader2, MapPin, Phone, Sparkles, Tag, Users } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { NOT_AVAILABLE, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
 import { governorateLabel } from "@/lib/governorates";
 import { isEligible } from "./fields";
+import { applyEnrichment, enrichCompany, type EnrichSuggestion } from "./enrich-actions";
 import type { Company } from "@/types/entities";
 
 const NUMERIC = new Set(["capital_iqd", "capital_usd"]);
@@ -85,8 +90,49 @@ export function CompanyDetail({
   onClose: () => void;
   company: Company | null;
 }) {
+  const queryClient = useQueryClient();
+  const [suggestions, setSuggestions] = useState<EnrichSuggestion[] | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [enriching, setEnriching] = useState(false);
+  const [applying, setApplying] = useState(false);
+  // تصفير الاقتراحات عند تبديل الشركة (لا تتسرّب اقتراحات شركة لأخرى)
+  const companyId = company?.id ?? null;
+  useEffect(() => {
+    setSuggestions(null);
+    setChecked(new Set());
+  }, [companyId]);
+
   if (!company) return null;
   const o = company;
+
+  async function onEnrich(): Promise<void> {
+    if (enriching || !companyId) return;
+    setEnriching(true);
+    const res = await enrichCompany(companyId);
+    setEnriching(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    setSuggestions(res.suggestions);
+    setChecked(new Set(res.suggestions.map((s) => s.field)));
+    if (!res.suggestions.length) toast.info("لم يُعثَر على بيانات موثوقة بمصدر لهذه الشركة");
+  }
+  async function onApply(): Promise<void> {
+    if (!companyId || !suggestions) return;
+    const items = suggestions.filter((s) => checked.has(s.field));
+    if (!items.length) return;
+    setApplying(true);
+    const res = await applyEnrichment(companyId, items);
+    setApplying(false);
+    if (res.ok) {
+      toast.success("اعتُمِدت الاقتراحات وحُدِّثت الشركة (المصدر موثَّق)");
+      setSuggestions(null);
+      void queryClient.invalidateQueries({ queryKey: ["table", "companies"] });
+    } else {
+      toast.error(res.error);
+    }
+  }
   const sources = Array.isArray(o.source) ? o.source.map(String).filter(Boolean) : [];
   const shareholders = Array.isArray(o.shareholders) ? o.shareholders : [];
 
@@ -180,6 +226,56 @@ export function CompanyDetail({
             )}
           </section>
         </div>
+
+        {/* إثراء بالويب 🟩 (§هـ.5): اقتراح بمصدر ← اعتماد المستخدم */}
+        <section className="rounded-xl border border-border/60 bg-background/40 p-3.5">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold text-primary/80">
+              <Globe className="size-3.5" /> إثراء بالويب <span aria-hidden>🟩</span>
+            </h4>
+            <Button type="button" size="sm" variant="outline" disabled={enriching} onClick={() => void onEnrich()} className="gap-1.5">
+              {enriching ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              {enriching ? "جارٍ البحث…" : suggestions ? "إعادة البحث" : "البحث عن النواقص"}
+            </Button>
+          </div>
+          {suggestions === null ? (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              يبحث الويب عن الحقول الناقصة (هاتف · بريد · موقع · عنوان · مدير · نشاط · رأس مال) ويقترحها <b>بمصدر</b> — لا يُحفَظ شيء إلا باعتمادك.
+            </p>
+          ) : suggestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">لا اقتراحات موثوقة بمصدر — تبقى الحقول «غير متوفّر» (لا تأليف).</p>
+          ) : (
+            <div className="space-y-2">
+              <ul className="space-y-1.5">
+                {suggestions.map((s) => (
+                  <li key={s.field} className="flex items-start gap-2 rounded-lg border border-border/50 bg-card/50 p-2">
+                    <input
+                      type="checkbox"
+                      checked={checked.has(s.field)}
+                      onChange={() =>
+                        setChecked((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(s.field)) next.delete(s.field);
+                          else next.add(s.field);
+                          return next;
+                        })
+                      }
+                      className="mt-1 size-4 shrink-0 cursor-pointer accent-state-completed"
+                      aria-label={`اعتماد ${s.label}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm"><b>{s.label}:</b> <span className="break-words">{s.value}</span></p>
+                      <p className="break-all text-[10px] text-muted-foreground">المصدر: {s.source}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Button type="button" size="sm" disabled={applying || checked.size === 0} onClick={() => void onApply()} className="gap-1.5">
+                <Check className="size-3.5" /> {applying ? "جارٍ الاعتماد…" : `اعتماد المحدّد (${checked.size})`}
+              </Button>
+            </div>
+          )}
+        </section>
 
         {/* ملاحظات + سجلّ المشاريع (يُثرى لاحقاً) */}
         <section className="rounded-xl border border-border/60 bg-background/40 p-3.5">

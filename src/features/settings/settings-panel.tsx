@@ -7,18 +7,19 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { Bot, Check, Download, KeyRound, Monitor, Trash2, UserCog } from "lucide-react";
+import { Bot, Check, Download, KeyRound, Monitor, Trash2, UserCog, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combo } from "@/components/ui/combo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useSettings } from "./use-settings";
-import { applyFont } from "./apply";
-import { changePassword, deleteApiKey, saveSettings, setApiKey } from "./actions";
+import { applyDisplay } from "./apply";
+import { changePassword, deleteApiKey, getSecondUser, saveSettings, setApiKey, testAiModel, upsertSecondUser } from "./actions";
 import { CLAUDE_MODELS, type AppSettings } from "./types";
 
 const TABS = [
   { id: "account", label: "الحساب", icon: UserCog },
+  { id: "users", label: "المستخدمون", icon: Users },
   { id: "display", label: "العرض", icon: Monitor },
   { id: "ai", label: "الذكاء", icon: Bot },
   { id: "export", label: "التصدير", icon: Download },
@@ -60,6 +61,33 @@ export function SettingsPanel() {
   const [busy, setBusy] = useState(false);
   const [keyInput, setKeyInput] = useState<Record<string, string>>({ anthropic: "", voyage: "" });
   const [pdf, setPdf] = useState({ org: "", header: "", footer: "" });
+  const [testingModel, setTestingModel] = useState(false);
+  // المستخدم الثاني (م8.1)
+  const [vUser, setVUser] = useState("");
+  const [vPwd, setVPwd] = useState("");
+  const [vBusy, setVBusy] = useState(false);
+  const [vExisting, setVExisting] = useState<string | null>(null);
+  useEffect(() => {
+    if (tab !== "users") return;
+    void getSecondUser().then((r) => {
+      if (r.ok) {
+        setVExisting(r.username);
+        setVUser(r.username ?? "");
+      }
+    });
+  }, [tab]);
+  async function onSaveSecondUser(): Promise<void> {
+    setVBusy(true);
+    const res = await upsertSecondUser(vUser, vPwd);
+    setVBusy(false);
+    if (res.ok) {
+      toast.success(vExisting ? "حُدِّث المستخدم الثاني" : "أُنشئ المستخدم الثاني");
+      setVExisting(vUser.trim().toLowerCase());
+      setVPwd("");
+    } else {
+      toast.error("تعذّر الحفظ", { description: res.error });
+    }
+  }
 
   const s = data?.settings;
   useEffect(() => {
@@ -120,7 +148,7 @@ export function SettingsPanel() {
   return (
     <div className="flex h-full flex-col">
       {/* تابات */}
-      <div className="grid grid-cols-4 gap-1 border-b border-border p-2">
+      <div className="grid grid-cols-5 gap-1 border-b border-border p-2">
         {TABS.map((tt) => {
           const Icon = tt.icon;
           return (
@@ -146,10 +174,29 @@ export function SettingsPanel() {
             <Field label="البريد/المستخدم">
               <div className="rounded-md border border-border/60 bg-secondary/30 px-2.5 py-1.5 text-sm text-foreground/80">{data?.email ?? "غير متوفّر"}</div>
             </Field>
-            <Field label="تغيير كلمة المرور" hint="٦ أحرف على الأقل">
+            <Field label="تغيير كلمة المرور" hint="6 أحرف على الأقل">
               <div className="flex gap-2">
                 <input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="كلمة مرور جديدة" className={INPUT} autoComplete="new-password" />
                 <Button type="button" size="sm" disabled={busy || pwd.length < 6} onClick={() => void onChangePwd()}>حفظ</Button>
+              </div>
+            </Field>
+          </>
+        ) : null}
+
+        {tab === "users" ? (
+          <>
+            <div className="rounded-lg border border-primary/25 bg-primary/8 p-3 text-xs leading-relaxed text-foreground/80">
+              المستخدم الثاني يتصفّح النظام كاملاً ويولّد التوصيات والمعايير ويصدّر التقارير، لكن لا يعدّل أو يحذف البيانات، ولا يصمّم فرصاً، ولا يرسم على الخريطة، ولا يصل هذه الإعدادات.
+            </div>
+            <Field label="اسم المستخدم الثاني" hint={vExisting ? `الحالي: ${vExisting}` : "لم يُنشأ بعد — أدخل اسماً وكلمة مرور"}>
+              <input value={vUser} onChange={(e) => setVUser(e.target.value)} placeholder="مثال: viewer" dir="ltr" className={INPUT} autoComplete="off" />
+            </Field>
+            <Field label={vExisting ? "كلمة مرور جديدة" : "كلمة المرور"} hint="6 أحرف على الأقل">
+              <div className="flex gap-2">
+                <input type="password" value={vPwd} onChange={(e) => setVPwd(e.target.value)} placeholder="كلمة المرور" className={INPUT} autoComplete="new-password" />
+                <Button type="button" size="sm" disabled={vBusy || !vUser.trim() || vPwd.length < 6} onClick={() => void onSaveSecondUser()}>
+                  {vBusy ? "…" : vExisting ? "تحديث" : "إنشاء"}
+                </Button>
               </div>
             </Field>
           </>
@@ -161,10 +208,10 @@ export function SettingsPanel() {
               <Combo value={s.theme} onChange={(v) => { setTheme(v); void commit({ theme: v }); }} options={[{ value: "light", label: "فاتح" }, { value: "dark", label: "داكن" }, { value: "system", label: "تلقائي" }]} ariaLabel="السمة" />
             </Field>
             <Field label="حجم الخطّ">
-              <Combo value={s.font_scale} onChange={(v) => { applyFont(v); void commit({ font_scale: v }); }} options={[{ value: "sm", label: "صغير" }, { value: "md", label: "متوسط" }, { value: "lg", label: "كبير" }]} ariaLabel="حجم الخطّ" />
+              <Combo value={s.font_scale} onChange={(v) => { applyDisplay(v, s.density); void commit({ font_scale: v }); }} options={[{ value: "sm", label: "صغير" }, { value: "md", label: "متوسط" }, { value: "lg", label: "كبير" }]} ariaLabel="حجم الخطّ" />
             </Field>
-            <Field label="كثافة العرض">
-              <Combo value={s.density} onChange={(v) => void commit({ density: v })} options={[{ value: "comfortable", label: "مريح" }, { value: "compact", label: "مدمج" }]} ariaLabel="كثافة العرض" />
+            <Field label="كثافة العرض" hint="«مدمج» يكثّف الواجهة كلها (نص وتباعد)">
+              <Combo value={s.density} onChange={(v) => { applyDisplay(s.font_scale, v); void commit({ density: v }); }} options={[{ value: "comfortable", label: "مريح" }, { value: "compact", label: "مدمج" }]} ariaLabel="كثافة العرض" />
             </Field>
             <Field label="أساس الخريطة الافتراضي" hint="يُطبَّق عند تحميل الخريطة">
               <Combo value={s.default_base} onChange={(v) => void commit({ default_base: v })} options={[{ value: "dark", label: "داكن" }, { value: "light", label: "فاتح" }, { value: "satellite", label: "قمر صناعي" }]} ariaLabel="أساس الخريطة" />
@@ -180,8 +227,27 @@ export function SettingsPanel() {
 
         {tab === "ai" ? (
           <>
-            <Field label="نموذج الذكاء" hint="يُطبَّق على كل وظائف النظام (المستشار · البحث · التوصيات)">
-              <Combo value={s.ai_model} onChange={(v) => void commit({ ai_model: v })} options={CLAUDE_MODELS} allowCustom ariaLabel="نموذج الذكاء" />
+            <Field label="نموذج الذكاء" hint={testingModel ? "جارٍ التحقّق من النموذج…" : "يُتحقَّق منه بنداء فعلي قبل الاعتماد — ويُطبَّق على كل وظائف النظام"}>
+              <Combo
+                value={s.ai_model}
+                onChange={(v) => {
+                  if (v === s.ai_model || testingModel) return;
+                  setTestingModel(true);
+                  void testAiModel(v).then((res) => {
+                    setTestingModel(false);
+                    if (res.ok) {
+                      void commit({ ai_model: v });
+                      toast.success("النموذج صالح وفُعِّل على كل وظائف الذكاء");
+                    } else {
+                      toast.error(`النموذج غير متاح — لم يُغيَّر (${res.error})`);
+                    }
+                  });
+                }}
+                options={CLAUDE_MODELS}
+                allowCustom
+                disabled={testingModel}
+                ariaLabel="نموذج الذكاء"
+              />
             </Field>
             <Toggle label="تفعيل البحث على الويب (للتوصيات/الإثراء)" checked={s.web_search_enabled} onChange={(v) => void commit({ web_search_enabled: v })} />
 

@@ -36,8 +36,8 @@ export const BOUNDARY_COLORS = {
   labelHalo: "#0b1220",
 };
 
-// ضبط نحو الكحلي المات للقاعدة الداكنة
-export const NAVY = { background: "#0f1729", water: "#0a1020" };
+// ضبط نحو الكحلي المات للقاعدة الداكنة — أرضية أعمق غموقاً (م7.6+++) تحت الشبكة الشعرية
+export const NAVY = { background: "#03060d", water: "#02050a" };
 
-// تعتيم محيط نينوى (§هـ.4 — «ما حولها معتم»)
-export const DIM_COLOR = "rgba(7,11,20,0.5)";
+// تعتيم محيط نينوى (§هـ.4 — «ما حولها معتم») — منسجم مع الأرضية الأغمق
+export const DIM_COLOR = "rgba(3,5,10,0.42)";

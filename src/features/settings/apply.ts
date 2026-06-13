@@ -1,6 +1,10 @@
 // تطبيق إعدادات العرض على المستند (مشترك بين اللوحة والمطبّق).
-const FONT_PX: Record<string, string> = { sm: "15px", md: "16px", lg: "17.5px" };
+// الكثافة «مدمج» تقلّص جذر القياس 8% — تباعد Tailwind كله rem فيتكثّف فعلياً مع النص.
+const FONT_PX: Record<string, number> = { sm: 15, md: 16, lg: 17.5 };
 
-export function applyFont(scale: string): void {
-  if (typeof document !== "undefined") document.documentElement.style.fontSize = FONT_PX[scale] ?? FONT_PX.md!;
+export function applyDisplay(fontScale: string, density: string): void {
+  if (typeof document === "undefined") return;
+  const base = FONT_PX[fontScale] ?? FONT_PX.md!;
+  const factor = density === "compact" ? 0.92 : 1;
+  document.documentElement.style.fontSize = `${(base * factor).toFixed(2)}px`;
 }

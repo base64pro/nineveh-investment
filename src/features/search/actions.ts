@@ -84,14 +84,21 @@ interface Row {
   status: string | null;
   parcel_no: string | null;
   map_ref: string | null;
+  entity_id: string | null;
   has_geom: boolean;
+  lng: number | null;
+  lat: number | null;
 }
 
-export async function superSearch(query: string): Promise<{ results: SearchResult[] }> {
+export async function superSearch(query: string): Promise<{ results: SearchResult[]; warning?: string }> {
   const q = query.trim();
   if (q.length < 2) return { results: [] };
 
-  const intent = await understand(q);
+  // الفهم بالذكاء للاستعلامات المركّبة فقط (مسافة أو طول ≥ 12) — الأسماء/الأرقام القصيرة مباشرة (أسرع وأوفر)
+  const needsIntent = /\s/.test(q) || q.length >= 12;
+  const intent: Intent = needsIntent
+    ? await understand(q)
+    : { terms: [q], kinds: [], sector: null, status: null, place: null };
   const hasFilters = intent.sector !== null || intent.status !== null || intent.kinds.length > 0;
   const needle = (intent.terms[0] ?? "").trim() || (hasFilters ? "" : q);
   const sCode = intent.sector ? sectorCode(intent.sector) : null;
@@ -109,16 +116,18 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
     }),
     geocodeNineveh(intent.place || q),
   ]);
+  if (dbRes.error) console.error("super_search:", dbRes.error.message); // لا إسقاط صامت لنتائج البيانات (§ز)
   const rows = (dbRes.data ?? []) as Row[];
   const entityResults: SearchResult[] = rows.map((r) => ({
     kind: r.kind,
     label: r.label ?? "—",
-    sublabel: buildSublabel(r.kind, r.sector, r.district, r.status),
+    sublabel: r.kind === "annotation" ? "تسمية محرَّرة — من بياناتك" : buildSublabel(r.kind, r.sector, r.district, r.status),
     parcel_no: r.parcel_no,
     mapRef: r.map_ref,
+    entityId: r.entity_id,
     hasGeom: r.has_geom,
-    lng: null,
-    lat: null,
+    lng: r.lng,
+    lat: r.lat,
   }));
 
   // تسميات/مواقع الخريطة (أُحضِرت أعلاه بالتوازي)
@@ -128,11 +137,15 @@ export async function superSearch(query: string): Promise<{ results: SearchResul
     sublabel: p.sublabel,
     parcel_no: null,
     mapRef: null,
+    entityId: null,
     hasGeom: false,
     lng: p.lng,
     lat: p.lat,
   }));
 
   // دمج: بياناتنا أولاً ثم تسميات/مواقع الخريطة (§هـ.4 الأولوية لعناصرنا)
-  return { results: [...entityResults, ...placeResults].slice(0, 18) };
+  return {
+    results: [...entityResults, ...placeResults].slice(0, 18),
+    ...(dbRes.error ? { warning: "تعذّر البحث في بيانات النظام مؤقتاً — تُعرض نتائج الخريطة فقط" } : {}),
+  };
 }

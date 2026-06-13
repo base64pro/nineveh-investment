@@ -3,7 +3,7 @@
 // نافذة القطعة الموحّدة (§هـ.4) — للأنواع الثلاثة (فرصة/رخصة/مفترضة).
 // رأس ثابت (عنوان + بيانات مفتاحية + إجراءات) · تمرير عمودي · تحرير مباشر لكل حقل · لا كشف تحقّق (§ح).
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, Layers, Ruler, Tag, X } from "lucide-react";
@@ -11,12 +11,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combo } from "@/components/ui/combo";
+import { useEscClose } from "@/components/ui/use-esc-close";
 import { OptionField } from "@/components/ui/option-field";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { ActionsWindow } from "@/features/parcels/actions-window";
 import { CompanyField } from "@/features/parcels/company-field";
 import { TransferLogView, type TransferEntry } from "@/features/parcels/transfer-log-view";
 import { VisitsLog } from "@/features/licenses/visits/visits-log";
+import { PhotosSection } from "@/features/parcels/photos/photos-section";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
@@ -26,6 +28,8 @@ import type { Company, ParcelState } from "@/types/entities";
 import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "@/features/opportunities/fields";
 import { LICENSE_FORM_FIELDS, LICENSE_OPTION_FIELDS } from "@/features/licenses/fields";
 import { ASSUMED_FORM_FIELDS, ASSUMED_OPTION_FIELDS } from "@/features/assumed/fields";
+import { sfxOpen } from "@/lib/sfx";
+import { useRole } from "@/features/auth/role-context";
 import { saveOpportunity } from "@/features/opportunities/actions";
 import { saveLicense } from "@/features/licenses/actions";
 import { saveAssumed } from "@/features/assumed/actions";
@@ -141,13 +145,20 @@ export function ParcelWindow({
 }) {
   const cfg = KINDS[kind];
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
+  const ro = readOnly || isViewer; // الثاني: النافذة للقراءة دائماً — لا تعديل/حالة/حفظ/زيارات/صور (م8.1)
   const { data: custom } = useFieldOptions();
   const [saving, setSaving] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [moving, setMoving] = useState(false);
+  useEscClose(!actionsOpen, onClose); // نافذة الإجراءات فوقها تستهلك Esc حين تكون مفتوحة
   const { data: companiesData } = useTable<Company>("companies");
   const companyOptions = useMemo(() => (companiesData ?? []).map((c) => ({ id: c.id, name: c.name })), [companiesData]);
   const [companyRef, setCompanyRef] = useState<string | null>((entity.company_ref as string | null) ?? null);
+
+  useEffect(() => {
+    sfxOpen(); // ومضة انبثاق (م7.9)
+  }, []);
 
   const state = parcelState(kind, entity);
   const missingHints = HINTS[kind].filter((h) => !field(entity, h.key));
@@ -161,11 +172,12 @@ export function ParcelWindow({
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (readOnly) return;
+    if (ro) return;
     setSaving(true);
     const fd = new FormData(e.currentTarget);
     const values: Record<string, unknown> = {};
     for (const f of cfg.fields) {
+      if (!fd.has(f.key)) continue; // حقل غير معروض في النافذة (كالحالة — تُدار بمنسدلة النقل) ← لا يُرسَل ولا يُمسح
       const raw = String(fd.get(f.key) ?? "").trim();
       values[f.key] = raw === "" ? null : f.type === "number" ? Number(raw) : raw; // فراغ→null (لا تأليف §ح)
     }
@@ -178,7 +190,7 @@ export function ParcelWindow({
       void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
       void queryClient.invalidateQueries({ queryKey: ["counts"] });
     } else {
-      toast.error("تعذّر الحفظ — حاول مجدداً");
+      toast.error("تعذّر الحفظ", { description: res.error }); // §ز: سبب واضح قابل للفعل لا رسالة عامة
     }
   }
 
@@ -188,7 +200,7 @@ export function ParcelWindow({
     const res = await moveParcel(kind, String(entityId(kind, entity) ?? ""), target);
     setMoving(false);
     if (!res.ok) {
-      toast.error("تعذّر نقل الحالة — حاول مجدداً");
+      toast.error("تعذّر نقل الحالة", { description: res.error });
       return;
     }
     await Promise.all([
@@ -198,8 +210,7 @@ export function ParcelWindow({
       queryClient.invalidateQueries({ queryKey: ["map_parcels"] }),
       queryClient.invalidateQueries({ queryKey: ["counts"] }),
     ]);
-    const pn = String(entity.parcel_no ?? "");
-    if (pn) requestFlyTo(pn); // طيران + إبراز القطعة في موضعها الجديد (يظهر عند إغلاق النافذة)
+    requestFlyTo(res.id); // طيران بمعرّف الكيان الجديد — يشمل المرسومة بلا رقم (مطابقة entity_id)
     const d = MOVE_DEST[target];
     toast.success(d ? `نُقلت إلى ${d.section} — تجدها ${d.color} على الخريطة` : "نُقلت القطعة");
     onMoved({ kind: res.kind, id: res.id });
@@ -235,7 +246,7 @@ export function ParcelWindow({
               {subParts.length ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{subParts.join(" · ")}</p> : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StateBadge state={state} />
-                {!readOnly ? (
+                {!ro ? (
                   <div className="flex items-center gap-1.5" title="نقل الحالة بين الأقسام الخمسة">
                     <ArrowLeftRight className="size-3.5 shrink-0 text-muted-foreground" />
                     <div className="w-32">
@@ -255,8 +266,14 @@ export function ParcelWindow({
               <Button type="button" size="sm" onClick={() => setActionsOpen(true)} className="gap-1.5">
                 <Layers className="size-4" /> إجراءات
               </Button>
-              <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 transition hover:bg-accent">
-                <X className="size-4" />
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="إغلاق"
+                title="إغلاق"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
+              >
+                <X className="size-5" />
               </button>
             </div>
           </header>
@@ -264,8 +281,8 @@ export function ParcelWindow({
           {/* جسم التحرير المباشر */}
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <fieldset disabled={readOnly} className="m-0 grid grid-cols-1 gap-3 border-0 p-0 sm:grid-cols-2">
-              {!readOnly && missingHints.length ? (
+              <fieldset disabled={ro} className="m-0 grid grid-cols-1 gap-3 border-0 p-0 sm:grid-cols-2">
+              {!ro && missingHints.length ? (
                 <div className="rounded-lg border border-state-announced/40 bg-state-announced/10 p-2.5 text-xs text-state-announced sm:col-span-2">
                   أكمل الحقول المطلوبة: {missingHints.map((h) => h.label).join(" · ")}
                 </div>
@@ -320,6 +337,10 @@ export function ParcelWindow({
                   })}
                 </div>
               ) : null}
+              {/* صور المشروع (م7.4) — تظهر في بطاقة الخريطة وتقرير القطعة */}
+              <div className="sm:col-span-2">
+                <PhotosSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
+              </div>
               {kind === "license" && (state === "in-progress" || state === "completed") ? (
                 <div className="sm:col-span-2">
                   <VisitsLog parcelRef={String(entity.record_id ?? "")} />
@@ -333,7 +354,7 @@ export function ParcelWindow({
 
             {/* ذيل ثابت: حفظ التحرير المباشر */}
             <footer className="flex shrink-0 items-center justify-start gap-2 border-t border-border/70 bg-card/80 px-5 py-3">
-              {!readOnly ? (
+              {!ro ? (
                 <Button type="submit" disabled={saving}>
                   {saving ? "جارٍ الحفظ…" : "حفظ"}
                 </Button>

@@ -4,10 +4,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, Scale, Send, Sparkles, User } from "lucide-react";
+import { BookmarkPlus, Copy, Scale, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { askLegalAdvisor } from "./actions";
 import { saveConsultation } from "./consultation-actions";
+import { copyConsultation } from "./copy-consultation";
 import { AdvisorAnswer } from "./advisor-answer";
 import type { ChatMessage } from "@/lib/ai/anthropic";
 
@@ -18,6 +19,18 @@ export function AdvisorChat() {
   const [savingIdx, setSavingIdx] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // مربع السؤال يتوسّع مع النص حتى 50% من مساحة لوحة الاستشارات ثم يظهر تمرير — النص كله مقروء (طلب معتمد)
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const cap = Math.max(160, Math.floor((rootRef.current?.clientHeight ?? window.innerHeight) * 0.5));
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, cap)}px`;
+    ta.style.overflowY = ta.scrollHeight > cap ? "auto" : "hidden";
+  }, [input]);
 
   async function saveOne(i: number) {
     const answer = messages[i]?.content ?? "";
@@ -55,7 +68,7 @@ export function AdvisorChat() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={rootRef} className="flex h-full flex-col">
       <div ref={scrollRef} className="scroll-slim min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-muted-foreground">
@@ -79,15 +92,25 @@ export function AdvisorChat() {
                 <p className="flex items-center gap-1.5 text-[11px] font-bold text-primary/70">
                   <Sparkles className="size-3.5" /> المستشار القانوني
                 </p>
-                <button
-                  type="button"
-                  onClick={() => void saveOne(i)}
-                  disabled={savingIdx === i}
-                  title="حفظ في مكتبة الاستشارات"
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary disabled:opacity-50"
-                >
-                  <BookmarkPlus className="size-3.5" /> {savingIdx === i ? "…" : "حفظ"}
-                </button>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => void copyConsultation(messages[i - 1]?.content ?? "", m.content)}
+                    title="نسخ السؤال والإجابة"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary"
+                  >
+                    <Copy className="size-3.5" /> نسخ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveOne(i)}
+                    disabled={savingIdx === i}
+                    title="حفظ في مكتبة الاستشارات"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-primary disabled:opacity-50"
+                  >
+                    <BookmarkPlus className="size-3.5" /> {savingIdx === i ? "…" : "حفظ"}
+                  </button>
+                </div>
               </div>
               <AdvisorAnswer text={m.content} />
             </div>
@@ -104,6 +127,7 @@ export function AdvisorChat() {
       <div className="border-t border-border/60 p-3">
         <div className="flex items-end gap-2">
           <textarea
+            ref={taRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -115,7 +139,7 @@ export function AdvisorChat() {
             rows={2}
             placeholder="اكتب سؤالك القانوني…"
             disabled={loading}
-            className="scroll-slim max-h-32 min-h-[2.75rem] w-full resize-none rounded-xl border border-input bg-background/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+            className="scroll-slim min-h-[2.75rem] w-full resize-none rounded-xl border border-input bg-background/60 px-3 py-2 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
           />
           <button
             type="button"

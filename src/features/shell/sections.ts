@@ -14,18 +14,19 @@ import {
 export interface SectionDef {
   id: string;
   label: string;
+  short: string; // اسم مختصر يظهر تحت أيقونة الشريط (م7.6)
   icon: LucideIcon;
   table: string | null; // جدول العدّاد (إن وُجد)
   note: string; // مرحلة البناء
 }
 
 export const SECTIONS: readonly SectionDef[] = [
-  { id: "legal-advisor", label: "المستشار القانوني للاستثمار", icon: Scale, table: null, note: "المستشار القانوني الذكي — يُبنى في م4." },
-  { id: "opportunities", label: "الفرص الاستثمارية", icon: Megaphone, table: "opportunities", note: "إدارة الفرص المعلَنة (CRUD + فلترة + تصدير) — م2.2." },
-  { id: "licenses", label: "الرخص الاستثمارية", icon: BadgeCheck, table: "licenses", note: "متابعة الرخص + سجلّ الزيارات — م2.2." },
-  { id: "companies", label: "الشركات", icon: Building2, table: "companies", note: "بنك الشركات المؤهّلة (CRUD + إثراء) — م2.2." },
-  { id: "criteria", label: "مكتبة المعايير", icon: Library, table: "criteria", note: "أرشيف المعايير المحفوظة — م2.2." },
-  { id: "reports", label: "التقارير الذكية", icon: BarChart3, table: null, note: "لوحات وتشارتات وتقارير — م5." },
-  { id: "opportunity-design", label: "تصميم فرصة", icon: PencilRuler, table: "assumed_parcels", note: "الفرص المفترضة — م2.2." },
-  { id: "settings", label: "إعدادات المستخدم", icon: Settings, table: null, note: "الحساب والعرض والذكاء والتصدير — م5." },
+  { id: "legal-advisor", label: "المستشار القانوني للاستثمار", short: "المستشار", icon: Scale, table: null, note: "المستشار القانوني الذكي — يُبنى في م4." },
+  { id: "opportunities", label: "الفرص الاستثمارية", short: "الفرص", icon: Megaphone, table: "opportunities", note: "إدارة الفرص المعلَنة (CRUD + فلترة + تصدير) — م2.2." },
+  { id: "licenses", label: "الرخص الاستثمارية", short: "الرخص", icon: BadgeCheck, table: "licenses", note: "متابعة الرخص + سجلّ الزيارات — م2.2." },
+  { id: "companies", label: "الشركات", short: "الشركات", icon: Building2, table: "companies", note: "بنك الشركات المؤهّلة (CRUD + إثراء) — م2.2." },
+  { id: "criteria", label: "مكتبة المعايير", short: "المعايير", icon: Library, table: "criteria", note: "أرشيف المعايير المحفوظة — م2.2." },
+  { id: "reports", label: "التقارير الذكية", short: "التقارير", icon: BarChart3, table: null, note: "لوحات وتشارتات وتقارير — م5." },
+  { id: "opportunity-design", label: "تصميم فرصة", short: "تصميم", icon: PencilRuler, table: "assumed_parcels", note: "الفرص المفترضة — م2.2." },
+  { id: "settings", label: "إعدادات المستخدم", short: "الإعدادات", icon: Settings, table: null, note: "الحساب والعرض والذكاء والتصدير — م5." },
 ];

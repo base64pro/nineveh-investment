@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileText,
   FilterX,
   Home,
   Landmark,
@@ -25,8 +26,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
+import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
@@ -85,12 +89,13 @@ export function AssumedPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AssumedParcel | null>(null);
 
-  const all = useMemo(() => data ?? [], [data]);
-  const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")), [data]); // الأحدث أولاً (افتراضي معتمد)
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
+  const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
-  const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
-  const subdistricts = useMemo(() => distinct(all.map((o) => o.subdistrict)), [all]);
-  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const districts = useMemo(() => distinct([...all.map((o) => o.district), ...(fo?.district ?? [])]), [all, fo]);
+  const subdistricts = useMemo(() => distinct([...all.map((o) => o.subdistrict), ...(fo?.subdistrict ?? [])]), [all, fo]);
+  const neighborhoods = useMemo(() => distinct([...all.map((o) => o.neighborhood), ...(fo?.neighborhood ?? [])]), [all, fo]);
   const districtOptions = useMemo(() => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(), [districts]);
   const subdistrictOptions = useMemo(() => Array.from(new Set([...NINEVEH_SUBDISTRICTS, ...subdistricts])).sort(), [subdistricts]);
 
@@ -100,10 +105,10 @@ export function AssumedPanel() {
       district: districtOptions,
       subdistrict: subdistrictOptions,
       neighborhood: neighborhoods,
-      muqataa_name: distinct(all.map((o) => o.muqataa_name)),
-      land_right: distinct(all.map((o) => o.land_right)),
+      muqataa_name: distinct([...all.map((o) => o.muqataa_name), ...(fo?.muqataa_name ?? [])]),
+      land_right: distinct([...all.map((o) => o.land_right), ...(fo?.land_right ?? [])]),
     }),
-    [all, sectors, districtOptions, subdistrictOptions, neighborhoods],
+    [all, fo, sectors, districtOptions, subdistrictOptions, neighborhoods],
   );
 
   const filtered = useMemo(() => {
@@ -154,9 +159,12 @@ export function AssumedPanel() {
     setSubdistrict("");
     setNeighborhood("");
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
-    exportCsv("assumed_parcels.csv", rows as unknown as Record<string, unknown>[], [...ASSUMED_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "assumed_parcels.csv", "تقرير الفرص المفترضة", rows as unknown as Record<string, unknown>[], [...ASSUMED_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   async function onDelete(o: AssumedParcel) {
     if (!window.confirm(`حذف القطعة المفترضة «${o.parcel_no ?? "بلا رقم"}»؟`)) return;
@@ -191,7 +199,7 @@ export function AssumedPanel() {
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="قطعة مفترضة جديدة" aria-label="قطعة مفترضة جديدة" className={cn(ORB, "size-12")}>
@@ -231,7 +239,7 @@ export function AssumedPanel() {
             return (
               <li
                 key={o.id}
-                className="group relative overflow-hidden rounded-xl border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
+                className="group relative overflow-hidden rounded-xl [content-visibility:auto] [contain-intrinsic-size:auto_120px] border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
               >
                 <span className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-state-assumed to-state-assumed/20" aria-hidden />
 
@@ -287,6 +295,9 @@ export function AssumedPanel() {
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "assumed", id: o.id, readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("assumed", o.id, o.name ?? o.parcel_no)} title="تصدير بطاقة القطعة PDF">
+                        <FileText className="size-3.5" /> PDF
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف

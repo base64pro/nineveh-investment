@@ -14,6 +14,8 @@ export async function anthropicChat(opts: {
   messages: ChatMessage[];
   maxTokens?: number;
   model?: string;
+  /** أدوات خادمية (مثل بحث الويب web_search_20250305) — تعمل لدى Anthropic، لا تصل العميل. */
+  tools?: unknown[];
 }): Promise<string> {
   // الإعدادات أولاً ثم env. APP_ANTHROPIC_KEY اسم مميّز يتفادى حقن بيئة التطوير لـANTHROPIC_API_KEY فارغاً.
   const key = await getProviderKey("anthropic", process.env.APP_ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY);
@@ -33,6 +35,7 @@ export async function anthropicChat(opts: {
       max_tokens: opts.maxTokens ?? 2048,
       system: opts.system,
       messages: opts.messages,
+      ...(opts.tools?.length ? { tools: opts.tools } : {}),
     }),
   });
   if (!res.ok) {

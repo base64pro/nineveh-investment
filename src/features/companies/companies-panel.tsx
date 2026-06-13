@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FileText,
   FilterX,
   Globe,
   Hash,
@@ -26,8 +27,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
 import { orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { sectorLabel } from "@/lib/sectors";
@@ -36,11 +38,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterCombo } from "@/components/ui/filter-combo";
 import { Combo } from "@/components/ui/combo";
+import { onOpenCompany } from "@/features/shell/shell-store";
 import { CompanyForm } from "./company-form";
 import { CompanyDetail } from "./company-detail";
 import { deleteCompany } from "./actions";
 import { COMPANY_EXPORT_COLUMNS, isEligible } from "./fields";
 import type { Company } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
@@ -73,6 +77,7 @@ function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
 export function CompaniesPanel() {
   const { data, isLoading, isError, refetch } = useTable<Company>("companies");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
@@ -86,6 +91,16 @@ export function CompaniesPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [detail, setDetail] = useState<Company | null>(null);
+
+  // فتح تفاصيل شركة بعينها من البحث الفائق (§هـ.2.ج «فتح بياناته») — يصمد أمام تأخّر تحميل البيانات
+  const [openCompanyId, setOpenCompanyId] = useState<string | null>(null);
+  useEffect(() => onOpenCompany(setOpenCompanyId), []);
+  useEffect(() => {
+    if (!openCompanyId || !data) return;
+    const c = data.find((x) => x.id === openCompanyId);
+    if (c) setDetail(c);
+    setOpenCompanyId(null);
+  }, [openCompanyId, data]);
 
   const all = useMemo(() => data ?? [], [data]);
   const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
@@ -159,9 +174,12 @@ export function CompaniesPanel() {
     setActivity("");
     setElig("");
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
-    exportCsv("companies.csv", rows as unknown as Record<string, unknown>[], [...COMPANY_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "companies.csv", "تقرير الشركات", rows as unknown as Record<string, unknown>[], [...COMPANY_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   async function onDelete(o: Company) {
     if (!window.confirm(`حذف الشركة «${o.name}»؟`)) return;
@@ -196,12 +214,14 @@ export function CompaniesPanel() {
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
+          {!isViewer ? (
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="إضافة شركة" aria-label="إضافة شركة" className={cn(ORB, "size-12")}>
             <Plus className="size-5" />
           </button>
+          ) : null}
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
           </button>
@@ -253,7 +273,7 @@ export function CompaniesPanel() {
             return (
               <li
                 key={o.id}
-                className="group relative overflow-hidden rounded-xl border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
+                className="group relative overflow-hidden rounded-xl [content-visibility:auto] [contain-intrinsic-size:auto_120px] border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
               >
                 <span className={cn("absolute inset-y-0 start-0 w-1 bg-gradient-to-b", accent)} aria-hidden />
 
@@ -315,12 +335,19 @@ export function CompaniesPanel() {
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
+                      ) : null}
+                      <Button size="sm" variant="outline" onClick={() => void exportTable("pdf", "company.csv", `بطاقة شركة — ${o.name ?? ""}`, [o as unknown as Record<string, unknown>], [...COMPANY_EXPORT_COLUMNS])} title="تصدير بطاقة الشركة PDF">
+                        <FileText className="size-3.5" /> PDF
+                      </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

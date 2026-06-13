@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Download,
   Eye,
+  FileText,
   FilterX,
   Home,
   Landmark,
@@ -29,8 +30,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useFieldOptions } from "@/lib/data/use-field-options";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
+import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, formatDate, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
 import { NINEVEH_DISTRICTS, NINEVEH_SUBDISTRICTS } from "@/lib/nineveh-geo";
@@ -47,6 +51,7 @@ import { VisitsLog } from "./visits/visits-log";
 import { deleteLicense } from "./actions";
 import { LICENSE_EXPORT_COLUMNS } from "./fields";
 import type { License } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
@@ -96,6 +101,7 @@ export function LicensesPanel({
 }) {
   const { data, isLoading, isError, refetch } = useTable<License>("licenses");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
@@ -109,12 +115,13 @@ export function LicensesPanel({
   const [editing, setEditing] = useState<License | null>(null);
   const [visitsFor, setVisitsFor] = useState<License | null>(null);
 
-  const all = useMemo(() => data ?? [], [data]);
-  const sectors = useMemo(() => distinct(all.map((o) => o.sector)), [all]);
+  const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.record_id ?? 0) - (a.record_id ?? 0)), [data]); // الأحدث أولاً (افتراضي معتمد)
+  const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
+  const sectors = useMemo(() => distinct([...all.map((o) => o.sector), ...(fo?.sector ?? [])]), [all, fo]);
   const sectorLabelOptions = useMemo(() => Array.from(new Set(sectors.map(sectorLabel))).sort(), [sectors]);
-  const districts = useMemo(() => distinct(all.map((o) => o.district)), [all]);
-  const subdistricts = useMemo(() => distinct(all.map((o) => o.subdistrict)), [all]);
-  const neighborhoods = useMemo(() => distinct(all.map((o) => o.neighborhood)), [all]);
+  const districts = useMemo(() => distinct([...all.map((o) => o.district), ...(fo?.district ?? [])]), [all, fo]);
+  const subdistricts = useMemo(() => distinct([...all.map((o) => o.subdistrict), ...(fo?.subdistrict ?? [])]), [all, fo]);
+  const neighborhoods = useMemo(() => distinct([...all.map((o) => o.neighborhood), ...(fo?.neighborhood ?? [])]), [all, fo]);
   const districtOptions = useMemo(
     () => Array.from(new Set([...NINEVEH_DISTRICTS, ...districts])).sort(),
     [districts],
@@ -126,15 +133,15 @@ export function LicensesPanel({
   const optionSets = useMemo(
     () => ({
       sector: sectors,
-      project_type: distinct(all.map((o) => o.project_type)),
+      project_type: distinct([...all.map((o) => o.project_type), ...(fo?.project_type ?? [])]),
       district: districtOptions,
       subdistrict: subdistrictOptions,
       neighborhood: neighborhoods,
-      muqataa_name: distinct(all.map((o) => o.muqataa_name)),
-      land_right: distinct(all.map((o) => o.land_right)),
-      investor_nationality: distinct(all.map((o) => o.investor_nationality)),
+      muqataa_name: distinct([...all.map((o) => o.muqataa_name), ...(fo?.muqataa_name ?? [])]),
+      land_right: distinct([...all.map((o) => o.land_right), ...(fo?.land_right ?? [])]),
+      investor_nationality: distinct([...all.map((o) => o.investor_nationality), ...(fo?.investor_nationality ?? [])]),
     }),
-    [all, sectors, districtOptions, subdistrictOptions, neighborhoods],
+    [all, fo, sectors, districtOptions, subdistrictOptions, neighborhoods],
   );
 
   const filtered = useMemo(() => {
@@ -187,9 +194,12 @@ export function LicensesPanel({
     setNeighborhood("");
     setStatus("");
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.record_id)) : filtered;
-    exportCsv("licenses.csv", rows as unknown as Record<string, unknown>[], [...LICENSE_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "licenses.csv", "تقرير الرخص الاستثمارية", rows as unknown as Record<string, unknown>[], [...LICENSE_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
   }
   async function onDelete(o: License) {
     if (!window.confirm(`حذف الرخصة «${o.title ?? o.license_number ?? "بلا عنوان"}»؟`)) return;
@@ -246,9 +256,10 @@ export function LicensesPanel({
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
+          {!isViewer ? (
           <button
             type="button"
             onClick={() => { setEditing(null); setFormOpen(true); }}
@@ -258,6 +269,7 @@ export function LicensesPanel({
           >
             <Plus className="size-5" />
           </button>
+          ) : null}
           <button
             type="button"
             onClick={toggleAll}
@@ -304,7 +316,7 @@ export function LicensesPanel({
             return (
               <li
                 key={o.record_id}
-                className="group relative overflow-hidden rounded-xl border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
+                className="group relative overflow-hidden rounded-xl [content-visibility:auto] [contain-intrinsic-size:auto_120px] border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
               >
                 {/* شريط الحالة الجانبي بلون حالة الرخصة */}
                 <span
@@ -389,17 +401,24 @@ export function LicensesPanel({
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: true })} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
-                      {o.parcel_no ? (
+                      {!isViewer && o.parcel_no ? (
                         <Button size="sm" variant="outline" onClick={() => { if (o.parcel_no) requestStartDraw({ parcel_no: o.parcel_no, muqataa_no: o.muqataa_no, label: o.title ?? o.license_number ?? "القطعة" }); }} title="ارسم حدودها واربطها على الخريطة">
                           <PenTool className="size-3.5" /> ارسم
                         </Button>
                       ) : null}
+                      {!isViewer ? (
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
+                      ) : null}
+                      <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("license", o.record_id, o.title)} title="تصدير بطاقة القطعة PDF">
+                        <FileText className="size-3.5" /> PDF
+                      </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

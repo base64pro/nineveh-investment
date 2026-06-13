@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FilterX,
   Layers,
   ListChecks,
   Pencil,
@@ -18,8 +19,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTable } from "@/lib/data/use-table";
+import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
-import { exportCsv } from "@/lib/export-csv";
+import { exportTable } from "@/lib/export-table";
 import { formatDate, orNA } from "@/lib/display";
 import { formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,7 @@ import { CriterionDetail } from "./criterion-detail";
 import { deleteCriterion, setCriterionStatus } from "./actions";
 import { asItems, criterionStatusLabel, domainLabel, CRITERION_DOMAINS, CRITERION_EXPORT_COLUMNS, CRITERION_STATUSES } from "./fields";
 import type { Criterion } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const ORB =
   "relative grid place-items-center rounded-full text-foreground bg-[radial-gradient(circle_at_50%_28%,#4f6498,#2a3a5c)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.32),0_10px_22px_-8px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_2px_rgba(255,255,255,0.45),0_15px_28px_-8px_rgba(0,0,0,0.85)] active:translate-y-0 active:scale-95";
@@ -48,6 +51,7 @@ function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
 export function CriteriaPanel() {
   const { data, isLoading, isError, refetch } = useTable<Criterion>("criteria");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [domain, setDomain] = useState("");
@@ -97,9 +101,18 @@ export function CriteriaPanel() {
   function toggleAll() {
     setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((o) => o.id)));
   }
-  function onExport() {
+  const { data: settingsData } = useSettings();
+  const exportFormat = settingsData?.settings.default_export ?? "pdf";
+  async function onExport() {
     const rows = selected.size ? filtered.filter((o) => selected.has(o.id)) : filtered;
-    exportCsv("criteria.csv", rows as unknown as Record<string, unknown>[], [...CRITERION_EXPORT_COLUMNS]);
+    const ok = await exportTable(exportFormat, "criteria.csv", "تقرير مكتبة المعايير", rows as unknown as Record<string, unknown>[], [...CRITERION_EXPORT_COLUMNS]);
+    if (!ok) toast.error("تعذّر تصدير الـPDF — حاول مجدداً");
+  }
+  const hasFilters = Boolean(q || domain || status);
+  function clearFilters() {
+    setQ("");
+    setDomain("");
+    setStatus("");
   }
   function invalidate() {
     void queryClient.invalidateQueries({ queryKey: ["table", "criteria"] });
@@ -144,7 +157,7 @@ export function CriteriaPanel() {
           <span className="absolute start-0 top-1/2 -translate-y-1/2 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {filtered.length}/{all.length}{selected.size ? ` · ${selected.size}` : ""}
           </span>
-          <button type="button" onClick={onExport} title="تصدير CSV" aria-label="تصدير CSV" className={cn(ORB, "size-12")}>
+          <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="معيار جديد" aria-label="معيار جديد" className={cn(ORB, "size-12")}>
@@ -152,6 +165,9 @@ export function CriteriaPanel() {
           </button>
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
+          </button>
+          <button type="button" onClick={clearFilters} disabled={!hasFilters} title="مسح التصفية (عودة للكل)" aria-label="مسح التصفية" className={cn(ORB, "size-12", !hasFilters && "opacity-40")}>
+            <FilterX className="size-4" />
           </button>
         </div>
       </div>
@@ -182,7 +198,7 @@ export function CriteriaPanel() {
             return (
               <li
                 key={o.id}
-                className="group relative overflow-hidden rounded-xl border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
+                className="group relative overflow-hidden rounded-xl [content-visibility:auto] [contain-intrinsic-size:auto_120px] border border-foreground/30 ring-1 ring-inset ring-foreground/10 bg-gradient-to-br from-card/85 via-card/55 to-card/35 shadow-sm transition-all duration-200 hover:border-foreground/50 hover:ring-foreground/20 hover:shadow-[0_12px_34px_-14px] hover:shadow-foreground/10"
               >
                 <span
                   className={cn("absolute inset-y-0 start-0 w-1 bg-gradient-to-b", isActive ? "from-state-completed to-state-completed/20" : "from-border to-border/10")}
@@ -233,6 +249,8 @@ export function CriteriaPanel() {
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض">
                         <Eye className="size-3.5" /> عرض
                       </Button>
+                      {!isViewer ? (
+                      <>
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
@@ -242,6 +260,8 @@ export function CriteriaPanel() {
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      </>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

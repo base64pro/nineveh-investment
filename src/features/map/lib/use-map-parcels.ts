@@ -13,6 +13,8 @@ interface MapParcelRow {
   state: string | null;
   geometry: Geometry | null;
   label: string | null;
+  neighborhood: string | null;
+  district: string | null;
 }
 
 export interface ParcelProps {
@@ -22,6 +24,8 @@ export interface ParcelProps {
   parcel_no: string | null;
   state: string;
   label: string;
+  neighborhood: string | null;
+  district: string | null;
 }
 
 /** قطع الخريطة الموحّدة (view map_parcels) كـFeatureCollection للعرض الملوّن — م2.4. */
@@ -49,6 +53,8 @@ export function useMapParcels() {
           parcel_no: r.parcel_no,
           state: r.state,
           label: r.label ?? "",
+          neighborhood: r.neighborhood,
+          district: r.district,
         } satisfies ParcelProps,
       }));
     return { type: "FeatureCollection", features };

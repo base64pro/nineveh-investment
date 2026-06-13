@@ -10,7 +10,7 @@ async function suggestTitle(question: string): Promise<string> {
   const fallback = question.replace(/\s+/g, " ").trim().slice(0, 60) || "استشارة قانونية";
   try {
     const t = await anthropicChat({
-      system: "اقترح عنواناً موجزاً جداً (٣–٦ كلمات) لاستشارة قانونية استثمارية. أعد العنوان فقط، بلا علامات اقتباس ولا شرح.",
+      system: "اقترح عنواناً موجزاً جداً (3–6 كلمات) لاستشارة قانونية استثمارية. أعد العنوان فقط، بلا علامات اقتباس ولا شرح.",
       messages: [{ role: "user", content: question }],
       maxTokens: 30,
     });

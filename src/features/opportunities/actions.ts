@@ -11,13 +11,16 @@ export async function saveOpportunity(
   id?: number,
 ): Promise<ActionResult> {
   const supabase = await createClient();
-  const record_id = id ?? Date.now();
   // توحيد القطاع: التسمية العربية ← رمز ثابت للتخزين (لا تنقسم القيم).
   const normalized = "sector" in values ? { ...values, sector: sectorCode(values.sector as string | null) } : values;
-  const { error } = await supabase
-    .from("opportunities")
-    .upsert({ ...normalized, record_id, kind: "opportunity" }, { onConflict: "record_id" });
-  if (error) return { ok: false, error: error.message };
+  // فصل صريح: تحديث يضبط الأعمدة المرسلة فقط، وإنشاء يفشل بصوت عند تصادم معرّف (لا دمج صامت).
+  if (id !== undefined) {
+    const { error } = await supabase.from("opportunities").update(normalized).eq("record_id", id);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from("opportunities").insert({ ...normalized, record_id: Date.now(), kind: "opportunity" });
+    if (error) return { ok: false, error: error.message };
+  }
   return { ok: true };
 }
 

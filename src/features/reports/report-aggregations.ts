@@ -1,5 +1,5 @@
 // م5.3 · تجميعات التقارير — **دوالّ نقية حتمية** (الأرقام من البيانات الفعلية، لا تأليف، §هـ.5 التقارير الذكية).
-import type { AssumedParcel, Company, License, Opportunity } from "@/types/entities";
+import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
 export type ParcelKind = "opportunity" | "license" | "assumed";
 
@@ -30,11 +30,28 @@ const yearOf = (d: string | null | undefined): string | null => {
   return /^\d{4}$/.test(s) ? s : null;
 };
 
-/** يوحّد الكيانات الثلاثة في سجلات قابلة للتجميع (الشركات تُعامَل منفصلة). */
+/**
+ * يوحّد الكيانات الثلاثة في سجلات قابلة للتجميع (الشركات تُعامَل منفصلة).
+ * منع العدّ المزدوج للمساحات: فرصة على نفس قطعة رخصة (parcel_no + muqataa_no) تبقى سجلاً
+ * لكن مساحتها 0 (تُحسب مرّة واحدة لدى الرخصة الفعلية) — نفس قاعدة dashboard_stats.
+ */
 export function normalize(opps: Opportunity[], lics: License[], assumed: AssumedParcel[]): NormRecord[] {
+  const licParcels = new Set(
+    lics.filter((l) => l.parcel_no).map((l) => `${l.parcel_no}|${l.muqataa_no ?? ""}`),
+  );
   const out: NormRecord[] = [];
-  for (const o of opps)
-    out.push({ kind: "opportunity", state: "announced", sector: o.sector, district: o.district, area: num(o.area_total_m2), year: yearOf(o.publish_date), value: 0 });
+  for (const o of opps) {
+    const sharesLicenseParcel = o.parcel_no !== null && licParcels.has(`${o.parcel_no}|${o.muqataa_no ?? ""}`);
+    out.push({
+      kind: "opportunity",
+      state: "announced",
+      sector: o.sector,
+      district: o.district,
+      area: sharesLicenseParcel ? 0 : num(o.area_total_m2),
+      year: yearOf(o.publish_date),
+      value: 0,
+    });
+  }
   for (const l of lics)
     out.push({ kind: "license", state: l.status, sector: l.sector, district: l.district, area: num(l.area_total_m2), year: yearOf(l.issue_date), value: num(l.capital) });
   for (const a of assumed)
@@ -110,12 +127,3 @@ export function byYear(recs: NormRecord[]): { year: string; opportunities: numbe
   return [...map.entries()].map(([year, v]) => ({ year, ...v })).sort((a, b) => a.year.localeCompare(b.year));
 }
 
-/** توزيع الشركات حسب القطاع (مرتّب تنازلياً). */
-export function companiesBySector(companies: Company[]): { key: string; count: number }[] {
-  const map = new Map<string, number>();
-  for (const c of companies) {
-    if (!c.sector) continue;
-    map.set(c.sector, (map.get(c.sector) ?? 0) + 1);
-  }
-  return [...map.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
-}

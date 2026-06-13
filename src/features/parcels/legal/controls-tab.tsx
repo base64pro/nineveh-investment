@@ -11,32 +11,11 @@ import { StateBadge } from "@/features/parcels/state-badge";
 import { AdvisorAnswer } from "@/features/legal-advisor/advisor-answer";
 import { sectorLabel } from "@/lib/sectors";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
-import type { ParcelState } from "@/types/entities";
-import { evaluateControls, type ControlItem, type ControlsInput, type Eligibility, type Fulfillment } from "./controls-engine";
+import { evaluateControls, type ControlItem, type Eligibility, type Fulfillment } from "./controls-engine";
+import { toControlsInput } from "./parcel-input";
 import { explainControls } from "./explain-actions";
 
-const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
-const str = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v : null);
-
-function parcelState(kind: ParcelKind, e: Record<string, unknown>): ParcelState {
-  if (kind === "opportunity") return "announced";
-  if (kind === "license") return (str(e.status) as ParcelState) ?? "in-progress";
-  return (str(e.state) as ParcelState) ?? "assumed";
-}
-
-export function toControlsInput(kind: ParcelKind, e: Record<string, unknown>): ControlsInput {
-  const capitalUsd = kind === "license" ? num(e.capital) : kind === "assumed" ? num(e.value) : null;
-  return {
-    state: parcelState(kind, e),
-    sector: str(e.sector),
-    capitalUsd,
-    projectValueUsd: capitalUsd,
-    landRight: str(e.land_right),
-    nationality: str(e.investor_nationality),
-    owner: str(e.owner),
-    withdrawalReason: str(e.withdrawal_reason),
-  };
-}
+export { toControlsInput } from "./parcel-input"; // إبقاء التصدير للمستهلكين القائمين
 
 const FULFILL: Record<Fulfillment, { label: string; cls: string; Icon: LucideIcon }> = {
   met: { label: "مستوفٍ", cls: "bg-state-completed/15 text-state-completed ring-state-completed/40", Icon: CheckCircle2 },
