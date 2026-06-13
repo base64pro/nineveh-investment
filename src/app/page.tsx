@@ -2,6 +2,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/features/shell/app-sidebar";
 import { Headbar } from "@/features/shell/headbar";
+import { MobileKpis } from "@/features/shell/mobile-kpis";
 import { SearchOverlay } from "@/features/search/search-overlay";
 import { SettingsApplier } from "@/features/settings/settings-applier";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
@@ -35,6 +36,7 @@ export default async function Home() {
           <div className="absolute inset-y-0 left-0 right-20">
             <InvestmentMap />
           </div>
+          <MobileKpis />
           <AppSidebar userEmail={user?.email ?? null} />
           <SearchOverlay />
           <SettingsApplier />

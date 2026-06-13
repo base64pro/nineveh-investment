@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { openSearch } from "@/features/search/search-store";
 import { requestOpenSection } from "./shell-store";
 
-interface ChipDef {
+export interface ChipDef {
   key: keyof DashboardStats;
   label: string;
   shortLabel?: string;
@@ -24,7 +24,7 @@ interface ChipDef {
   status?: string;
 }
 
-const CHIPS: ChipDef[] = [
+export const CHIPS: ChipDef[] = [
   { key: "announced", label: "معلَنة", dot: "bg-state-announced", section: "opportunities" },
   { key: "lic_in_progress", label: "قيد الإنجاز", shortLabel: "قيد", dot: "bg-state-inprogress", section: "licenses", status: "in-progress" },
   { key: "lic_completed", label: "منجزة", dot: "bg-state-completed", section: "licenses", status: "completed" },
@@ -34,7 +34,7 @@ const CHIPS: ChipDef[] = [
 ];
 
 // رقم بتدرّج ضوئي (أبيض ← أزرق ثلجي) — التوقيع البصري الهولوكرامي
-const NUM_GRADIENT = "bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-transparent";
+export const NUM_GRADIENT = "bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-transparent";
 
 function Chip({ def, value, index, full = false }: { def: ChipDef; value: number; index: number; full?: boolean }) {
   const display = useCountUp(value);
@@ -188,29 +188,22 @@ export function Headbar() {
         </div>
       </div>
 
-      {/* ===== الجوال (<md): طبقتان رصينتان مملوءتان للشاشة ===== */}
-      <div className="md:hidden">
-        {/* طبقة الهوية والبحث — على مستوى أفقي واحد */}
-        <div className="flex h-14 items-center gap-2.5 px-3">
-          <DirectorAvatar className="size-10" />
-          <div className="min-w-0 flex-1 text-right leading-tight">
-            <div className="truncate text-[13px] font-bold tracking-tight text-foreground">هيئة استثمار نينوى</div>
-            <div className="truncate text-[9px] text-muted-foreground">مكتب السيد رئيس الهيئة الأستاذ حارث البخو</div>
-          </div>
-          <button
-            type="button"
-            onClick={openSearch}
-            title="بحث فائق"
-            aria-label="بحث فائق"
-            className="grid size-10 shrink-0 place-items-center rounded-full border border-[rgba(148,175,209,0.45)] bg-white/5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.85)] hover:bg-white/10 hover:text-foreground active:scale-95"
-          >
-            <Search className="size-[18px]" />
-          </button>
+      {/* ===== الجوال (<md): صفّ واحد أنيق — الصورة · العنوان · البحث (الأرقام في شريط عمودي أسفل-يسار الخريطة) ===== */}
+      <div className="flex h-[58px] items-center gap-2.5 px-3 md:hidden">
+        <DirectorAvatar className="size-10" />
+        <div className="min-w-0 flex-1 text-right leading-tight">
+          <div className="truncate text-[13.5px] font-bold tracking-tight text-foreground">هيئة استثمار نينوى</div>
+          <div className="truncate text-[9px] text-muted-foreground">مكتب السيد رئيس الهيئة الأستاذ حارث البخو</div>
         </div>
-        {/* طبقة الأرقام — تملأ عرض الشاشة كاملاً */}
-        <div className="px-2.5 pb-2.5">
-          <CountersBar stats={stats} full />
-        </div>
+        <button
+          type="button"
+          onClick={openSearch}
+          title="بحث فائق"
+          aria-label="بحث فائق"
+          className="grid size-10 shrink-0 place-items-center rounded-full border border-[rgba(148,175,209,0.45)] bg-white/5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.85)] hover:bg-white/10 hover:text-foreground active:scale-95"
+        >
+          <Search className="size-[18px]" />
+        </button>
       </div>
     </div>
   );
