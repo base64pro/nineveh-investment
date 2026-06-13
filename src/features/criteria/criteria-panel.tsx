@@ -32,6 +32,7 @@ import { CriterionDetail } from "./criterion-detail";
 import { deleteCriterion, setCriterionStatus } from "./actions";
 import { asItems, criterionStatusLabel, domainLabel, CRITERION_DOMAINS, CRITERION_EXPORT_COLUMNS, CRITERION_STATUSES } from "./fields";
 import type { Criterion } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const ORB =
   "relative grid place-items-center rounded-full text-foreground bg-[radial-gradient(circle_at_50%_28%,#4f6498,#2a3a5c)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.32),0_10px_22px_-8px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_2px_rgba(255,255,255,0.45),0_15px_28px_-8px_rgba(0,0,0,0.85)] active:translate-y-0 active:scale-95";
@@ -50,6 +51,7 @@ function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
 export function CriteriaPanel() {
   const { data, isLoading, isError, refetch } = useTable<Criterion>("criteria");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [domain, setDomain] = useState("");
@@ -247,6 +249,8 @@ export function CriteriaPanel() {
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض">
                         <Eye className="size-3.5" /> عرض
                       </Button>
+                      {!isViewer ? (
+                      <>
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
@@ -256,6 +260,8 @@ export function CriteriaPanel() {
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      </>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

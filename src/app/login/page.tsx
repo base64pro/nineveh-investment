@@ -69,9 +69,9 @@ export default async function LoginPage({
             <div className="space-y-1.5">
               <label htmlFor="email" className="flex items-center gap-1.5 text-xs font-semibold text-foreground/80">
                 <Mail className="size-3.5 text-[#9fc0e8]" />
-                البريد الإلكتروني
+                اسم المستخدم أو البريد
               </label>
-              <input id="email" name="email" type="email" required autoComplete="email" dir="ltr" className={INPUT} />
+              <input id="email" name="email" type="text" required autoComplete="username" dir="ltr" className={INPUT} />
             </div>
 
             <div className="space-y-1.5">

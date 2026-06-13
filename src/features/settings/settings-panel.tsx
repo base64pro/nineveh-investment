@@ -7,18 +7,19 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { Bot, Check, Download, KeyRound, Monitor, Trash2, UserCog } from "lucide-react";
+import { Bot, Check, Download, KeyRound, Monitor, Trash2, UserCog, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combo } from "@/components/ui/combo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useSettings } from "./use-settings";
 import { applyDisplay } from "./apply";
-import { changePassword, deleteApiKey, saveSettings, setApiKey, testAiModel } from "./actions";
+import { changePassword, deleteApiKey, getSecondUser, saveSettings, setApiKey, testAiModel, upsertSecondUser } from "./actions";
 import { CLAUDE_MODELS, type AppSettings } from "./types";
 
 const TABS = [
   { id: "account", label: "الحساب", icon: UserCog },
+  { id: "users", label: "المستخدمون", icon: Users },
   { id: "display", label: "العرض", icon: Monitor },
   { id: "ai", label: "الذكاء", icon: Bot },
   { id: "export", label: "التصدير", icon: Download },
@@ -61,6 +62,32 @@ export function SettingsPanel() {
   const [keyInput, setKeyInput] = useState<Record<string, string>>({ anthropic: "", voyage: "" });
   const [pdf, setPdf] = useState({ org: "", header: "", footer: "" });
   const [testingModel, setTestingModel] = useState(false);
+  // المستخدم الثاني (م8.1)
+  const [vUser, setVUser] = useState("");
+  const [vPwd, setVPwd] = useState("");
+  const [vBusy, setVBusy] = useState(false);
+  const [vExisting, setVExisting] = useState<string | null>(null);
+  useEffect(() => {
+    if (tab !== "users") return;
+    void getSecondUser().then((r) => {
+      if (r.ok) {
+        setVExisting(r.username);
+        setVUser(r.username ?? "");
+      }
+    });
+  }, [tab]);
+  async function onSaveSecondUser(): Promise<void> {
+    setVBusy(true);
+    const res = await upsertSecondUser(vUser, vPwd);
+    setVBusy(false);
+    if (res.ok) {
+      toast.success(vExisting ? "حُدِّث المستخدم الثاني" : "أُنشئ المستخدم الثاني");
+      setVExisting(vUser.trim().toLowerCase());
+      setVPwd("");
+    } else {
+      toast.error("تعذّر الحفظ", { description: res.error });
+    }
+  }
 
   const s = data?.settings;
   useEffect(() => {
@@ -121,7 +148,7 @@ export function SettingsPanel() {
   return (
     <div className="flex h-full flex-col">
       {/* تابات */}
-      <div className="grid grid-cols-4 gap-1 border-b border-border p-2">
+      <div className="grid grid-cols-5 gap-1 border-b border-border p-2">
         {TABS.map((tt) => {
           const Icon = tt.icon;
           return (
@@ -151,6 +178,25 @@ export function SettingsPanel() {
               <div className="flex gap-2">
                 <input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="كلمة مرور جديدة" className={INPUT} autoComplete="new-password" />
                 <Button type="button" size="sm" disabled={busy || pwd.length < 6} onClick={() => void onChangePwd()}>حفظ</Button>
+              </div>
+            </Field>
+          </>
+        ) : null}
+
+        {tab === "users" ? (
+          <>
+            <div className="rounded-lg border border-primary/25 bg-primary/8 p-3 text-xs leading-relaxed text-foreground/80">
+              المستخدم الثاني يتصفّح النظام كاملاً ويولّد التوصيات والمعايير ويصدّر التقارير، لكن لا يعدّل أو يحذف البيانات، ولا يصمّم فرصاً، ولا يرسم على الخريطة، ولا يصل هذه الإعدادات.
+            </div>
+            <Field label="اسم المستخدم الثاني" hint={vExisting ? `الحالي: ${vExisting}` : "لم يُنشأ بعد — أدخل اسماً وكلمة مرور"}>
+              <input value={vUser} onChange={(e) => setVUser(e.target.value)} placeholder="مثال: viewer" dir="ltr" className={INPUT} autoComplete="off" />
+            </Field>
+            <Field label={vExisting ? "كلمة مرور جديدة" : "كلمة المرور"} hint="6 أحرف على الأقل">
+              <div className="flex gap-2">
+                <input type="password" value={vPwd} onChange={(e) => setVPwd(e.target.value)} placeholder="كلمة المرور" className={INPUT} autoComplete="new-password" />
+                <Button type="button" size="sm" disabled={vBusy || !vUser.trim() || vPwd.length < 6} onClick={() => void onSaveSecondUser()}>
+                  {vBusy ? "…" : vExisting ? "تحديث" : "إنشاء"}
+                </Button>
               </div>
             </Field>
           </>

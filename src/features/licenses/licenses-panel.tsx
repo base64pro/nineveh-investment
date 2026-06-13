@@ -51,6 +51,7 @@ import { VisitsLog } from "./visits/visits-log";
 import { deleteLicense } from "./actions";
 import { LICENSE_EXPORT_COLUMNS } from "./fields";
 import type { License } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
@@ -100,6 +101,7 @@ export function LicensesPanel({
 }) {
   const { data, isLoading, isError, refetch } = useTable<License>("licenses");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
@@ -257,6 +259,7 @@ export function LicensesPanel({
           <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
+          {!isViewer ? (
           <button
             type="button"
             onClick={() => { setEditing(null); setFormOpen(true); }}
@@ -266,6 +269,7 @@ export function LicensesPanel({
           >
             <Plus className="size-5" />
           </button>
+          ) : null}
           <button
             type="button"
             onClick={toggleAll}
@@ -397,20 +401,24 @@ export function LicensesPanel({
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: true })} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
-                      {o.parcel_no ? (
+                      {!isViewer && o.parcel_no ? (
                         <Button size="sm" variant="outline" onClick={() => { if (o.parcel_no) requestStartDraw({ parcel_no: o.parcel_no, muqataa_no: o.muqataa_no, label: o.title ?? o.license_number ?? "القطعة" }); }} title="ارسم حدودها واربطها على الخريطة">
                           <PenTool className="size-3.5" /> ارسم
                         </Button>
                       ) : null}
+                      {!isViewer ? (
                       <Button size="sm" variant="outline" onClick={() => requestOpenParcelDetail({ kind: "license", id: String(o.record_id), readOnly: false })} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
+                      ) : null}
                       <Button size="sm" variant="outline" onClick={() => void exportParcelPdf("license", o.record_id, o.title)} title="تصدير بطاقة القطعة PDF">
                         <FileText className="size-3.5" /> PDF
                       </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

@@ -20,10 +20,16 @@ import { LegalAdvisorPanel } from "@/features/legal-advisor/legal-advisor-panel"
 import { ParcelModals } from "@/features/parcels/parcel-modals";
 import { onOpenSection } from "./shell-store";
 import { SECTIONS } from "./sections";
+import { useRole } from "@/features/auth/role-context";
+
+// أقسام محظورة على المستخدم الثاني (م8.1): تصميم فرصة + الإعدادات.
+const VIEWER_HIDDEN = new Set(["opportunity-design", "settings"]);
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   useRealtimeSync(); // المصدر الواحد: انعكاس فوري لأي تغيير
   const { data: counts } = useCounts();
+  const { isViewer } = useRole();
+  const sections = isViewer ? SECTIONS.filter((s) => !VIEWER_HIDDEN.has(s.id)) : SECTIONS;
   const [active, setActive] = useState<string | null>(null);
   const [licenseStatus, setLicenseStatus] = useState("");
 
@@ -37,7 +43,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
     [],
   );
 
-  const activeSection = SECTIONS.find((s) => s.id === active) ?? null;
+  const activeSection = sections.find((s) => s.id === active) ?? null;
   const ActiveIcon = activeSection?.icon;
 
   return (
@@ -112,7 +118,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       {/* الشريط — يمين الشاشة (§هـ.1) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق + توهّجات */}
       <nav className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur">
         <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent" />
-        {SECTIONS.map((s) => {
+        {sections.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;
           const count = s.table && counts ? counts[s.table] : undefined;

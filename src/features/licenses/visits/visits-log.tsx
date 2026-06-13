@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, orNA } from "@/lib/display";
 import { signedUrls, uploadVisitPhotos } from "@/features/parcels/photos/photo-lib";
 import { saveVisit, deleteVisit } from "./visits-actions";
+import { useRole } from "@/features/auth/role-context";
 import type { Visit } from "@/types/entities";
 
 /** مصغّرات صور زيارة (روابط موقّعة من الدلو الخاص). */
@@ -42,6 +43,7 @@ const INPUT = "w-full rounded-md border border-input bg-background px-2 py-1.5 t
 export function VisitsLog({ parcelRef }: { parcelRef: string }) {
   const { data } = useTable<Visit>("visits");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole(); // الثاني: عرض السجلّ فقط — لا إضافة/تعديل/حذف (م8.1)
   const [editing, setEditing] = useState<Visit | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -130,7 +132,7 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
           <ClipboardList className="size-3.5" /> سجلّ الزيارات
           <span className="rounded bg-secondary/60 px-1.5 text-[10px] text-secondary-foreground">{visits.length}</span>
         </h4>
-        {!showForm ? (
+        {!showForm && !isViewer ? (
           <Button size="sm" variant="outline" onClick={() => { setEditing(null); setPhotoPaths([]); setAdding(true); }}>
             <Plus className="size-3.5" /> زيارة
           </Button>
@@ -223,14 +225,16 @@ export function VisitsLog({ parcelRef }: { parcelRef: string }) {
                 {v.notes ? <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{orNA(v.notes)}</p> : null}
                 <VisitThumbs paths={Array.isArray(v.photos) ? v.photos : []} />
               </div>
-              <div className="flex shrink-0 gap-1">
-                <Button size="icon" variant="ghost" onClick={() => { setAdding(false); setPhotoPaths(v.photos ?? []); setEditing(v); }} title="تعديل" aria-label="تعديل">
-                  <Pencil className="size-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => void onDelete(v)} title="حذف" aria-label="حذف">
-                  <Trash2 className="size-3.5 text-destructive" />
-                </Button>
-              </div>
+              {!isViewer ? (
+                <div className="flex shrink-0 gap-1">
+                  <Button size="icon" variant="ghost" onClick={() => { setAdding(false); setPhotoPaths(v.photos ?? []); setEditing(v); }} title="تعديل" aria-label="تعديل">
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={() => void onDelete(v)} title="حذف" aria-label="حذف">
+                    <Trash2 className="size-3.5 text-destructive" />
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </li>
         ))}

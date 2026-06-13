@@ -44,6 +44,7 @@ import { CompanyDetail } from "./company-detail";
 import { deleteCompany } from "./actions";
 import { COMPANY_EXPORT_COLUMNS, isEligible } from "./fields";
 import type { Company } from "@/types/entities";
+import { useRole } from "@/features/auth/role-context";
 
 const distinct = (values: (string | null)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort();
@@ -76,6 +77,7 @@ function Chip({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
 export function CompaniesPanel() {
   const { data, isLoading, isError, refetch } = useTable<Company>("companies");
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
 
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("");
@@ -215,9 +217,11 @@ export function CompaniesPanel() {
           <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
+          {!isViewer ? (
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="إضافة شركة" aria-label="إضافة شركة" className={cn(ORB, "size-12")}>
             <Plus className="size-5" />
           </button>
+          ) : null}
           <button type="button" onClick={toggleAll} title={allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"} aria-label="تحديد/إلغاء تحديد الكل" className={cn(ORB, "size-12")}>
             {allFilteredSelected ? <CheckCheck className="size-4" /> : <ListChecks className="size-4" />}
           </button>
@@ -331,15 +335,19 @@ export function CompaniesPanel() {
                       <Button size="sm" variant="outline" onClick={() => setDetail(o)} title="عرض التفاصيل">
                         <Eye className="size-3.5" /> عرض
                       </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="outline" onClick={() => { setEditing(o); setFormOpen(true); }} title="تعديل">
                         <Pencil className="size-3.5" /> تعديل
                       </Button>
+                      ) : null}
                       <Button size="sm" variant="outline" onClick={() => void exportTable("pdf", "company.csv", `بطاقة شركة — ${o.name ?? ""}`, [o as unknown as Record<string, unknown>], [...COMPANY_EXPORT_COLUMNS])} title="تصدير بطاقة الشركة PDF">
                         <FileText className="size-3.5" /> PDF
                       </Button>
+                      {!isViewer ? (
                       <Button size="sm" variant="danger" onClick={() => void onDelete(o)} title="حذف" className="ms-auto">
                         <Trash2 className="size-3.5" /> حذف
                       </Button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

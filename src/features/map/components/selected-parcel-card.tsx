@@ -13,6 +13,7 @@ import { sectorLabel } from "@/lib/sectors";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { useParcelPhotos } from "@/features/parcels/photos/photo-lib";
 import { PhotoLightbox } from "@/features/parcels/photos/photo-lightbox";
+import { useRole } from "@/features/auth/role-context";
 import { sfxOpen } from "@/lib/sfx";
 import type { ParcelKind } from "../lib/map-nav-store";
 import type { ParcelProps } from "../lib/use-map-parcels";
@@ -67,6 +68,7 @@ export function SelectedParcelCard({
   onClose: () => void;
 }) {
   const kind = props.kind as ParcelKind;
+  const { isViewer } = useRole(); // الثاني: لا «الحدود» ولا «حذف الرسمة» — عرض فقط (م8.1)
   const { data: photos = [] } = useParcelPhotos(kind, props.entity_id);
   const [idx, setIdx] = useState(0);
   const [lightbox, setLightbox] = useState(false);
@@ -234,22 +236,26 @@ export function SelectedParcelCard({
             >
               <Eye className="size-3.5" /> عرض
             </button>
-            <button
-              type="button"
-              onClick={onEditGeometry}
-              title="تعديل حدود الرسم"
-              className={cn(BTN, "bg-state-assumed/15 text-state-assumed ring-state-assumed/40 hover:bg-state-assumed/25")}
-            >
-              <PencilRuler className="size-3.5" /> الحدود
-            </button>
-            <button
-              type="button"
-              onClick={onDeleteGeometry}
-              title="إزالة الرسمة من الخريطة — بيانات القطعة تبقى محفوظة"
-              className={cn(BTN, "bg-state-withdrawn/12 text-state-withdrawn ring-state-withdrawn/40 hover:bg-state-withdrawn/22")}
-            >
-              <Trash2 className="size-3.5" /> حذف الرسمة
-            </button>
+            {!isViewer ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onEditGeometry}
+                  title="تعديل حدود الرسم"
+                  className={cn(BTN, "bg-state-assumed/15 text-state-assumed ring-state-assumed/40 hover:bg-state-assumed/25")}
+                >
+                  <PencilRuler className="size-3.5" /> الحدود
+                </button>
+                <button
+                  type="button"
+                  onClick={onDeleteGeometry}
+                  title="إزالة الرسمة من الخريطة — بيانات القطعة تبقى محفوظة"
+                  className={cn(BTN, "bg-state-withdrawn/12 text-state-withdrawn ring-state-withdrawn/40 hover:bg-state-withdrawn/22")}
+                >
+                  <Trash2 className="size-3.5" /> حذف الرسمة
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </motion.div>

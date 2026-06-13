@@ -38,6 +38,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { deleteParcelGeometry, updateParcelGeometry } from "../lib/geometry-actions";
 import { useMapAnnotations } from "../lib/use-map-annotations";
 import { useFieldOptions } from "@/lib/data/use-field-options";
+import { useRole } from "@/features/auth/role-context";
 import { sfxFly } from "@/lib/sfx";
 import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
 import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
@@ -1307,6 +1308,7 @@ export default function InvestmentMap() {
     toast.success("أُزيلت الرسمة من الخريطة — البيانات محفوظة");
   }
 
+  const { isViewer } = useRole(); // الثاني: لا رسم ولا تعديل/حذف حدود (م8.1)
   // أحياء فلترة الظهور: القطع المرسومة ∪ القاموس الموحّد (م7.7 — نفس القيم في كل منسدلات النظام)
   const { data: fieldOpts } = useFieldOptions();
   const neighborhoodOptions = useMemo(
@@ -1496,21 +1498,23 @@ export default function InvestmentMap() {
           ) : null}
         </AnimatePresence>
 
-        {/* استوديو الرسم (م7.1/7.6) — قابل للطي، تحت الأزرار العائمة (خريطة فقط — استثناء الوصول المزدوج §هـ.4) */}
-        <DrawDock
-          open={drawOpen}
-          onToggle={() =>
-            setDrawOpen((v) => {
-              const next = !v;
-              if (next) setShowLayers(false); // فتح الاستوديو يطوي لوحة الطبقات
-              return next;
-            })
-          }
-          mode={drawMode}
-          onMode={enterDrawMode}
-          liveAreaM2={drawMode !== "off" ? liveArea : null}
-          onCancel={exitDraw}
-        />
+        {/* استوديو الرسم (م7.1/7.6) — للمدير فقط (الرسم محظور على المستخدم الثاني · م8.1) */}
+        {!isViewer ? (
+          <DrawDock
+            open={drawOpen}
+            onToggle={() =>
+              setDrawOpen((v) => {
+                const next = !v;
+                if (next) setShowLayers(false); // فتح الاستوديو يطوي لوحة الطبقات
+                return next;
+              })
+            }
+            mode={drawMode}
+            onMode={enterDrawMode}
+            liveAreaM2={drawMode !== "off" ? liveArea : null}
+            onCancel={exitDraw}
+          />
+        ) : null}
       </div>
 
       {/* الجارت الهولوكرامي (م7.6) — ينزاح بأناقة عند انشغال الأدوات العائمة (طبقات/رسم) فلا تداخل */}

@@ -29,6 +29,7 @@ import { OPPORTUNITY_FORM_FIELDS, OPPORTUNITY_OPTION_FIELDS } from "@/features/o
 import { LICENSE_FORM_FIELDS, LICENSE_OPTION_FIELDS } from "@/features/licenses/fields";
 import { ASSUMED_FORM_FIELDS, ASSUMED_OPTION_FIELDS } from "@/features/assumed/fields";
 import { sfxOpen } from "@/lib/sfx";
+import { useRole } from "@/features/auth/role-context";
 import { saveOpportunity } from "@/features/opportunities/actions";
 import { saveLicense } from "@/features/licenses/actions";
 import { saveAssumed } from "@/features/assumed/actions";
@@ -144,6 +145,8 @@ export function ParcelWindow({
 }) {
   const cfg = KINDS[kind];
   const queryClient = useQueryClient();
+  const { isViewer } = useRole();
+  const ro = readOnly || isViewer; // الثاني: النافذة للقراءة دائماً — لا تعديل/حالة/حفظ/زيارات/صور (م8.1)
   const { data: custom } = useFieldOptions();
   const [saving, setSaving] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -169,7 +172,7 @@ export function ParcelWindow({
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (readOnly) return;
+    if (ro) return;
     setSaving(true);
     const fd = new FormData(e.currentTarget);
     const values: Record<string, unknown> = {};
@@ -243,7 +246,7 @@ export function ParcelWindow({
               {subParts.length ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{subParts.join(" · ")}</p> : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StateBadge state={state} />
-                {!readOnly ? (
+                {!ro ? (
                   <div className="flex items-center gap-1.5" title="نقل الحالة بين الأقسام الخمسة">
                     <ArrowLeftRight className="size-3.5 shrink-0 text-muted-foreground" />
                     <div className="w-32">
@@ -278,8 +281,8 @@ export function ParcelWindow({
           {/* جسم التحرير المباشر */}
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <fieldset disabled={readOnly} className="m-0 grid grid-cols-1 gap-3 border-0 p-0 sm:grid-cols-2">
-              {!readOnly && missingHints.length ? (
+              <fieldset disabled={ro} className="m-0 grid grid-cols-1 gap-3 border-0 p-0 sm:grid-cols-2">
+              {!ro && missingHints.length ? (
                 <div className="rounded-lg border border-state-announced/40 bg-state-announced/10 p-2.5 text-xs text-state-announced sm:col-span-2">
                   أكمل الحقول المطلوبة: {missingHints.map((h) => h.label).join(" · ")}
                 </div>
@@ -336,7 +339,7 @@ export function ParcelWindow({
               ) : null}
               {/* صور المشروع (م7.4) — تظهر في بطاقة الخريطة وتقرير القطعة */}
               <div className="sm:col-span-2">
-                <PhotosSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={readOnly} />
+                <PhotosSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
               </div>
               {kind === "license" && (state === "in-progress" || state === "completed") ? (
                 <div className="sm:col-span-2">
@@ -351,7 +354,7 @@ export function ParcelWindow({
 
             {/* ذيل ثابت: حفظ التحرير المباشر */}
             <footer className="flex shrink-0 items-center justify-start gap-2 border-t border-border/70 bg-card/80 px-5 py-3">
-              {!readOnly ? (
+              {!ro ? (
                 <Button type="submit" disabled={saving}>
                   {saving ? "جارٍ الحفظ…" : "حفظ"}
                 </Button>

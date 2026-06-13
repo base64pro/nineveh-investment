@@ -2,9 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { usernameToEmail } from "@/features/auth/username";
 
 export async function login(formData: FormData): Promise<void> {
-  const email = String(formData.get("email") ?? "").trim();
+  // المدير يدخل ببريده؛ المستخدم الثاني باسمٍ بسيط (يُحوَّل لبريد داخلي) — م8.1.
+  const email = usernameToEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
 
   const supabase = await createClient();

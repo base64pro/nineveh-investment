@@ -34,7 +34,8 @@ describe("answerToHtml (تحويل حرفي)", () => {
     const html = answerToHtml("### العنوان\n- بند **مهم**\n- بند ثانٍ\n\nفقرة باستشهاد قانون 13/2006 م.29");
     expect(html).toContain("<h3>العنوان</h3>");
     expect(html).toContain("<li>بند <strong>مهم</strong></li>");
-    expect(html).toContain("<p>فقرة باستشهاد قانون 13/2006 م.29</p>");
+    // م7.10 · الاستشهاد يُميَّز كرقاقة في تقرير الـPDF (نفس نمط العرض داخل النظام)
+    expect(html).toContain('<p>فقرة باستشهاد <span class="cite">قانون 13/2006 م.29</span></p>');
   });
 
   it("يُهرّب أي HTML داخل النص", () => {
