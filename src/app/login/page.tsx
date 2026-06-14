@@ -15,7 +15,7 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#070d18] p-6">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#070d18] p-6">
       {/* شبكة الزمكان الرقيقة — تتمايل ببطء مائي */}
       <div
         aria-hidden

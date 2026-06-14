@@ -25,7 +25,8 @@ export default async function Home() {
 
   return (
     <RoleProvider role={role}>
-      <main className="flex h-screen w-screen flex-col overflow-hidden">
+      {/* h-dvh = الارتفاع الديناميكي الفعلي (يعالج شريط أدوات iOS المتغيّر) — ثبات صارم بلا قفزات */}
+      <main className="flex h-dvh w-screen flex-col overflow-hidden">
         {/* الهيدبار — في سياق التدفّق، يأخذ ارتفاعه الطبيعي (يلتفّ على الجوال بلا تمرير أفقي) */}
         <div className="relative z-30 shrink-0">
           <Headbar />

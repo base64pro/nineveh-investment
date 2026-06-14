@@ -58,6 +58,16 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* ثبات صارم على الجوال (طلب معتمد): لا ارتداد/تمرير للصفحة، لا تكييف حجم نص عند الدوران،
+     ولا تكبير بالنقر المزدوج — التطبيق ملء الشاشة الثابت (الخريطة تُدير تكبيرها داخلياً). */
+  html,
+  body {
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overflow: hidden;
+    height: 100%;
+  }
   /* الأرقام لاتينية دائماً (§ح.3) */
   html {
     font-variant-numeric: lining-nums tabular-nums;

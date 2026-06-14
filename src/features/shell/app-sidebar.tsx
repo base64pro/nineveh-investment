@@ -121,7 +121,6 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
         {sections.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;
-          const count = s.table && counts ? counts[s.table] : undefined;
           return (
             <button
               key={s.id}
@@ -165,11 +164,6 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               <span className={cn("text-[9.5px] font-semibold leading-none tracking-tight", isActive ? "text-foreground" : "text-foreground/60 group-hover:text-foreground/85")}>
                 {s.short}
               </span>
-              {typeof count === "number" && count > 0 ? (
-                <span className="absolute end-0.5 top-0.5 rounded-full bg-[hsl(220_36%_11%/0.94)] px-1.5 text-[8.5px] font-bold leading-snug text-[#cfe3ff] ring-1 ring-inset ring-[rgba(148,175,209,0.45)]">
-                  {formatNumber(count)}
-                </span>
-              ) : null}
             </button>
           );
         })}

@@ -4,15 +4,16 @@
 // مستمع واحد مفوَّض على المستند (لا تعديل لكل زر)، يعمل بأول إيماءة (سياسة autoplay).
 
 import { useEffect } from "react";
-import { sfxBoot, sfxClick } from "@/lib/sfx";
+import { sfxBoot, sfxClick, unlockSfx } from "@/lib/sfx";
 
 const CLICKABLE = 'button, [role="button"], [role="tab"], a, input[type="checkbox"], input[type="radio"], select, [role="option"]';
 
 export function SfxEvents() {
   useEffect(() => {
-    // نغمة الافتتاح عند الدخول: نحاول فوراً (قد يحجبها المتصفّح)، وإلا فعند أوّل إيماءة (سياسة autoplay)
-    sfxBoot();
+    // **لا نلمس AudioContext قبل الإيماءة** (سياسة autoplay — يمنع تحذير الكونسول).
+    // أوّل إيماءة: تفتح السياق (ضمن الإيماءة) ثم تشغّل نغمة الافتتاح مرّة واحدة.
     const boot = (): void => {
+      unlockSfx();
       sfxBoot();
       window.removeEventListener("pointerdown", boot, { capture: true });
       window.removeEventListener("keydown", boot, { capture: true });
@@ -21,6 +22,7 @@ export function SfxEvents() {
     window.addEventListener("keydown", boot, { capture: true });
 
     const onDown = (e: PointerEvent): void => {
+      unlockSfx(); // ضمان فتح السياق ضمن إيماءة النقر
       const el = e.target as Element | null;
       if (el?.closest?.(CLICKABLE)) sfxClick();
     };
