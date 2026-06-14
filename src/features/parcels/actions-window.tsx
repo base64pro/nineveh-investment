@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { FileText, Lightbulb, ListChecks, Scale, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useEscClose } from "@/components/ui/use-esc-close";
 import { ControlsTab } from "./legal/controls-tab";
 import { ReportTab } from "./legal/report-tab";
@@ -55,8 +56,8 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
           </button>
         </header>
 
-        {/* شريط التابات الأفقي — يتمرّر أفقياً على الشاشات الضيقة بدل الانضغاط */}
-        <div className="scroll-slim flex shrink-0 gap-1 overflow-x-auto border-b border-border/60 px-3 pt-2">
+        {/* شريط التابات — شبكة 4 أعمدة متساوية تملأ العرض دائماً (لا تمرير أفقي على أي شاشة) */}
+        <div className="grid shrink-0 grid-cols-4 gap-1 border-b border-border/60 px-2 pb-1.5 pt-2">
           {TABS.map((t) => {
             const Icon = t.icon;
             const active = tab === t.key;
@@ -65,14 +66,16 @@ export function ActionsWindow({ kind, entity, onClose }: { kind: ParcelKind; ent
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className={
-                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-lg px-3 py-2 text-xs font-medium transition " +
-                  (active
-                    ? "bg-background text-primary ring-1 ring-inset ring-border/60 ring-b-0"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground")
-                }
+                title={t.label}
+                className={cn(
+                  "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-center transition active:scale-[0.97]",
+                  active
+                    ? "bg-primary/15 text-primary ring-1 ring-inset ring-primary/40 shadow-[0_0_14px_-6px_rgba(148,175,209,0.9)]"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
               >
-                <Icon className="size-3.5" /> {t.label}
+                <Icon className="size-4 shrink-0" />
+                <span className="text-[10px] font-semibold leading-tight md:text-[11px]">{t.label}</span>
               </button>
             );
           })}
