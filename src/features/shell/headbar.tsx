@@ -139,7 +139,11 @@ export function Headbar() {
   const { data: stats } = useDashboardStats();
 
   return (
-    <div className="relative bg-[linear-gradient(180deg,hsl(220_38%_16%/0.97),hsl(220_36%_12%/0.95))] shadow-[0_6px_24px_-10px_rgba(0,0,0,0.7)] backdrop-blur">
+    // م8.2 · إزاحة آمنة علوية (--sat=0 على الديسكتوب فلا يتأثّر؛ على iOS تُنزل الهيدبار تحت الجزيرة)
+    <div
+      style={{ paddingTop: "var(--sat)" }}
+      className="relative bg-[linear-gradient(180deg,hsl(220_38%_16%/0.97),hsl(220_36%_12%/0.95))] shadow-[0_6px_24px_-10px_rgba(0,0,0,0.7)] backdrop-blur"
+    >
       {/* شفق هولوكرامي حيّ ينجرف بوضوح + خط توهّج قاعدي تجري عليه لمعة أنيقة مريحة (موشن مستمر) */}
       <motion.span
         aria-hidden
@@ -188,22 +192,13 @@ export function Headbar() {
         </div>
       </div>
 
-      {/* ===== الجوال (<md): صفّ واحد أنيق — الصورة · العنوان · البحث (الأرقام في شريط عمودي أسفل-يسار الخريطة) ===== */}
-      <div className="flex h-[58px] items-center gap-2.5 px-3 md:hidden">
-        <DirectorAvatar className="size-10" />
+      {/* ===== الجوال (<md): صفّ واحد أنيق — الصورة + العنوان (البحث في شريط سفلي ثابت §8، الأرقام في شريط KPI تحت الهيدبار §7) ===== */}
+      <div className="flex h-[58px] items-center gap-3 px-3 md:hidden">
+        <DirectorAvatar className="size-12" />
         <div className="min-w-0 flex-1 text-right leading-tight">
-          <div className="truncate text-[13.5px] font-bold tracking-tight text-foreground">هيئة استثمار نينوى</div>
+          <div className="truncate text-[15px] font-bold tracking-tight text-foreground">هيئة استثمار نينوى</div>
           <div className="truncate text-[9px] text-muted-foreground">مكتب السيد رئيس الهيئة الأستاذ حارث البخو</div>
         </div>
-        <button
-          type="button"
-          onClick={openSearch}
-          title="بحث فائق"
-          aria-label="بحث فائق"
-          className="grid size-10 shrink-0 place-items-center rounded-full border border-[rgba(148,175,209,0.45)] bg-white/5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.85)] hover:bg-white/10 hover:text-foreground active:scale-95"
-        >
-          <Search className="size-[18px]" />
-        </button>
       </div>
     </div>
   );

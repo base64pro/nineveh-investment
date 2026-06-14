@@ -19,11 +19,56 @@ import { SettingsPanel } from "@/features/settings/settings-panel";
 import { LegalAdvisorPanel } from "@/features/legal-advisor/legal-advisor-panel";
 import { ParcelModals } from "@/features/parcels/parcel-modals";
 import { onOpenSection } from "./shell-store";
-import { SECTIONS } from "./sections";
+import { SECTIONS, type SectionDef } from "./sections";
 import { useRole } from "@/features/auth/role-context";
+import { MobileDock } from "./mobile-dock";
+import { MobileSectionSheet, MobileFullscreen } from "./mobile-section-sheet";
 
 // أقسام محظورة على المستخدم الثاني (م8.1): تصميم فرصة + الإعدادات.
 const VIEWER_HIDDEN = new Set(["opportunity-design", "settings"]);
+
+// جسم اللوحة لكل قسم — مصدر واحد يُعاد استخدامه في الديسكتوب (aside) والجوال (ورقة/ملء شاشة) بلا تكرار منطق.
+function PanelBody({
+  section,
+  licenseStatus,
+  setLicenseStatus,
+  counts,
+}: {
+  section: SectionDef;
+  licenseStatus: string;
+  setLicenseStatus: (s: string) => void;
+  counts: Record<string, number> | undefined;
+}) {
+  switch (section.id) {
+    case "legal-advisor":
+      return <LegalAdvisorPanel />;
+    case "opportunities":
+      return <OpportunitiesPanel />;
+    case "licenses":
+      return <LicensesPanel status={licenseStatus} setStatus={setLicenseStatus} />;
+    case "companies":
+      return <CompaniesPanel />;
+    case "criteria":
+      return <CriteriaPanel />;
+    case "opportunity-design":
+      return <AssumedPanel />;
+    case "reports":
+      return <ReportsPanel />;
+    case "settings":
+      return <SettingsPanel />;
+    default:
+      return (
+        <div className="space-y-3 p-4 text-sm">
+          {section.table && counts ? (
+            <p>
+              العدد: <span className="font-semibold">{formatNumber(counts[section.table] ?? 0)}</span>
+            </p>
+          ) : null}
+          <p className="text-muted-foreground">{section.note}</p>
+        </div>
+      );
+  }
+}
 
 export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   useRealtimeSync(); // المصدر الواحد: انعكاس فوري لأي تغيير
@@ -32,8 +77,18 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   const sections = isViewer ? SECTIONS.filter((s) => !VIEWER_HIDDEN.has(s.id)) : SECTIONS;
   const [active, setActive] = useState<string | null>(null);
   const [licenseStatus, setLicenseStatus] = useState("");
+  // الجوال (< md): يقرّر مسار العرض (ورقة سفلية/ملء شاشة) بدل لوحة الديسكتوب — يمنع تركيب اللوحة مرّتين.
+  const [isMobile, setIsMobile] = useState(false);
 
-  // فتح قسم من الهيدبار/البحث (§هـ.1 · النقر على مؤشّر ← مصدره)
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = (): void => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // فتح قسم من الهيدبار/البحث/المؤشّرات (§هـ.1 · النقر على مؤشّر ← مصدره)
   useEffect(
     () =>
       onOpenSection((id, status) => {
@@ -45,78 +100,74 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
 
   const activeSection = sections.find((s) => s.id === active) ?? null;
   const ActiveIcon = activeSection?.icon;
+  const isSheetSection = activeSection?.id === "opportunities" || activeSection?.id === "licenses";
+
+  // اختيار قسم من الشريط/الدوك (إعادة استخدام لمنطق الفلتر النظيف للرخص)
+  const selectSection = (id: string): void => {
+    if (id === "licenses" && active !== id) setLicenseStatus(""); // فتح جديد ← فلتر نظيف (لا فلتر عالق)
+    setActive(active === id ? null : id);
+  };
 
   return (
     <>
-      {/* اللوحة — overlay إلى يسار الشريط (تُبنى أقسامها في م2.2) */}
-      <AnimatePresence>
-        {activeSection ? (
-          <motion.aside
-            key={activeSection.id}
-            initial={{ x: "100%", opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "100%", opacity: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[calc(100vw-5rem)] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
-          >
-          <header className="relative flex items-center justify-between gap-2 border-b border-border bg-card p-3">
-            <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.65)] to-transparent" />
-            <div className="flex min-w-0 items-center gap-2.5">
-              {ActiveIcon ? (
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[rgba(148,175,209,0.16)] text-foreground ring-1 ring-inset ring-foreground/15">
-                  <ActiveIcon className="size-4" />
-                </span>
-              ) : null}
-              <h2 className="truncate text-base font-bold tracking-tight">{activeSection.label}</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActive(null)}
-              aria-label="إغلاق"
-              title="إغلاق"
-              className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
+      {/* ===== الديسكتوب (md+): لوحة جانبية overlay + عدّادات الرخص ===== */}
+      {!isMobile ? (
+        <AnimatePresence>
+          {activeSection ? (
+            <motion.aside
+              key={activeSection.id}
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "100%", opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[calc(100vw-5rem)] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
             >
-              <X className="size-5" />
-            </button>
-          </header>
-          <div className="min-h-0 flex-1">
-            {activeSection.id === "legal-advisor" ? (
-              <LegalAdvisorPanel />
-            ) : activeSection.id === "opportunities" ? (
-              <OpportunitiesPanel />
-            ) : activeSection.id === "licenses" ? (
-              <LicensesPanel status={licenseStatus} setStatus={setLicenseStatus} />
-            ) : activeSection.id === "companies" ? (
-              <CompaniesPanel />
-            ) : activeSection.id === "criteria" ? (
-              <CriteriaPanel />
-            ) : activeSection.id === "opportunity-design" ? (
-              <AssumedPanel />
-            ) : activeSection.id === "reports" ? (
-              <ReportsPanel />
-            ) : activeSection.id === "settings" ? (
-              <SettingsPanel />
-            ) : (
-              <div className="space-y-3 p-4 text-sm">
-                {activeSection.table && counts ? (
-                  <p>
-                    العدد:{" "}
-                    <span className="font-semibold">{formatNumber(counts[activeSection.table] ?? 0)}</span>
-                  </p>
-                ) : null}
-                <p className="text-muted-foreground">{activeSection.note}</p>
+              <header className="relative flex items-center justify-between gap-2 border-b border-border bg-card p-3">
+                <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.65)] to-transparent" />
+                <div className="flex min-w-0 items-center gap-2.5">
+                  {ActiveIcon ? (
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[rgba(148,175,209,0.16)] text-foreground ring-1 ring-inset ring-foreground/15">
+                      <ActiveIcon className="size-4" />
+                    </span>
+                  ) : null}
+                  <h2 className="truncate text-base font-bold tracking-tight">{activeSection.label}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActive(null)}
+                  aria-label="إغلاق"
+                  title="إغلاق"
+                  className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground hover:ring-border active:scale-90"
+                >
+                  <X className="size-5" />
+                </button>
+              </header>
+              <div className="min-h-0 flex-1">
+                <PanelBody section={activeSection} licenseStatus={licenseStatus} setLicenseStatus={setLicenseStatus} counts={counts} />
               </div>
-            )}
-          </div>
-          </motion.aside>
-        ) : null}
-        {activeSection?.id === "licenses" ? (
-          <LicenseStatusCounters key="lic-counters" status={licenseStatus} onSelect={setLicenseStatus} />
-        ) : null}
-      </AnimatePresence>
+            </motion.aside>
+          ) : null}
+          {activeSection?.id === "licenses" ? (
+            <LicenseStatusCounters key="lic-counters" status={licenseStatus} onSelect={setLicenseStatus} />
+          ) : null}
+        </AnimatePresence>
+      ) : (
+        /* ===== الجوال (< md): ورقة سفلية للفرص/الرخص، وملء شاشة لبقية الأقسام ===== */
+        <AnimatePresence>
+          {activeSection && isSheetSection ? (
+            <MobileSectionSheet key={activeSection.id} title={activeSection.label} Icon={activeSection.icon} onClose={() => setActive(null)}>
+              <PanelBody section={activeSection} licenseStatus={licenseStatus} setLicenseStatus={setLicenseStatus} counts={counts} />
+            </MobileSectionSheet>
+          ) : activeSection ? (
+            <MobileFullscreen key={activeSection.id} title={activeSection.label} Icon={activeSection.icon} onClose={() => setActive(null)}>
+              <PanelBody section={activeSection} licenseStatus={licenseStatus} setLicenseStatus={setLicenseStatus} counts={counts} />
+            </MobileFullscreen>
+          ) : null}
+        </AnimatePresence>
+      )}
 
-      {/* الشريط — يمين الشاشة (§هـ.1) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق + توهّجات */}
-      <nav className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur">
+      {/* الشريط — يمين الشاشة (§هـ.1) · ديسكتوب فقط (md+) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق */}
+      <nav className="absolute inset-y-0 right-0 z-30 hidden w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur md:flex">
         <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent" />
         {sections.map((s) => {
           const Icon = s.icon;
@@ -127,10 +178,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               type="button"
               title={s.label}
               aria-label={s.label}
-              onClick={() => {
-                if (s.id === "licenses" && !isActive) setLicenseStatus(""); // فتح جديد من الشريط ← فلتر نظيف (لا فلتر عالق)
-                setActive(isActive ? null : s.id);
-              }}
+              onClick={() => selectSection(s.id)}
               className={cn(
                 "group relative flex h-[64px] w-[72px] flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200",
                 isActive ? "text-foreground" : "text-foreground/65 hover:text-foreground",
@@ -182,6 +230,9 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
           </button>
         </form>
       </nav>
+
+      {/* الدوك العائم — جوال فقط (يحوي نفس الأقسام المفلترة بالأدوار) */}
+      <MobileDock sections={sections} active={active} onSelect={selectSection} userEmail={userEmail} />
 
       {/* نوافذ القطعة المفترضة العامّة (تُفتح من الخريطة: بعد الرسم / من الإشارة) */}
       <ParcelModals />

@@ -14,6 +14,7 @@ import { StateBadge } from "@/features/parcels/state-badge";
 import { useParcelPhotos } from "@/features/parcels/photos/photo-lib";
 import { PhotoLightbox } from "@/features/parcels/photos/photo-lightbox";
 import { useRole } from "@/features/auth/role-context";
+import { useSheetHeight } from "@/features/shell/mobile-sheet-store";
 import { sfxOpen } from "@/lib/sfx";
 import type { ParcelKind } from "../lib/map-nav-store";
 import type { ParcelProps } from "../lib/use-map-parcels";
@@ -79,11 +80,29 @@ export function SelectedParcelCard({
     sfxOpen(); // ومضة انبثاق هولوكرامية (م7.9)
   }, []);
 
-  // البطاقة على الجهة الأرحب من نقطة القطعة + حجب داخل الخريطة
+  // م8.2 · أبعاد مرنة على الجوال (< md): البطاقة تتّسع للشاشة وتبقى ضمن المنطقة المرئية فوق الورقة السفلية (§9)
+  // — الديسكتوب يبقى بالثوابت الأصلية حرفياً (340×446). الخط مربوط بمركز القطعة (centroid) كما هو.
+  const sheetH = useSheetHeight();
+  // الجوال يُحدَّد بعرض الـviewport (مثل بقية النظام) لا بعرض حاوية الخريطة — كي لا تتحوّل البطاقة لوضع الجوال
+  // على md+ في النطاق 768–847px (حيث حاوية الخريطة = العرض − شريط 80px).
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = (): void => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  const cardW = isMobile ? Math.min(CARD_W, container.w - 24) : CARD_W;
+  const topPad = isMobile ? 48 : 8; // شريط KPI تحت الهيدبار
+  const botPad = isMobile ? Math.max(70, sheetH) : 8; // الأكبر بين شريط البحث والورقة السفلية الحيّة (الورقة تغطّي البحث)
+  const cardH = isMobile ? Math.max(240, Math.min(CARD_H, container.h - topPad - botPad)) : CARD_H;
+
+  // البطاقة على الجهة الأرحب من نقطة القطعة + حجب داخل المنطقة المرئية
   const flip = anchor.x > container.w / 2; // القطعة يميناً ← البطاقة يساراً
-  const cardX = flip ? Math.max(8, anchor.x - GAP - CARD_W) : Math.min(container.w - CARD_W - 8, anchor.x + GAP);
-  const cardY = Math.min(Math.max(anchor.y - CARD_H / 2, 8), Math.max(8, container.h - CARD_H - 8));
-  const attachX = flip ? cardX + CARD_W : cardX; // حافة البطاقة المواجهة للقطعة
+  const cardX = flip ? Math.max(8, anchor.x - GAP - cardW) : Math.min(container.w - cardW - 8, anchor.x + GAP);
+  const cardY = Math.min(Math.max(anchor.y - cardH / 2, topPad), Math.max(topPad, container.h - cardH - botPad));
+  const attachX = flip ? cardX + cardW : cardX; // حافة البطاقة المواجهة للقطعة
   const attachY = cardY + 84;
   const elbowX = (anchor.x + attachX) / 2;
 
@@ -127,9 +146,12 @@ export function SelectedParcelCard({
         exit={{ opacity: 0, scale: 0.86, x: flip ? 10 : -10 }}
         transition={{ type: "spring", stiffness: 280, damping: 26 }}
         className="absolute z-[15] rounded-2xl p-px shadow-[0_18px_50px_-16px_rgba(0,0,0,0.8),0_0_34px_-10px_rgba(148,175,209,0.5)]"
-        style={{ left: cardX, top: cardY, width: CARD_W, background: `linear-gradient(135deg, ${accent}b3, rgba(148,175,209,0.4), rgba(139,111,176,0.45))` }}
+        style={{ left: cardX, top: cardY, width: cardW, background: `linear-gradient(135deg, ${accent}b3, rgba(148,175,209,0.4), rgba(139,111,176,0.45))` }}
       >
-        <div className="relative overflow-hidden rounded-[calc(1rem-1px)] bg-[hsl(221_42%_10%_/_0.9)] backdrop-blur-xl">
+        <div
+          className={cn("relative overflow-hidden rounded-[calc(1rem-1px)] bg-[hsl(221_42%_10%_/_0.9)] backdrop-blur-xl", isMobile && "flex flex-col")}
+          style={isMobile ? { height: cardH } : undefined}
+        >
           {/* خط مسح ضوئي خفيف */}
           <motion.span
             aria-hidden
@@ -140,7 +162,7 @@ export function SelectedParcelCard({
           />
 
           {/* رأس الشارة */}
-          <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-2.5">
+          <div className="flex shrink-0 items-center gap-1.5 px-3 pb-1.5 pt-2.5">
             <motion.span
               aria-hidden
               animate={{ opacity: [1, 0.35, 1] }}
@@ -160,10 +182,10 @@ export function SelectedParcelCard({
               <X className="size-3.5" />
             </button>
           </div>
-          <span aria-hidden className="block h-px" style={{ background: `linear-gradient(90deg, transparent, ${accent}cc, transparent)` }} />
+          <span aria-hidden className="block h-px shrink-0" style={{ background: `linear-gradient(90deg, transparent, ${accent}cc, transparent)` }} />
 
-          {/* الصور — تهيمن على البطاقة (~80%)، والقراءات شريط زجاجي فوق أسفلها */}
-          <div className="group relative h-[300px] w-full bg-[rgba(148,175,209,0.06)]">
+          {/* الصور — تهيمن على البطاقة (~80%)، والقراءات شريط زجاجي فوق أسفلها (على الجوال تملأ المساحة المتبقّية) */}
+          <div className={cn("group relative w-full bg-[rgba(148,175,209,0.06)]", isMobile ? "min-h-0 flex-1" : "h-[300px]")}>
             <AnimatePresence mode="wait">
               {photos.length ? (
                 <motion.img
@@ -228,7 +250,7 @@ export function SelectedParcelCard({
           </div>
 
           {/* الأزرار: عرض · الحدود · حذف الرسمة */}
-          <div className="flex gap-1.5 px-3 py-2.5">
+          <div className="flex shrink-0 gap-1.5 px-3 py-2.5">
             <button
               type="button"
               onClick={onView}

@@ -57,6 +57,7 @@ import { onFlyTo, onFlyToCoords, onStartDraw, type ParcelKind, requestFlyTo, req
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
+import { getSheetHeight } from "@/features/shell/mobile-sheet-store";
 import type { AssumedParcel, License, Opportunity } from "@/types/entities";
 
 type MapData = {
@@ -66,6 +67,18 @@ type MapData = {
   maskFC: Feature<Polygon | MultiPolygon>;
   bounds: [number, number, number, number];
 };
+
+// م8.2 · حشوة كاميرا للجوال (< md فقط): تُبقي المؤطَّر داخل الباند المرئي فوق شريط البحث والورقة السفلية.
+// أعلى = شريط مؤشّرات KPI تحت الهيدبار، أسفل = شريط البحث + ارتفاع الورقة الحيّ (§6). على الديسكتوب تُعيد
+// الرقم الأساس حرفياً (صفر تغيير على md+). ممنوع تغيير حجم canvas — التأطير عبر هذه الحشوة فقط.
+type PadOpt = number | { top: number; bottom: number; left: number; right: number };
+function framePadding(base: number): PadOpt {
+  if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return base;
+  const KPI = 46; // شريط المؤشّرات تحت الهيدبار
+  const SEARCH = 70; // شريط البحث السفلي + هامش
+  // الورقة المفتوحة تغطّي شريط البحث ← الإقصاء السفلي = الأكبر بينهما (لا جمع مزدوج)
+  return { top: base + KPI, bottom: base + Math.max(SEARCH, getSheetHeight()), left: base, right: base };
+}
 
 type StyleSource = { url?: string; tiles?: string[]; [k: string]: unknown };
 type StyleLayer = {
@@ -772,7 +785,7 @@ export default function InvestmentMap() {
         applyAnnotations(m, annFcRef.current, showAnnotationsRef.current);
         applySpacetime(m, dataRef.current?.gov ?? null);
 
-        m.fitBounds(bounds, { padding: 48, duration: 2200 }); // دخول متسارع
+        m.fitBounds(bounds, { padding: framePadding(48), duration: 2200 }); // دخول متسارع (حشوة جوال تؤطّر المحافظة فوق شريط البحث)
         m.once("moveend", lockView);
       });
     })();
@@ -842,7 +855,12 @@ export default function InvestmentMap() {
       if (m && f?.geometry) {
         sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
-        m.fitBounds(b, { padding: 80, maxZoom: 16, duration: 1000 });
+        m.fitBounds(b, { padding: framePadding(80), maxZoom: 16, duration: 1000 }); // الجوال: القطعة في الباند العلوي فوق الورقة (§6)
+        // الجوال فقط (§6): تطفو بطاقة صور القطعة مع الطيران — الديسكتوب يبقى طيراناً فقط (صفر تغيير md+)
+        if (window.matchMedia("(max-width: 767px)").matches) {
+          const ref = f.properties?.ref_id;
+          setSelectedId(typeof ref === "string" ? ref : null);
+        }
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
       }
@@ -855,7 +873,7 @@ export default function InvestmentMap() {
       const m = mapRef.current;
       if (!m) return;
       sfxFly(); // أثر طيران تقني ناعم (م7.9)
-      m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400 });
+      m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400, padding: framePadding(0) });
       if (label) toast.info(label);
     });
   }, []);
@@ -930,7 +948,7 @@ export default function InvestmentMap() {
     const data = dataRef.current;
     if (!map || !data) return;
     sfxFly(); // أثر طيران عند العودة لكامل نينوى (طلب معتمد)
-    map.fitBounds(data.bounds, { padding: 48, duration: 1200 });
+    map.fitBounds(data.bounds, { padding: framePadding(48), duration: 1200 });
   }
 
   // ===== استوديو الرسم (م7.1) =====
@@ -1605,7 +1623,7 @@ export default function InvestmentMap() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 28, opacity: 0 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
-            className="pointer-events-none absolute inset-x-0 bottom-7 z-20 flex justify-center"
+            className="pointer-events-none absolute inset-x-0 bottom-7 z-20 flex justify-center max-md:bottom-[calc(var(--sab)+5rem)]"
           >
             <div className={cn("pointer-events-auto flex items-center gap-2 rounded-2xl px-3 py-2", GLASS)}>
               <span className="max-w-44 truncate text-[11px] text-muted-foreground" title={editing.label}>
