@@ -12,7 +12,7 @@ import destination from "@turf/destination";
 import distance from "@turf/distance";
 import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
-import { ChevronDown, FilterX, Layers, Maximize2 } from "lucide-react";
+import { ChevronDown, FilterX, Layers, Maximize2, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -39,7 +39,7 @@ import { deleteParcelGeometry, updateParcelGeometry } from "../lib/geometry-acti
 import { useMapAnnotations } from "../lib/use-map-annotations";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useRole } from "@/features/auth/role-context";
-import { sfxFly } from "@/lib/sfx";
+import { isSfxMuted, setSfxMuted, sfxFly } from "@/lib/sfx";
 import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
 import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
 import { DrawDock, type DrawModeId } from "./draw-dock";
@@ -534,6 +534,8 @@ export default function InvestmentMap() {
   const [nbhQuery, setNbhQuery] = useState(""); // بحث قائمة الأحياء المدمجة (م7.9 — لا منسدلة منبثقة بعد اليوم)
   const [showLayers, setShowLayers] = useState(false);
   const [drawOpen, setDrawOpen] = useState(false); // طيّ/فتح استوديو الرسم — لا يتعارض مع لوحة الطبقات
+  const [sfxMuted, setSfxMutedState] = useState(false); // كتم الصوت العام (يُهيّأ من localStorage بعد الترطيب)
+  useEffect(() => setSfxMutedState(isSfxMuted()), []);
   // مرساة شارة القطعة (إسقاط شاشة يتبع الزوم/التنقّل حيّاً)
   const [calloutPx, setCalloutPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const calloutAnchorRef = useRef<[number, number] | null>(null);
@@ -927,6 +929,7 @@ export default function InvestmentMap() {
     const map = mapRef.current;
     const data = dataRef.current;
     if (!map || !data) return;
+    sfxFly(); // أثر طيران عند العودة لكامل نينوى (طلب معتمد)
     map.fitBounds(data.bounds, { padding: 48, duration: 1200 });
   }
 
@@ -1379,6 +1382,27 @@ export default function InvestmentMap() {
           >
             <Layers style={{ width: 15, height: 15 }} aria-hidden />
             <ChevronDown style={{ width: 10, height: 10 }} className={cn("transition-transform", showLayers && "rotate-180")} aria-hidden />
+          </button>
+        </div>
+
+        {/* كتم/تشغيل صوت النظام (طلب معتمد) — تحت زر تحديد الظهور */}
+        <div className={cn("flex rounded-2xl p-1", GLASS)}>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !sfxMuted;
+              setSfxMuted(next);
+              setSfxMutedState(next);
+            }}
+            title={sfxMuted ? "تشغيل الصوت" : "كتم الصوت"}
+            aria-label={sfxMuted ? "تشغيل الصوت" : "كتم الصوت"}
+            aria-pressed={sfxMuted}
+            className={cn(
+              "grid size-10 place-items-center rounded-xl transition active:scale-95",
+              sfxMuted ? "bg-state-withdrawn/15 text-state-withdrawn ring-1 ring-inset ring-state-withdrawn/40" : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
+            )}
+          >
+            {sfxMuted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4 text-primary/80" aria-hidden />}
           </button>
         </div>
 

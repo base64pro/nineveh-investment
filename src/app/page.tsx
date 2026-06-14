@@ -7,6 +7,7 @@ import { SearchOverlay } from "@/features/search/search-overlay";
 import { SettingsApplier } from "@/features/settings/settings-applier";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { SfxEvents } from "@/components/ui/sfx-events";
+import { ViewportFix } from "@/components/viewport-fix";
 import { RoleProvider, type Role } from "@/features/auth/role-context";
 import InvestmentMap from "@/features/map/components/investment-map";
 
@@ -25,8 +26,8 @@ export default async function Home() {
 
   return (
     <RoleProvider role={role}>
-      {/* h-dvh = الارتفاع الديناميكي الفعلي (يعالج شريط أدوات iOS المتغيّر) — ثبات صارم بلا قفزات */}
-      <main className="flex h-dvh w-screen flex-col overflow-hidden">
+      {/* الارتفاع = منطقة العرض المرئية (--app-h يضبطها VisualViewport فوق الكيبورد)، fallback dvh — ثبات صارم */}
+      <main className="flex w-screen flex-col overflow-hidden" style={{ height: "var(--app-h, 100dvh)" }}>
         {/* الهيدبار — في سياق التدفّق، يأخذ ارتفاعه الطبيعي (يلتفّ على الجوال بلا تمرير أفقي) */}
         <div className="relative z-30 shrink-0">
           <Headbar />
@@ -43,6 +44,7 @@ export default async function Home() {
           <SettingsApplier />
           <ConnectivityBanner />
           <SfxEvents />
+          <ViewportFix />
         </div>
       </main>
     </RoleProvider>

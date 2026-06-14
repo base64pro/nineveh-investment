@@ -11,6 +11,27 @@ let unlocked = false;
 let lastClickAt = 0;
 let booted = false;
 
+// كتم الصوت العام (طلب معتمد) — يُحفظ في localStorage فيثبت بين الجلسات.
+let muted = false;
+if (typeof window !== "undefined") {
+  try {
+    muted = window.localStorage.getItem("sfx-muted") === "1";
+  } catch {
+    /* تجاهل */
+  }
+}
+export function isSfxMuted(): boolean {
+  return muted;
+}
+export function setSfxMuted(v: boolean): void {
+  muted = v;
+  try {
+    window.localStorage.setItem("sfx-muted", v ? "1" : "0");
+  } catch {
+    /* تجاهل */
+  }
+}
+
 /** يُستدعى **حصراً** من معالج إيماءة — ينشئ السياق ويستأنفه ضمن الإيماءة. */
 export function unlockSfx(): void {
   if (typeof window === "undefined") return;
@@ -53,7 +74,7 @@ export function unlockSfx(): void {
 }
 
 function audio(): AudioContext | null {
-  if (!unlocked || !ctx) return null;
+  if (muted || !unlocked || !ctx) return null;
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
 }
@@ -148,68 +169,80 @@ export function sfxClick(): void {
   tone(a, { type: "sine", f0: 200, f1: 150, dur: 0.05, peak: 0.06, filter: 900 }); // ثِقل سفلي يمنح «القوة»
 }
 
-/** ومضة انبثاق هولوكرامية فخمة وقوية — كورد FM يتجسّد صاعداً + سووش مادّي + بريق + صدى زجاجي. */
+/** انبثاق نافذة معلومات «مركز أمني رقمي متقدّم» — مهيب درامي يوحي بالأهمية:
+ *  سويلة سفلية تتصاعد (ثِقل) + كنس صاعد متوتّر (تشغيل) + رنّة معلومات بلّورية عالية + ذيل صدى واسع. */
 export function sfxOpen(): void {
   const a = audio();
   if (!a) return;
-  // كورد FM ثلاثي (C–E–G) متعاقب — معدني لامع يتجسّد
-  fm(a, { carrier: 523, ratio: 1.5, index: 4, dur: 0.32, peak: 0.12, filter: 5000, reverb: 0.5 });
-  fm(a, { carrier: 659, ratio: 2.0, index: 3.5, dur: 0.3, peak: 0.1, delay: 0.04, filter: 5600, reverb: 0.5 });
-  fm(a, { carrier: 784, ratio: 3.0, index: 3, dur: 0.28, peak: 0.07, delay: 0.08, filter: 7000, reverb: 0.6 });
-  tone(a, { type: "sine", f0: 262, f1: 523, dur: 0.34, peak: 0.06, filter: 1700 }); // أساس دافئ صاعد
-  // سووش مادّي خاطف يصاحب التجسّد
   const t = a.currentTime;
-  const len = Math.floor(a.sampleRate * 0.28);
+
+  // 1) سويلة سفلية مهيبة تتصاعد ببطء (الجاذبية/الأهمية)
+  tone(a, { type: "sine", f0: 70, f1: 150, dur: 0.6, peak: 0.09, filter: 600, reverb: 0.25 });
+  tone(a, { type: "triangle", f0: 140, f1: 210, dur: 0.55, peak: 0.04, filter: 900, reverb: 0.3 });
+
+  // 2) كنس صاعد متوتّر (إحساس «التشغيل/التحميل») — ضوضاء عبر تمرير نطاقي يصعد
+  const len = Math.floor(a.sampleRate * 0.42);
   const buf = a.createBuffer(1, len, a.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.min(1, (i / len) * 1.6);
   const src = a.createBufferSource();
   src.buffer = buf;
   const bp = a.createBiquadFilter();
   bp.type = "bandpass";
-  bp.Q.value = 1.0;
-  bp.frequency.setValueAtTime(700, t);
-  bp.frequency.exponentialRampToValueAtTime(3200, t + 0.26);
+  bp.Q.value = 1.4;
+  bp.frequency.setValueAtTime(280, t);
+  bp.frequency.exponentialRampToValueAtTime(2600, t + 0.4);
   const ng = a.createGain();
   ng.gain.setValueAtTime(0.0001, t);
-  ng.gain.exponentialRampToValueAtTime(0.05, t + 0.04);
-  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+  ng.gain.exponentialRampToValueAtTime(0.045, t + 0.18);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
   src.connect(bp);
   bp.connect(ng);
   routeOut(a, ng, 0.4);
   src.start(t);
-  src.stop(t + 0.28);
+  src.stop(t + 0.42);
+
+  // 3) رنّة المعلومات البلّورية العالية عند الذروة (لحظة «جاهز/مهم») — جرسان FM بفاصل خامسة
+  fm(a, { carrier: 1175, ratio: 2.0, index: 5, dur: 0.5, peak: 0.1, delay: 0.22, filter: 7000, reverb: 0.62 });
+  fm(a, { carrier: 1760, ratio: 3.0, index: 3.5, dur: 0.42, peak: 0.055, delay: 0.27, filter: 8000, reverb: 0.7 });
+  // 4) بريق علوي خاطف يثبّت اللحظة
+  tone(a, { type: "sine", f0: 3000, f1: 3600, dur: 0.05, peak: 0.03, delay: 0.24, reverb: 0.4 });
 }
 
-/** انسياب طيران تقني فخم وناعم (سووش) — للانتقال للقطعة على الخريطة. */
+/** انسياب طيران تقني فخم — **أطول وأنعم وأجمل**: سووش طويل بقوس تردّدي رشيق + قاع نغمي حالم + شمرة هوائية. */
 export function sfxFly(): void {
   const a = audio();
   if (!a) return;
   const t = a.currentTime;
-  const len = Math.floor(a.sampleRate * 0.95);
+  const DUR = 1.35; // أطول
+  const len = Math.floor(a.sampleRate * DUR);
   const buf = a.createBuffer(1, len, a.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; // ضوضاء كاملة (الظرف من الغين لنعومة أعلى)
   const src = a.createBufferSource();
   src.buffer = buf;
   const bp = a.createBiquadFilter();
   bp.type = "bandpass";
-  bp.Q.value = 1.3;
-  bp.frequency.setValueAtTime(420, t);
-  bp.frequency.exponentialRampToValueAtTime(2800, t + 0.4);
-  bp.frequency.exponentialRampToValueAtTime(900, t + 0.9);
+  bp.Q.value = 0.9; // أعرض = أنعم
+  bp.frequency.setValueAtTime(380, t);
+  bp.frequency.exponentialRampToValueAtTime(2600, t + 0.6);
+  bp.frequency.exponentialRampToValueAtTime(820, t + DUR);
   const g = a.createGain();
+  // ظرف ناعم: هجوم متدرّج · استدامة · تلاشٍ مطوّل
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.08, t + 0.12);
-  g.gain.setValueAtTime(0.08, t + 0.42);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.92);
+  g.gain.exponentialRampToValueAtTime(0.07, t + 0.22);
+  g.gain.setValueAtTime(0.07, t + 0.7);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + DUR);
   src.connect(bp);
   bp.connect(g);
-  routeOut(a, g, 0.32);
+  routeOut(a, g, 0.38);
   src.start(t);
-  src.stop(t + 0.95);
-  // طبقة FM صاعدة ناعمة تحت السووش (الإحساس «الفخم»)
-  fm(a, { carrier: 330, ratio: 2.0, index: 2, dur: 0.5, glide: 880, peak: 0.05, filter: 3000, reverb: 0.3 });
+  src.stop(t + DUR + 0.05);
+  // قاع نغمي حالم صاعد ثم مستقرّ (إقلاع → استقرار لطيف)
+  fm(a, { carrier: 300, ratio: 1.5, index: 1.8, dur: 0.85, glide: 760, peak: 0.045, filter: 2600, reverb: 0.34 });
+  fm(a, { carrier: 450, ratio: 2.0, index: 1.4, dur: 0.6, glide: 600, peak: 0.022, delay: 0.1, filter: 3200, reverb: 0.34 });
+  // شمرة هوائية عالية خافتة تنساب
+  tone(a, { type: "sine", f0: 2200, f1: 3000, dur: 0.7, peak: 0.012, delay: 0.08, reverb: 0.3 });
 }
 
 /** نغمة افتتاح النظام عند أوّل تفاعل — كورد FM مهيب صاعد (مرّة واحدة). */
