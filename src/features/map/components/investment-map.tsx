@@ -572,6 +572,17 @@ export default function InvestmentMap() {
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
   const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
+  const showParcelsRef = useRef(showParcels);
+  showParcelsRef.current = showParcels;
+  const hiddenStatesRef = useRef(hiddenStates);
+  hiddenStatesRef.current = hiddenStates;
+  const nbhFilterRef = useRef(nbhFilter);
+  nbhFilterRef.current = nbhFilter;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  // م8.3 · تسميات الدبابيس عند الزوم القريب (~1كم): بطاقات زجاجية صغيرة فوق الدبابيس، تظهر/تتلاشى مع الزوم
+  const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]);
+  const [labelOpacity, setLabelOpacity] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const { data: settingsData } = useSettings();
   const startApplied = useRef(false);
@@ -855,12 +866,8 @@ export default function InvestmentMap() {
       if (m && f?.geometry) {
         sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
-        m.fitBounds(b, { padding: framePadding(80), maxZoom: 16, duration: 1000 }); // الجوال: القطعة في الباند العلوي فوق الورقة (§6)
-        // الجوال فقط (§6): تطفو بطاقة صور القطعة مع الطيران — الديسكتوب يبقى طيراناً فقط (صفر تغيير md+)
-        if (window.matchMedia("(max-width: 767px)").matches) {
-          const ref = f.properties?.ref_id;
-          setSelectedId(typeof ref === "string" ? ref : null);
-        }
+        m.fitBounds(b, { padding: framePadding(80), maxZoom: 16, duration: 1000 }); // الجوال: القطعة في الـ50% العلوية فوق الورقة (§6)
+        // ملاحظة: لا تنبثق بطاقة الصور تلقائياً عند الطيران — انبثاقها حصراً عند النقر على رسمة القطعة (طلب معتمد).
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
       }
@@ -1270,6 +1277,64 @@ export default function InvestmentMap() {
     };
   }, [selectedProps]);
 
+  // م8.3 · تسميات الدبابيس عند الزوم القريب (~1كم على شريط المقياس): بطاقات زجاجية صغيرة فوق الدبابيس
+  // المرئية باسم القطعة المختصر — تظهر بالزوم إن (≥~13.5) وتتلاشى خارجه. تتبّع حيّ بـrAF كالشارة.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !mapReady) return;
+    const SHOW = 13.5; // مستوى ~1كم
+    const FADE = 0.7;
+    let raf = 0;
+    const compute = (): void => {
+      raf = 0;
+      const mm = mapRef.current;
+      if (!mm) return;
+      // جوال فقط (< md) — صفر حساب وصفر تسميات على md+/الديسكتوب
+      if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) {
+        setLabelOpacity(0);
+        setPinLabels((prev) => (prev.length ? [] : prev));
+        return;
+      }
+      const op = Math.max(0, Math.min(1, (mm.getZoom() - (SHOW - FADE)) / FADE));
+      setLabelOpacity(op);
+      if (op <= 0.01 || !showParcelsRef.current) {
+        setPinLabels((prev) => (prev.length ? [] : prev));
+        return;
+      }
+      const el = mm.getContainer();
+      const W = el.clientWidth;
+      const Ht = el.clientHeight;
+      const hidden = hiddenStatesRef.current;
+      const out: { x: number; y: number; name: string; key: string }[] = [];
+      for (const f of fcRef.current.features) {
+        if (!f.geometry) continue;
+        const p = f.properties ?? {};
+        if (hidden.has(String(p.state ?? ""))) continue;
+        if (nbhFilterRef.current && p.neighborhood !== nbhFilterRef.current) continue; // احترم فلتر الحي
+        if (editingRef.current && p.ref_id === editingRef.current.refId) continue; // القطعة قيد التحرير لا تسمية لها
+        const name = typeof p.label === "string" && p.label ? p.label : typeof p.parcel_no === "string" ? p.parcel_no : "";
+        if (!name) continue;
+        const c = centroid(f as Feature).geometry.coordinates as [number, number];
+        const pt = mm.project(c);
+        if (pt.x < -30 || pt.x > W + 30 || pt.y < -30 || pt.y > Ht + 30) continue;
+        out.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name) });
+        if (out.length >= 26) break;
+      }
+      setPinLabels(out);
+    };
+    const onMove = (): void => {
+      if (!raf) raf = requestAnimationFrame(compute);
+    };
+    m.on("move", onMove);
+    m.on("zoom", onMove);
+    compute();
+    return () => {
+      m.off("move", onMove);
+      m.off("zoom", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mapReady]);
+
   // تتبّع بطاقة الإشارة (م7.8): إسقاط شاشة حيّ لموقع الإشارة مع كل حركة/تكبير — كالشارة تماماً
   useEffect(() => {
     const m = mapRef.current;
@@ -1558,6 +1623,21 @@ export default function InvestmentMap() {
           />
         ) : null}
       </div>
+
+      {/* م8.3 · تسميات الدبابيس عند الزوم ~1كم — بطاقات زجاجية رشيقة فوق الدبابيس، تتلاشى عند الإبعاد */}
+      {pinLabels.length ? (
+        <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden md:hidden" style={{ opacity: labelOpacity }}>
+          {pinLabels.map((l) => (
+            <span
+              key={l.key}
+              className="absolute max-w-[130px] truncate rounded-full border border-[rgba(159,192,232,0.5)] bg-[hsl(221_42%_10%/0.8)] px-2 py-0.5 text-[10px] font-semibold text-[#dbe7fb] shadow-[0_5px_16px_-5px_rgba(0,0,0,0.85),0_0_14px_-5px_rgba(148,175,209,0.75)] ring-1 ring-inset ring-white/10 backdrop-blur-md"
+              style={{ left: l.x, top: l.y - 52, transform: "translate(-50%, -100%)" }}
+            >
+              {l.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {/* الجارت الهولوكرامي (م7.6) — ينزاح بأناقة عند انشغال الأدوات العائمة (طبقات/رسم) فلا تداخل */}
       <HoloStatsChart hidden={showLayers || drawOpen || drawMode !== "off"} />

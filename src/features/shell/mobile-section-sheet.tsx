@@ -1,17 +1,61 @@
 "use client";
 
-// م8.2 · الورقة السفلية للجوال (§6) — للفرص/الرخص: تستضيف اللوحة كما هي بلا تغيير منطقي، بنقطتَي التقام
-// «نصف»/«موسّع» وسحب نابض (transform فقط — صفر اهتزاز). تبثّ ارتفاعها الحيّ لمتجر الورقة (يستهلكه camera
-// padding للخريطة §5 وقصّ بطاقة الصور §9). «اللحظة البصرية»: أي طيران لقطعة ← الورقة تنزل إلى «نصف».
-// والملء الكامل (MobileFullscreen) لبقية الأقسام.
+// م8.2/م8.3 · الورقة السفلية للجوال (§6) — للفرص/الرخص: تستضيف اللوحة كما هي بلا تغيير منطقي، بنقطتَي
+// التقام «نصف=50%»/«موسّع» وسحب نابض ساحر (transform فقط). أرضية زجاجية هولوكرامية. تمرير «منصبّ»:
+// البطاقة في المنتصف تكبر والمجاورة تصغر تدريجياً (coverflow). نقر زر الموقع ← يطير ثم تنغلق الورقة تلقائياً.
+// والملء الكامل (MobileFullscreen) لبقية الأقسام — يحترم ارتفاع المنطقة المرئية (--app-h) فيثبت إطاره فوق الكيبورد.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { animate, motion, useDragControls, useMotionValue, type PanInfo } from "framer-motion";
 import { X, type LucideIcon } from "lucide-react";
 import { onFlyTo } from "@/features/map/lib/map-nav-store";
 import { setSheetHeight } from "./mobile-sheet-store";
 
-const SPRING = { type: "spring" as const, stiffness: 320, damping: 34 };
+const SPRING = { type: "spring" as const, stiffness: 300, damping: 32 };
+
+// تمرير «منصبّ» (coverflow): البطاقة الأقرب لمركز الحاوية أكبر وأوضح، والأبعد أصغر وأخفت — حركة جرافيكية مميّزة.
+function useFocusedScroll(rootRef: React.RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let scroller: HTMLElement | null = null;
+    let raf = 0;
+    const apply = (): void => {
+      raf = 0;
+      if (!scroller) scroller = root.querySelector<HTMLElement>(".overflow-y-auto");
+      if (!scroller) return;
+      const rect = scroller.getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      const half = rect.height / 2 || 1;
+      scroller.querySelectorAll<HTMLElement>("ul > li").forEach((li) => {
+        const r = li.getBoundingClientRect();
+        const t = Math.min(1, Math.abs(r.top + r.height / 2 - centerY) / half);
+        li.style.transformOrigin = "center";
+        li.style.transition = "transform 0.18s cubic-bezier(0.22,1,0.36,1), opacity 0.18s ease-out";
+        li.style.transform = `scale(${(1 - t * 0.16).toFixed(3)})`;
+        li.style.opacity = (1 - t * 0.5).toFixed(2);
+      });
+    };
+    const onScroll = (): void => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    const mo = new MutationObserver(onScroll);
+    // أرجئ الربط حتى تظهر حاوية التمرير (اللوحة تُركَّب مع الورقة)
+    const t0 = window.setTimeout(() => {
+      scroller = root.querySelector<HTMLElement>(".overflow-y-auto");
+      if (!scroller) return;
+      scroller.addEventListener("scroll", onScroll, { passive: true });
+      mo.observe(scroller, { childList: true, subtree: true });
+      apply();
+    }, 60);
+    return () => {
+      window.clearTimeout(t0);
+      scroller?.removeEventListener("scroll", onScroll);
+      mo.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [rootRef]);
+}
 
 export function MobileSectionSheet({
   title,
@@ -24,19 +68,25 @@ export function MobileSectionSheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  // أبعاد ثابتة من ارتفاع الشاشة عند التركيب (الوضع عمودي فقط — لا حاجة لإعادة الحساب). مرساة bottom:0،
-  // والارتفاع المرئي = expanded - y (y إزاحة لأسفل تُخفي الجزء السفلي). نصف ≈ 44% · موسّع ≈ 78%.
-  const [dims] = useState(() => {
+  // مرساة bottom:0 · الارتفاع المرئي = expanded − y. «نصف» = 50% من الشاشة، «موسّع» ≈ 82%.
+  const dimsRef = useRef<{ expanded: number; half: number } | null>(null);
+  if (dimsRef.current === null) {
     const h = typeof window !== "undefined" ? window.innerHeight : 800;
-    return { expanded: Math.round(h * 0.78), half: Math.round(h * 0.44) };
-  });
+    dimsRef.current = { expanded: Math.round(h * 0.82), half: Math.round(h * 0.5) };
+  }
+  const dims = dimsRef.current;
   const snapHalf = dims.expanded - dims.half;
-  const y = useMotionValue(dims.expanded); // يبدأ مخفيّاً تماماً ثم ينزلق إلى «نصف»
+  const y = useMotionValue(dims.expanded); // يبدأ مخفيّاً ثم ينزلق إلى «نصف=50%»
   const dragControls = useDragControls();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useFocusedScroll(rootRef);
 
   const report = (): void => setSheetHeight(Math.max(0, dims.expanded - y.get()));
 
-  // فتح: انزلاق إلى «نصف» (مرّة واحدة عند التركيب) + تنظيف المتجر عند الإغلاق
+  // فتح: انزلاق ساحر إلى «نصف=50%» + تنظيف المتجر عند الإغلاق
   useEffect(() => {
     const c = animate(y, snapHalf, { ...SPRING, onUpdate: report });
     return () => {
@@ -46,19 +96,15 @@ export function MobileSectionSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // اللحظة البصرية (§6): أي طيران لقطعة ← الورقة تنزل إلى «نصف» (إن كانت موسّعة)
+  // اللحظة البصرية (§6 — معدّلة بطلب): أي طيران لقطعة ← الورقة تنغلق تلقائياً (لا تنبثق بطاقة الصور)
   useEffect(() => {
-    return onFlyTo(() => {
-      animate(y, snapHalf, { ...SPRING, onUpdate: report });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return onFlyTo(() => onCloseRef.current());
   }, []);
 
   const onDragEnd = (_: unknown, info: PanInfo): void => {
     const cur = y.get();
-    // سحب قويّ لأسفل من «نصف» ← إغلاق
     if (cur > snapHalf + 50 && info.velocity.y > 400) {
-      animate(y, dims.expanded + 40, { ...SPRING, onUpdate: report, onComplete: onClose });
+      animate(y, dims.expanded + 40, { ...SPRING, onUpdate: report, onComplete: () => onCloseRef.current() });
       return;
     }
     const goHalf = cur > snapHalf / 2 || info.velocity.y > 350;
@@ -69,40 +115,47 @@ export function MobileSectionSheet({
 
   return (
     <motion.div
+      ref={rootRef}
       style={{ y, height: dims.expanded }}
       drag="y"
       dragListener={false}
       dragControls={dragControls}
       dragConstraints={{ top: 0, bottom: dims.expanded + 40 }}
-      dragElastic={0.04}
+      dragElastic={0.05}
       onDrag={report}
       onDragEnd={onDragEnd}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.18 } }}
-      className="fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-3xl border border-b-0 border-[rgba(148,175,209,0.4)] bg-[hsl(221_40%_10%/0.97)] shadow-[0_-18px_50px_-16px_rgba(0,0,0,0.9),0_0_40px_-12px_rgba(148,175,209,0.45)] ring-1 ring-inset ring-white/[0.06] backdrop-blur-2xl md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[1.75rem] border border-b-0 border-[rgba(159,192,232,0.5)] bg-[hsl(221_42%_9%/0.86)] shadow-[0_-22px_60px_-18px_rgba(0,0,0,0.92),0_0_50px_-12px_rgba(148,175,209,0.55)] ring-1 ring-inset ring-white/[0.07] backdrop-blur-2xl md:hidden"
     >
-      {/* منطقة السحب: المقبض + الرأس (الإغلاق يوقف الانتشار كي لا يبدأ سحباً) */}
-      <div onPointerDown={startDrag} className="shrink-0 cursor-grab touch-none active:cursor-grabbing">
+      {/* وهج هولوكرامي علوي ساحر يطفو على رأس الورقة */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(70%_120%_at_50%_-30%,rgba(148,175,209,0.25),transparent_70%)]"
+      />
+      <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[rgba(207,227,255,0.85)] to-transparent" />
+
+      {/* منطقة السحب: المقبض + الرأس المكثّف (إفساح أكبر للبطاقات) — الإغلاق يوقف الانتشار كي لا يبدأ سحباً */}
+      <div onPointerDown={startDrag} className="relative shrink-0 cursor-grab touch-none active:cursor-grabbing">
         <div className="flex flex-col items-center pt-2">
-          <span className="h-1.5 w-12 rounded-full bg-white/25" />
+          <span className="h-1.5 w-11 rounded-full bg-white/30 shadow-[0_0_8px_-1px_rgba(255,255,255,0.4)]" />
         </div>
-        <header className="relative flex items-center justify-between gap-2 px-4 py-2.5">
-          <span aria-hidden className="pointer-events-none absolute inset-x-4 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.55)] to-transparent" />
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[rgba(148,175,209,0.16)] text-foreground ring-1 ring-inset ring-foreground/15">
-              <Icon className="size-4" />
+        <header className="flex items-center justify-between gap-2 px-4 pb-1.5 pt-1.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[linear-gradient(150deg,rgba(159,192,232,0.26),rgba(139,111,176,0.14))] text-[#cfe3ff] ring-1 ring-inset ring-[rgba(159,192,232,0.45)]">
+              <Icon className="size-[15px]" />
             </span>
-            <h2 className="truncate text-[15px] font-bold tracking-tight">{title}</h2>
+            <h2 className="truncate text-sm font-bold tracking-tight">{title}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             onPointerDown={(e) => e.stopPropagation()}
             aria-label="إغلاق"
-            className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground active:scale-90"
+            className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground active:scale-90"
           >
-            <X className="size-5" />
+            <X className="size-4" />
           </button>
         </header>
       </div>
@@ -131,8 +184,9 @@ export function MobileFullscreen({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 24, transition: { duration: 0.18 } }}
       transition={SPRING}
-      style={{ paddingTop: "var(--sat)", paddingBottom: "var(--sab)" }}
-      className="fixed inset-0 z-50 flex flex-col bg-[hsl(221_40%_9%/0.98)] backdrop-blur-2xl md:hidden"
+      // الارتفاع = المنطقة المرئية (--app-h يضبطها VisualViewport فوق الكيبورد) — يثبت الإطار عند تحرير نص الاستشارة
+      style={{ paddingTop: "var(--sat)", paddingBottom: "var(--sab)", height: "var(--app-h, 100dvh)" }}
+      className="fixed inset-x-0 top-0 z-50 flex flex-col bg-[hsl(221_40%_9%/0.98)] backdrop-blur-2xl md:hidden"
     >
       <header className="relative flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card/60 px-4 py-3">
         <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.65)] to-transparent" />

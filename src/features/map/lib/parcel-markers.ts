@@ -34,7 +34,7 @@ function rgba(hex: string, a: number): string {
 }
 
 function makePin(color: string): PinIcon {
-  const W = 46;
+  const W = 42; // أرشق قليلاً (طلب معتمد)
   const H = 60;
   const dpr = 3; // أحدّ للشاشات عالية الكثافة
   const canvas = document.createElement("canvas");
@@ -45,23 +45,23 @@ function makePin(color: string): PinIcon {
   ctx.scale(dpr, dpr);
 
   const cx = W / 2;
-  const orbR = 12.5;
-  const ring = 2.6;
-  const orbCY = orbR + ring + 3; // مركز القرص أعلى الإشارة
+  const orbR = 11; // قرص أرشق
+  const ring = 2.3;
+  const orbCY = orbR + ring + 4; // مركز القرص أعلى الإشارة
   const tipY = H - 2.5; // نقطة التثبيت على القطعة
 
   const light = mix(color, 0.55, true);
-  const lighter = mix(color, 0.78, true);
-  const dark = mix(color, 0.4, false);
+  const lighter = mix(color, 0.8, true);
+  const dark = mix(color, 0.42, false);
 
-  // 1) هالة طيفية ناعمة حول القرص (توهّج هولوكرامي)
-  const aura = ctx.createRadialGradient(cx, orbCY, orbR * 0.5, cx, orbCY, orbR + 8);
-  aura.addColorStop(0, rgba(color, 0.42));
-  aura.addColorStop(0.6, rgba(color, 0.16));
+  // 1) هالة طيفية مزدوجة أنعم وأوسع (توهّج هولوكرامي أبهى)
+  const aura = ctx.createRadialGradient(cx, orbCY, orbR * 0.4, cx, orbCY, orbR + 10);
+  aura.addColorStop(0, rgba(color, 0.5));
+  aura.addColorStop(0.55, rgba(color, 0.18));
   aura.addColorStop(1, rgba(color, 0));
   ctx.fillStyle = aura;
   ctx.beginPath();
-  ctx.arc(cx, orbCY, orbR + 8, 0, Math.PI * 2);
+  ctx.arc(cx, orbCY, orbR + 10, 0, Math.PI * 2);
   ctx.fill();
 
   // 2) نقطة التثبيت على القطعة: ظلّ بيضوي + حلقة متوهّجة + لبّ مضيء (إحساس «مغروزة»)
@@ -79,13 +79,13 @@ function makePin(color: string): PinIcon {
   ctx.arc(cx, tipY, 1.25, 0, Math.PI * 2);
   ctx.fill();
 
-  // 3) الساق الإبري المتدرّج (أعرض عند القرص، يدقّ نحو نقطة التثبيت) — حافتان بيضاوان ولبّ ملوّن
+  // 3) الساق الإبري المتدرّج الأرشق (أعرض عند القرص، يدقّ نحو نقطة التثبيت) — حافتان بيضاوان ولبّ ملوّن
   const stemTop = orbCY + orbR - 1;
   const path = new Path2D();
-  path.moveTo(cx - 2.6, stemTop);
-  path.lineTo(cx + 2.6, stemTop);
-  path.lineTo(cx + 1.0, tipY);
-  path.lineTo(cx - 1.0, tipY);
+  path.moveTo(cx - 2.1, stemTop);
+  path.lineTo(cx + 2.1, stemTop);
+  path.lineTo(cx + 0.8, tipY);
+  path.lineTo(cx - 0.8, tipY);
   path.closePath();
   const stemGrad = ctx.createLinearGradient(0, stemTop, 0, tipY);
   stemGrad.addColorStop(0, "#ffffff");

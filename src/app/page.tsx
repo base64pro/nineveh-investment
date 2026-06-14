@@ -9,7 +9,7 @@ import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { SfxEvents } from "@/components/ui/sfx-events";
 import { ViewportFix } from "@/components/viewport-fix";
 import { InstallHint } from "@/components/install-hint";
-import { MobileSearchBar } from "@/components/mobile-search-bar";
+import { MobileSearch } from "@/components/mobile-search";
 import { RoleProvider, type Role } from "@/features/auth/role-context";
 import InvestmentMap from "@/features/map/components/investment-map";
 
@@ -47,8 +47,8 @@ export default async function Home() {
           <ConnectivityBanner />
           <SfxEvents />
           <ViewportFix />
-          {/* §8 شريط بحث سفلي + §2.3 إرشاد تثبيت ناعم — جوال فقط */}
-          <MobileSearchBar />
+          {/* §8 بحث سفلي مضمَّن + §2.3 إرشاد تثبيت ناعم — جوال فقط */}
+          <MobileSearch />
           <InstallHint />
         </div>
       </main>
