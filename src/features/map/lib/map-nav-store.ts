@@ -40,6 +40,18 @@ export function onFlyToCoords(listener: (c: Coords) => void): () => void {
   };
 }
 
+// العودة للخارطة الكاملة (كامل نينوى) — يُطلَب من الدوك على الجوال (زر «كامل نينوى»).
+const resetListeners = new Set<() => void>();
+export function requestResetView(): void {
+  for (const l of resetListeners) l();
+}
+export function onResetView(listener: () => void): () => void {
+  resetListeners.add(listener);
+  return () => {
+    resetListeners.delete(listener);
+  };
+}
+
 // فتح نموذج قطعة مفترضة (بعد الرسم أو من الإشارة) — عامّ، مستقلّ عن السايدبار.
 const formListeners = new Set<Listener>();
 export function requestOpenParcelForm(id: string): void {

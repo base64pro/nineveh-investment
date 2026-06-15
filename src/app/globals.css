@@ -185,6 +185,15 @@
   100% { transform: translateY(1300%); }
 }
 
+/* م8.4 · شريط مؤشّرات الجوال المتحرّك (marquee) — CSS خالص (لا framer) كي لا يتعارض مع AnimatePresence */
+@keyframes kpi-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.kpi-marquee {
+  animation: kpi-marquee 34s linear infinite;
+}
+
 /* م8.2 · أدوات MapLibre على الجوال فقط (< md): ترفعها فوق شريط البحث السفلي، وتكبّر أزرار الزوم
    لقوس الإبهام، وتُكسيها زجاجاً كحلياً بهوية النظام (§هـ.3). الديسكتوب بلا أي تغيير. */
 @media (max-width: 767px) {

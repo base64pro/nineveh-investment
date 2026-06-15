@@ -53,7 +53,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onFlyToCoords, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -885,6 +885,12 @@ export default function InvestmentMap() {
     });
   }, []);
 
+  // العودة لكامل نينوى (زر «كامل نينوى» في الدوك على الجوال)
+  useEffect(() => {
+    return onResetView(() => resetView());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resetView مستقرّ (refs)
+  }, []);
+
   // بدء رسم وربط هندسة بقطعة موجودة (من بطاقة فرصة/رخصة)
   useEffect(() => {
     return onStartDraw((target) => {
@@ -1440,7 +1446,7 @@ export default function InvestmentMap() {
             onClick={resetView}
             title="إعادة العرض إلى كامل نينوى"
             aria-label="كامل نينوى"
-            className="grid size-10 place-items-center rounded-xl text-foreground/80 transition hover:bg-white/8 hover:text-foreground active:scale-95"
+            className="grid size-10 place-items-center rounded-xl text-foreground/80 transition hover:bg-white/8 hover:text-foreground active:scale-95 max-md:hidden"
           >
             <Maximize2 className="size-4 text-primary/80" aria-hidden />
           </button>
