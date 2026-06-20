@@ -120,7 +120,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "100%", opacity: 0 }}
               transition={{ duration: 0.22, ease: "easeOut" }}
-              className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[calc(100vw-5rem)] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur"
+              className="absolute inset-y-0 right-20 z-20 flex w-[480px] max-w-[calc(100vw-5rem)] flex-col border-l border-l-[rgba(148,175,209,0.5)] bg-[hsl(220_36%_18%_/_0.96)] shadow-[-4px_0_18px_-6px_rgba(148,175,209,0.55),0_12px_36px_-12px_rgba(0,0,0,0.55)] backdrop-blur lg:inset-y-3 lg:right-[6.5rem] lg:max-w-[calc(100vw-9rem)] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[rgba(148,175,209,0.5)]"
             >
               <header className="relative flex items-center justify-between gap-2 border-b border-border bg-card p-3">
                 <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(148,175,209,0.65)] to-transparent" />
@@ -167,8 +167,8 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       )}
 
       {/* الشريط — يمين الشاشة (§هـ.1) · ديسكتوب فقط (md+) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق */}
-      <nav className="absolute inset-y-0 right-0 z-30 hidden w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur md:flex">
-        <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent" />
+      <nav className="absolute inset-y-0 right-0 z-30 hidden w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur md:flex lg:inset-y-3 lg:right-3 lg:rounded-2xl lg:border lg:border-[rgba(148,175,209,0.5)] lg:py-4 lg:shadow-[0_18px_50px_-16px_rgba(0,0,0,0.85),0_0_40px_-12px_rgba(148,175,209,0.5)] lg:ring-1 lg:ring-inset lg:ring-white/[0.06]">
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent lg:hidden" />
         {sections.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;

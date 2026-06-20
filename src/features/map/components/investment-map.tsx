@@ -1418,8 +1418,9 @@ export default function InvestmentMap() {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* عمود الأدوات العائمة: القاعدة · العودة · الطبقات ← ثم استوديو الرسم — فوق الجارت دائماً (z-20) */}
-      <div className="absolute end-3 top-16 z-20 flex flex-col items-end gap-2">
+      {/* عمود الأدوات العائمة: القاعدة · العودة · الطبقات ← ثم استوديو الرسم — فوق الجارت دائماً (z-20).
+          م8.7: على lg تُزاح يسار الدوك العائم (end-[6.5rem]) كي لا تتداخل معه على الخريطة الكاملة. */}
+      <div className="absolute end-3 top-16 z-20 flex flex-col items-end gap-2 lg:end-[6.5rem]">
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           {BASES.map((b) => (
             <button

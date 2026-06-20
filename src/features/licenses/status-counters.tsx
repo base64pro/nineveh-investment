@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useTable } from "@/lib/data/use-table";
 import { useCountUp } from "@/components/ui/use-count-up";
@@ -72,15 +72,25 @@ export function LicenseStatusCounters({
     } as Record<string, number>;
   }, [data]);
 
+  // م8.7: على الشاشات الكبيرة (≥1024px) تطفو اللوحة بعيداً عن الحافة، فيزداد إزاحة العدّادات لتبقى يسارها
+  const [isLg, setIsLg] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = (): void => setIsLg(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 44 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 44 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      // تموضع نسبي لحافة اللوحة (480px أو 92vw الأصغر + شريط 80px) — وتُخفى دون md (التبويبات داخل اللوحة تغني عنها لمساً)
+      // تموضع نسبي لحافة اللوحة (480px أو 92vw الأصغر) + الشريط: 80px ثابت (md) أو دوك عائم (lg) — تُخفى دون md
       className="absolute top-3 z-10 hidden flex-col gap-2.5 md:flex"
-      style={{ right: "calc(min(480px, 92vw) + 67px)" }}
+      style={{ right: `calc(min(480px, 92vw) + ${isLg ? 91 : 67}px)` }}
       aria-label="عدّادات حالات الرخص"
     >
       {COUNTERS.map((c) => (

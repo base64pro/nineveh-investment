@@ -35,9 +35,9 @@ export default async function Home() {
           <Headbar />
         </div>
 
-        {/* منطقة المحتوى — الخريطة تملأها. الجوال: عرض كامل (right-0). الديسكتوب: تترك 80px يميناً للسايدبار (md:right-20). */}
+        {/* منطقة المحتوى — الخريطة تملأها. الجوال + الشاشات الكبيرة (lg): ملء الشاشة (right-0). التابلت (md): تترك 80px للشريط الثابت. */}
         <div className="relative min-h-0 flex-1">
-          <div className="absolute inset-y-0 left-0 right-0 md:right-20">
+          <div className="absolute inset-y-0 left-0 right-0 md:right-20 lg:right-0">
             <InvestmentMap />
           </div>
           <MobileKpis />
