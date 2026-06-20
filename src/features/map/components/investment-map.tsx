@@ -74,7 +74,7 @@ type MapData = {
 type PadOpt = number | { top: number; bottom: number; left: number; right: number };
 function framePadding(base: number): PadOpt {
   if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return base;
-  const KPI = 46; // شريط المؤشّرات تحت الهيدبار
+  const KPI = 74; // شريط المؤشّرات تحت الهيدبار (صفّان 3+3 · م8.6)
   const SEARCH = 70; // شريط البحث السفلي + هامش
   // الورقة المفتوحة تغطّي شريط البحث ← الإقصاء السفلي = الأكبر بينهما (لا جمع مزدوج)
   return { top: base + KPI, bottom: base + Math.max(SEARCH, getSheetHeight()), left: base, right: base };

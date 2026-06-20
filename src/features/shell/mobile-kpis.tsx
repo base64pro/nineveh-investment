@@ -1,7 +1,7 @@
 "use client";
 
-// م8.3/م8.4 · شريط مؤشّرات الجوال: أقراص زجاجية بأرقام بارزة (عدّ متحرك) تمشي **بحركة بطيئة سلسة لا نهائية**
-// (marquee) — تدخل من اليمين وتخرج من اليسار باستمرار، فلا حاجة لتمرير يدوي. النقر ينقل للقسم (§هـ.1).
+// م8.3/م8.4/م8.6 · شريط مؤشّرات الجوال: أقراص زجاجية بأرقام بارزة (عدّ متحرك) **ثابتة على صفّين (3+3)**
+// تظهر كلها دفعةً واحدة بلا تمرير أفقي ولا حركة marquee. النقر ينقل للقسم (§هـ.1).
 // يُعيد استخدام CHIPS وuseCountUp وNUM_GRADIENT (مشتركة مع الديسكتوب — لا تُعدَّل).
 
 import { useDashboardStats } from "@/lib/data/use-dashboard-stats";
@@ -34,12 +34,12 @@ export function MobileKpis() {
   const items = CHIPS.map((c) => ({ ...c, value: z(stats?.[c.key]) }));
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-[6] overflow-hidden bg-gradient-to-b from-[hsl(221_42%_7%/0.82)] via-[hsl(221_42%_7%/0.45)] to-transparent py-2 md:hidden">
-      {/* صفّ متحرّك بلا نهاية (CSS خالص) — مكرّر مرّتين للسلاسة؛ dir=ltr لحركة ثابتة (دخول من اليمين) */}
-      <div dir="ltr" className="kpi-marquee pointer-events-auto flex w-max items-center gap-2 px-2">
-        {[...items, ...items].map((c, i) => (
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-[6] bg-gradient-to-b from-[hsl(221_42%_7%/0.82)] via-[hsl(221_42%_7%/0.45)] to-transparent py-2 md:hidden">
+      {/* صفّان ثابتان (3+3) — كل الأقراص ظاهرة دفعةً واحدة بلا تمرير أفقي؛ dir=rtl ليبدأ الترتيب يميناً */}
+      <div dir="rtl" className="pointer-events-auto mx-auto grid max-w-[27rem] grid-cols-3 place-items-center gap-x-2 gap-y-1.5 px-2">
+        {items.map((c) => (
           <Pill
-            key={`${c.key}-${i}`}
+            key={c.key}
             dot={c.dot}
             value={c.value}
             label={c.shortLabel ?? c.label}
