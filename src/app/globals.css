@@ -185,6 +185,29 @@
   100% { transform: translateY(1300%); }
 }
 
+/* م8.8 · نبضة الموقع — حلقة متوسّعة متلاشية من قاعدة الدبوس (location ping)، transform/opacity فقط */
+.pin-ping {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  opacity: 0;
+  transform: scale(0.4);
+  animation: pin-ping 2.6s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+@keyframes pin-ping {
+  0% { transform: scale(0.4); opacity: 0.5; }
+  70% { opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin-ping { animation: none; opacity: 0; }
+}
+
 /* م8.7 · الشاشات الكبيرة (≥1024px): الخريطة ملء الشاشة والشريط دوك عائم يميناً —
    نُزيح أدوات الزوم (الركن السفلي الأيمن) يساراً كي لا تختفي خلف الدوك العائم. */
 @media (min-width: 1024px) {

@@ -583,6 +583,7 @@ export default function InvestmentMap() {
   // م8.3 · تسميات الدبابيس عند الزوم القريب (~1كم): بطاقات زجاجية صغيرة فوق الدبابيس، تظهر/تتلاشى مع الزوم
   const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]);
   const [labelOpacity, setLabelOpacity] = useState(0);
+  const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
   const [mapReady, setMapReady] = useState(false);
   const { data: settingsData } = useSettings();
   const startApplied = useRef(false);
@@ -1293,16 +1294,19 @@ export default function InvestmentMap() {
     const SHOW = 12.0; // م8.7 · مستوى ~5كم على شريط المقياس (كان 13.5 ≈ ~1كم)
     const FADE = 1.0; // مدى تلاشٍ أوسع — تبدأ بالظهور عند ~5كم وتكتمل بالاقتراب
     const CAP = 60; // حدّ التسميات المرئية مع فرز بالأقرب لمركز الشاشة (أولوية حتمية لا اقتطاع عشوائي)
+    const PING_CAP = 50; // م8.8 · حدّ نبضات الموقع المرئية (الأقرب للمركز)
+    const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#8B6FB0" };
     let raf = 0;
+    // مرور واحد على القطع: نبضات الموقع (كل مستويات الزوم) + تسميات الدبابيس (عند الاقتراب op>0) — تفادياً لمرورين.
     const compute = (): void => {
       raf = 0;
       const mm = mapRef.current;
       if (!mm) return;
-      // م8.7: تظهر على كل الشاشات (جوال + حاسوب) — أُزيل قصر الجوال
       const op = Math.max(0, Math.min(1, (mm.getZoom() - (SHOW - FADE)) / FADE));
       setLabelOpacity(op);
-      if (op <= 0.01 || !showParcelsRef.current) {
+      if (!showParcelsRef.current) {
         setPinLabels((prev) => (prev.length ? [] : prev));
+        setPinPings((prev) => (prev.length ? [] : prev));
         return;
       }
       const el = mm.getContainer();
@@ -1311,22 +1315,30 @@ export default function InvestmentMap() {
       const cx = W / 2;
       const cy = Ht / 2;
       const hidden = hiddenStatesRef.current;
+      const wantLabels = op > 0.01; // التسميات عند الاقتراب فقط؛ النبضات على كل مستويات الزوم
+      const pings: { x: number; y: number; key: string; color: string; d: number }[] = [];
       const cand: { x: number; y: number; name: string; key: string; d: number }[] = [];
       for (const f of fcRef.current.features) {
         if (!f.geometry) continue;
         const p = f.properties ?? {};
-        if (hidden.has(String(p.state ?? ""))) continue;
+        const st = String(p.state ?? "");
+        if (hidden.has(st)) continue;
         if (nbhFilterRef.current && p.neighborhood !== nbhFilterRef.current) continue; // احترم فلتر الحي
-        if (editingRef.current && p.ref_id === editingRef.current.refId) continue; // القطعة قيد التحرير لا تسمية لها
-        const name = typeof p.label === "string" && p.label ? p.label : typeof p.parcel_no === "string" ? p.parcel_no : "";
-        if (!name) continue;
+        if (editingRef.current && p.ref_id === editingRef.current.refId) continue; // القطعة قيد التحرير لا نبضة/تسمية لها
         const c = centroid(f as Feature).geometry.coordinates as [number, number];
         const pt = mm.project(c);
         if (pt.x < -30 || pt.x > W + 30 || pt.y < -30 || pt.y > Ht + 30) continue;
-        cand.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name), d: Math.hypot(pt.x - cx, pt.y - cy) });
+        const d = Math.hypot(pt.x - cx, pt.y - cy);
+        pings.push({ x: pt.x, y: pt.y, key: String(p.ref_id ?? `${Math.round(pt.x)},${Math.round(pt.y)}`), color: PING_HEX[st] ?? "#9fc0e8", d });
+        if (wantLabels) {
+          const name = typeof p.label === "string" && p.label ? p.label : typeof p.parcel_no === "string" ? p.parcel_no : "";
+          if (name) cand.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name), d });
+        }
       }
+      pings.sort((a, b) => a.d - b.d);
+      setPinPings(pings.slice(0, PING_CAP).map((r) => ({ x: r.x, y: r.y, key: r.key, color: r.color })));
       cand.sort((a, b) => a.d - b.d); // الأقرب لمركز الشاشة أولاً
-      setPinLabels(cand.slice(0, CAP).map((r) => ({ x: r.x, y: r.y, name: r.name, key: r.key })));
+      setPinLabels(wantLabels ? cand.slice(0, CAP).map((r) => ({ x: r.x, y: r.y, name: r.name, key: r.key })) : []);
     };
     const onMove = (): void => {
       if (!raf) raf = requestAnimationFrame(compute);
@@ -1339,7 +1351,8 @@ export default function InvestmentMap() {
       m.off("zoom", onMove);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [mapReady]);
+    // fc ضمن التبعيات: يُعيد الحساب عند تحميل/تغيّر القطع دون انتظار حركة المستخدم (مهمّ للنبضات في العرض الساكن)
+  }, [mapReady, fc]);
 
   // تتبّع بطاقة الإشارة (م7.8): إسقاط شاشة حيّ لموقع الإشارة مع كل حركة/تكبير — كالشارة تماماً
   useEffect(() => {
@@ -1630,6 +1643,18 @@ export default function InvestmentMap() {
           />
         ) : null}
       </div>
+
+      {/* م8.8 · نبضة الموقع — حلقتان متوسّعتان متلاشيتان من قاعدة كل دبوس مرئي (بلون الحالة) */}
+      {pinPings.length ? (
+        <div className="pointer-events-none absolute inset-0 z-[11] overflow-hidden">
+          {pinPings.map((p) => (
+            <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color }}>
+              <span className="pin-ping" />
+              <span className="pin-ping" style={{ animationDelay: "1.3s" }} />
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {/* م8.3/م8.7 · تسميات الدبابيس — تبدأ بالظهور عند ~5كم على كل الشاشات، بطاقات زجاجية فوق الدبابيس، تتلاشى عند الإبعاد */}
       {pinLabels.length ? (
