@@ -185,7 +185,9 @@
   100% { transform: translateY(1300%); }
 }
 
-/* م8.8 · نبضة الموقع — حلقة متوسّعة متلاشية من قاعدة الدبوس (location ping)، transform/opacity فقط */
+/* م8.8.2 · نبضة الموقع — جبهة موجية سونار بطيئة فخمة: خمس حلقات متطابقة متتابعة،
+   تنبثق حلقة كل ثانية فتزحف خمسٌ معاً للخارج ببطء — الجديدة تنطلق قبل تلاشي القديمة
+   بكثير (لا انتظار). transform + opacity فقط؛ border/box-shadow ثابتة؛ العمق من تدرّج العتمة. */
 .pin-ping {
   position: absolute;
   left: 0;
@@ -194,16 +196,24 @@
   height: 22px;
   margin: -11px 0 0 -11px;
   border-radius: 9999px;
-  border: 2.5px solid currentColor;
-  box-shadow: 0 0 9px -1px currentColor;
+  border: 2px solid currentColor;        /* ثابت — لا يُحرَّك */
+  box-shadow: 0 0 8px -1px currentColor; /* ثابت — لا يُحرَّك */
   opacity: 0;
-  transform: scale(0.4);
-  animation: pin-ping 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  transform: scale(0.35);
+  /* تباطؤ ease-out لطيف وبطيء: انطلاق هادئ ثم انزلاق متّسع كموجة تتبدّد (لا قفزة حادّة) */
+  animation: pin-ping 5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
 }
+/* خمس طبقات متطابقة: تنبثق حلقة كل ثانية على دورة 5ث؛ التأخير سالب فالخمس في الجوّ
+   منذ أوّل إطار (لا ومضة تزامن) — فدائماً خمس حلقات متّحدة المركز تزحف للخارج ببطء بتتابع سلس. */
+.pin-ping--l1 { animation-delay: 0s; }
+.pin-ping--l2 { animation-delay: -1s; }
+.pin-ping--l3 { animation-delay: -2s; }
+.pin-ping--l4 { animation-delay: -3s; }
+.pin-ping--l5 { animation-delay: -4s; }
 @keyframes pin-ping {
-  0% { transform: scale(0.4); opacity: 0.72; }
-  65% { opacity: 0; }
-  100% { transform: scale(3.1); opacity: 0; }
+  0% { transform: scale(0.35); opacity: 0; }
+  14% { opacity: 0.52; } /* انبثاق ناعم — لا ومضة حادة */
+  100% { transform: scale(3.1); opacity: 0; } /* العتمة تبلغ 0 عند أقصى اتّساع (بلا مسافة ميّتة)؛ الأبعد أخفت = عمق */
 }
 @media (prefers-reduced-motion: reduce) {
   .pin-ping { animation: none; opacity: 0; }

@@ -1685,13 +1685,16 @@ export default function InvestmentMap() {
         ) : null}
       </div>
 
-      {/* م8.8 · نبضة الموقع — حلقتان متوسّعتان متلاشيتان من قاعدة كل دبوس مرئي (بلون الحالة) */}
+      {/* م8.8 · نبضة الموقع — جبهة موجية سونار: حلقات متتالية سلسة بلا فجوات من قاعدة كل دبوس مرئي (بلون الحالة) */}
       {pinPings.length ? (
         <div className="pointer-events-none absolute inset-0 z-[11] overflow-hidden">
           {pinPings.map((p) => (
             <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color }}>
-              <span className="pin-ping" />
-              <span className="pin-ping" style={{ animationDelay: "1.3s" }} />
+              <span className="pin-ping pin-ping--l1" />
+              <span className="pin-ping pin-ping--l2" />
+              <span className="pin-ping pin-ping--l3" />
+              <span className="pin-ping pin-ping--l4" />
+              <span className="pin-ping pin-ping--l5" />
             </span>
           ))}
         </div>
