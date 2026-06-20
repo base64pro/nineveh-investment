@@ -584,6 +584,7 @@ export default function InvestmentMap() {
   const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]);
   const [labelOpacity, setLabelOpacity] = useState(0);
   const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
+  const [pingScale, setPingScale] = useState(1); // م8.8.2 · حجم النبضة المرن مع الزوم (يصغر عند الإبعاد لتفادي التداخل)
   const [altM, setAltM] = useState(0); // م8.8 · ارتفاع الكاميرا الفعلي (متر) من MapLibre — مؤشّر الارتفاع الجوي
   const [mapReady, setMapReady] = useState(false);
   const { data: settingsData } = useSettings();
@@ -681,6 +682,10 @@ export default function InvestmentMap() {
         const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
+        // م8.8.2 · ارفع لوحة deck (القطع + الإشارات) فوق طبقة النبضات (z-9) كي تظهر النبضات **تحت** الدبابيس
+        // (لا تغطّيها عند التداخل). z=10 يبقى دون التسميات (12) ومؤشّر الارتفاع (13) والأدوات (20).
+        const deckCanvas = Array.from(m.getContainer().querySelectorAll<HTMLCanvasElement>("canvas")).find((c) => !c.classList.contains("maplibregl-canvas"));
+        if (deckCanvas) deckCanvas.style.zIndex = "10";
         // نقر إشارة القطعة ← نافذة منبثقة (موقع/عرض)؛ نقر قطعة ← تحديدها؛ نقر فراغ ← إلغاء
         m.on("click", (e) => {
           const ov = overlayRef.current;
@@ -1296,6 +1301,9 @@ export default function InvestmentMap() {
     const FADE = 1.0; // مدى تلاشٍ أوسع — تبدأ بالظهور عند ~5كم وتكتمل بالاقتراب
     const CAP = 60; // حدّ التسميات المرئية مع فرز بالأقرب لمركز الشاشة (أولوية حتمية لا اقتطاع عشوائي)
     const PING_CAP = 50; // م8.8 · حدّ نبضات الموقع المرئية (الأقرب للمركز)
+    const PING_Z_OUT = 8.5; // م8.8.2 · عند هذا الزوم وأدنى (عرض المحافظة) → أصغر حجم (القطع متقاربة)
+    const PING_Z_IN = 12.5; // م8.8.2 · عند هذا الزوم وأعلى (~5كم فأقرب) → الحجم الكامل (القطع متباعدة)
+    const PING_S_MIN = 0.4; // م8.8.2 · أصغر معامل حجم عند أقصى إبعاد
     const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#8B6FB0" };
     let raf = 0;
     // مرور واحد على القطع: نبضات الموقع (كل مستويات الزوم) + تسميات الدبابيس (عند الاقتراب op>0) — تفادياً لمرورين.
@@ -1338,6 +1346,11 @@ export default function InvestmentMap() {
       }
       pings.sort((a, b) => a.d - b.d);
       setPinPings(pings.slice(0, PING_CAP).map((r) => ({ x: r.x, y: r.y, key: r.key, color: r.color })));
+      // م8.8.2 · حجم النبضة مرن مع الزوم: الحجم الكامل عند التقريب (تتباعد القطع فلا تتداخل الحلقات)،
+      // ويصغر تدريجياً عند الإبعاد (زوم-آوت) حيث تتقارب القطع — لعرض أنيق بلا تداخل. (smoothstep بين عتبتَي الزوم.)
+      const zt = Math.max(0, Math.min(1, (mm.getZoom() - PING_Z_OUT) / (PING_Z_IN - PING_Z_OUT)));
+      const ps = +(PING_S_MIN + (1 - PING_S_MIN) * (zt * zt * (3 - 2 * zt))).toFixed(3);
+      setPingScale((prev) => (prev === ps ? prev : ps));
       cand.sort((a, b) => a.d - b.d); // الأقرب لمركز الشاشة أولاً
       setPinLabels(wantLabels ? cand.slice(0, CAP).map((r) => ({ x: r.x, y: r.y, name: r.name, key: r.key })) : []);
     };
@@ -1685,11 +1698,11 @@ export default function InvestmentMap() {
         ) : null}
       </div>
 
-      {/* م8.8 · نبضة الموقع — جبهة موجية سونار: حلقات متتالية سلسة بلا فجوات من قاعدة كل دبوس مرئي (بلون الحالة) */}
+      {/* م8.8.2 · نبضة الموقع — جبهة موجية سونار تحت الدبابيس (z-9 < deck): الحجم مرن مع الزوم */}
       {pinPings.length ? (
-        <div className="pointer-events-none absolute inset-0 z-[11] overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 z-[9] overflow-hidden">
           {pinPings.map((p) => (
-            <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color }}>
+            <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color, transform: `scale(${pingScale})`, transformOrigin: "0 0" }}>
               <span className="pin-ping pin-ping--l1" />
               <span className="pin-ping pin-ping--l2" />
               <span className="pin-ping pin-ping--l3" />
