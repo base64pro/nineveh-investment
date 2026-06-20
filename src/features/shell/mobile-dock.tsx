@@ -93,6 +93,7 @@ export function MobileDock({
       {!horizontal ? (
         <button
           type="button"
+          data-sfx="off"
           onClick={() => requestResetView()}
           aria-label="كامل نينوى"
           title="العودة إلى كامل نينوى"

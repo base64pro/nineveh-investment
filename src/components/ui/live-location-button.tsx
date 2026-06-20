@@ -7,6 +7,7 @@ export function LiveLocationButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
+      data-sfx="off"
       onClick={(e) => {
         e.stopPropagation();
         onClick();

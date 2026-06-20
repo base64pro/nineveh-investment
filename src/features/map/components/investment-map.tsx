@@ -633,10 +633,12 @@ export default function InvestmentMap() {
         center: MAP_CENTER,
         zoom: INITIAL_ZOOM,
         maxZoom: MAX_ZOOM,
+        attributionControl: false, // م8.8: لا زرّ «!» منبثق
       });
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-      map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+      // م8.8: النسب القانوني مفتوحاً دائماً بلا زرّ تبديل «!» (صون ترخيص MapTiler/OSM)
+      map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-left");
 
       // §ز.5 · فشل الخريطة (الشبكة): تنبيه مخفَّف (مرّة/60 ثانية) — البيانات والأقسام تبقى متاحة من السايدبار
       let lastMapErrorAt = 0;

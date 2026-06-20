@@ -121,7 +121,7 @@ export function MarkerCallout({
             <button type="button" onClick={onView} className={cn(BTN, "bg-primary/15 text-primary ring-primary/40 hover:bg-primary/25 hover:shadow-[0_0_16px_-6px_rgba(148,175,209,0.9)]")}>
               <Eye className="size-3.5" /> عرض
             </button>
-            <button type="button" onClick={onLocate} className={cn(BTN, "bg-white/6 text-foreground ring-border/60 hover:bg-white/12")}>
+            <button type="button" data-sfx="off" onClick={onLocate} className={cn(BTN, "bg-white/6 text-foreground ring-border/60 hover:bg-white/12")}>
               <Navigation className="size-3.5" /> الموقع
             </button>
           </div>

@@ -43,6 +43,7 @@ export function SfxEvents() {
       armed = false;
       if (Math.hypot(e.clientX - startX, e.clientY - startY) > TAP_SLOP) return; // تمرير/سحب — لا صوت
       const el = e.target as Element | null;
+      if (el?.closest?.('[data-sfx="off"]')) return; // أزرار الطيران: يُسمَع صوت الطيران فقط بلا نقرة
       if (el?.closest?.(CLICKABLE)) sfxClick();
     };
     const onCancel = (): void => {
