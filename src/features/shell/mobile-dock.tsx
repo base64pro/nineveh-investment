@@ -5,11 +5,11 @@
 //  - ورقة مفتوحة → شريط أفقي يعلو الورقة ويرتفع معها حيّاً (بدل الانزياح الرأسي الشاذّ).
 import { motion } from "framer-motion";
 import { signOut } from "@/app/actions";
-import { LogOut, Maximize2 } from "lucide-react";
+import { LogOut, Maximize2, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SectionDef } from "./sections";
 import { useSheetHeight } from "./mobile-sheet-store";
-import { requestResetView } from "@/features/map/lib/map-nav-store";
+import { requestResetView, requestZoom } from "@/features/map/lib/map-nav-store";
 
 export function MobileDock({
   sections,
@@ -30,7 +30,7 @@ export function MobileDock({
       style={horizontal ? { bottom: `${sheetH + 8}px` } : { transform: "translateY(-50%)", paddingRight: "var(--sar)" }}
       className={cn(
         "fixed z-40 flex md:hidden",
-        horizontal ? "inset-x-2 flex-row items-center justify-center" : "right-2 top-1/2 flex-col items-center gap-2.5",
+        horizontal ? "inset-x-2 flex-row items-center justify-center" : "right-2 top-[44%] flex-col items-center gap-2.5",
       )}
     >
       {/* صندوق الدوك (الأقسام + الخروج) */}
@@ -101,6 +101,33 @@ export function MobileDock({
         >
           <Maximize2 className="size-[26px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]" strokeWidth={2} />
         </button>
+      ) : null}
+
+      {/* م8.9 · زرّا الزوم +/− — عمود زجاجي كحلي تحت قرص «كامل نينوى» (الوضع العمودي فقط) */}
+      {!horizontal ? (
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-[rgba(159,192,232,0.5)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.92),hsl(221_44%_9%/0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_12px_30px_-12px_rgba(0,0,0,0.85),0_0_22px_-8px_rgba(148,175,209,0.55)] backdrop-blur-xl">
+          <button
+            type="button"
+            data-sfx="off"
+            onClick={() => requestZoom(1)}
+            aria-label="تكبير"
+            title="تكبير"
+            className="grid size-12 place-items-center text-[#eaf2ff] transition active:scale-90 active:bg-[rgba(159,192,232,0.2)]"
+          >
+            <Plus className="size-5" strokeWidth={2.4} />
+          </button>
+          <span aria-hidden className="h-px bg-[rgba(159,192,232,0.28)]" />
+          <button
+            type="button"
+            data-sfx="off"
+            onClick={() => requestZoom(-1)}
+            aria-label="تصغير"
+            title="تصغير"
+            className="grid size-12 place-items-center text-[#eaf2ff] transition active:scale-90 active:bg-[rgba(159,192,232,0.2)]"
+          >
+            <Minus className="size-5" strokeWidth={2.4} />
+          </button>
+        </div>
       ) : null}
     </div>
   );

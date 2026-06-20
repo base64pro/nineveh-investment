@@ -52,6 +52,18 @@ export function onResetView(listener: () => void): () => void {
   };
 }
 
+// تكبير/تصغير الخريطة — يُطلَب من أزرار الزوم في الدوك على الجوال (م8.9). delta موجب=تكبير، سالب=تصغير.
+const zoomListeners = new Set<(delta: number) => void>();
+export function requestZoom(delta: number): void {
+  for (const l of zoomListeners) l(delta);
+}
+export function onZoom(listener: (delta: number) => void): () => void {
+  zoomListeners.add(listener);
+  return () => {
+    zoomListeners.delete(listener);
+  };
+}
+
 // فتح نموذج قطعة مفترضة (بعد الرسم أو من الإشارة) — عامّ، مستقلّ عن السايدبار.
 const formListeners = new Set<Listener>();
 export function requestOpenParcelForm(id: string): void {

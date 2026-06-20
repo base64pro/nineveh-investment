@@ -19,7 +19,7 @@ function Pill({ dot, value, label, onClick }: { dot: string; value: number; labe
       onClick={onClick}
       title={`${label} — انتقل للقسم`}
       dir="rtl"
-      className="flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-[rgba(148,175,209,0.28)] bg-white/[0.05] px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-inset ring-white/[0.04] transition active:scale-95"
+      className="flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-[rgba(148,175,209,0.42)] bg-white/[0.12] px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] ring-1 ring-inset ring-white/[0.08] backdrop-blur-md transition active:scale-95"
     >
       <span className="flex items-center gap-1">
         <span className={cn("size-1.5 shrink-0 rounded-full shadow-[0_0_6px_1px] shadow-current", dot)} />
@@ -36,7 +36,7 @@ export function MobileKpis() {
   const items = CHIPS.map((c) => ({ ...c, value: z(stats?.[c.key]) }));
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-[6] bg-gradient-to-b from-[hsl(221_42%_7%/0.82)] via-[hsl(221_42%_7%/0.45)] to-transparent py-2 md:hidden">
+    <div data-kpibar className="pointer-events-none absolute inset-x-0 top-0 z-[6] bg-gradient-to-b from-[hsl(221_42%_7%/0.82)] via-[hsl(221_42%_7%/0.45)] to-transparent py-2 md:hidden">
       {/* صفّ واحد من ستة أقراص متطابقة الحجم (6 أعمدة متساوية) — بلا تمرير أفقي؛ dir=rtl ليبدأ الترتيب يميناً */}
       <div dir="rtl" className="pointer-events-auto mx-auto grid max-w-[30rem] grid-cols-6 items-stretch gap-1 px-2">
         {items.map((c) => (

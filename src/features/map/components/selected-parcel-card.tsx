@@ -4,7 +4,7 @@
 // وتتبعها حيّاً مع الزوم والتنقّل — الصورة تهيمن على البطاقة (~80%) والقراءات شريط زجاجي فوقها،
 // مع عارض كبير (Lightbox) للتكبير، وزر «حذف الرسمة» (فكّ الارتباط §هـ.4).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, ChevronLeft, Eye, ImageOff, Maximize2, Minimize2, PencilRuler, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -87,6 +87,8 @@ export function SelectedParcelCard({
   // على md+ في النطاق 768–847px (حيث حاوية الخريطة = العرض − شريط 80px).
   const [isMobile, setIsMobile] = useState(false);
   const [expanded, setExpanded] = useState(false); // م8.8 · تصغير/تكبير بطاقة الصور (الجوال فقط)
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null); // م8.9 · موضع يدوي بالسحب من الرأس (يُلغي المرساة)
+  const dragRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const apply = (): void => setIsMobile(mq.matches);
@@ -102,11 +104,39 @@ export function SelectedParcelCard({
 
   // البطاقة على الجهة الأرحب من نقطة القطعة + حجب داخل المنطقة المرئية
   const flip = anchor.x > container.w / 2; // القطعة يميناً ← البطاقة يساراً
-  const cardX = flip ? Math.max(8, anchor.x - GAP - cardW) : Math.min(container.w - cardW - 8, anchor.x + GAP);
-  const cardY = Math.min(Math.max(anchor.y - cardH / 2, topPad), Math.max(topPad, container.h - cardH - botPad));
+  // الموضع التلقائي (مرساة للقطعة) — يُلغيه السحب اليدوي إن وُجد (م8.9)؛ ويُقصّ دائماً داخل حدود الخريطة فلا تخرج عن الشاشة
+  const autoX = flip ? Math.max(8, anchor.x - GAP - cardW) : Math.min(container.w - cardW - 8, anchor.x + GAP);
+  const autoY = Math.min(Math.max(anchor.y - cardH / 2, topPad), Math.max(topPad, container.h - cardH - botPad));
+  const cardX = Math.min(Math.max(drag ? drag.x : autoX, 8), Math.max(8, container.w - cardW - 8));
+  const cardY = Math.min(Math.max(drag ? drag.y : autoY, topPad), Math.max(topPad, container.h - cardH - botPad));
   const attachX = flip ? cardX + cardW : cardX; // حافة البطاقة المواجهة للقطعة
   const attachY = cardY + 84;
   const elbowX = (anchor.x + attachX) / 2;
+
+  // م8.9 · سحب البطاقة من رأسها لأي موضع على الشاشة، مقيَّداً داخل حدود الخريطة (لا تخرج عن الشاشة)؛ الخطّ القائد يبقى موصولاً.
+  const onHeadPointerDown = (e: React.PointerEvent): void => {
+    if ((e.target as HTMLElement).closest("button")) return; // الأزرار (تكبير/إغلاق) لا تبدأ سحباً
+    e.preventDefault();
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* تجاهل */
+    }
+    dragRef.current = { px: e.clientX, py: e.clientY, ox: cardX, oy: cardY };
+  };
+  const onHeadPointerMove = (e: React.PointerEvent): void => {
+    const d = dragRef.current;
+    if (!d) return;
+    setDrag({ x: d.ox + (e.clientX - d.px), y: d.oy + (e.clientY - d.py) });
+  };
+  const onHeadPointerUp = (e: React.PointerEvent): void => {
+    dragRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* تجاهل */
+    }
+  };
 
   const BTN = "flex flex-1 items-center justify-center gap-1 rounded-lg py-2 text-[11px] font-bold ring-1 ring-inset transition active:scale-95";
 
@@ -163,8 +193,14 @@ export function SelectedParcelCard({
             className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.08)] to-transparent"
           />
 
-          {/* رأس الشارة */}
-          <div className="flex shrink-0 items-center gap-1.5 px-3 pb-1.5 pt-2.5">
+          {/* رأس الشارة — مقبض السحب (م8.9): اضغط واسحب لنقل البطاقة؛ الأزرار توقف الانتشار فلا تبدأ سحباً */}
+          <div
+            onPointerDown={onHeadPointerDown}
+            onPointerMove={onHeadPointerMove}
+            onPointerUp={onHeadPointerUp}
+            onPointerCancel={onHeadPointerUp}
+            className="flex shrink-0 cursor-grab touch-none select-none items-center gap-1.5 px-3 pb-1.5 pt-2.5 active:cursor-grabbing"
+          >
             <motion.span
               aria-hidden
               animate={{ opacity: [1, 0.35, 1] }}

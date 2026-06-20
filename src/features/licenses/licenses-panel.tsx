@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -33,6 +33,7 @@ import { useTable } from "@/lib/data/use-table";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
+import { usePersistentScroll, usePersistentState } from "@/lib/panel-state";
 import { exportTable } from "@/lib/export-table";
 import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, formatDate, orNA } from "@/lib/display";
@@ -103,17 +104,22 @@ export function LicensesPanel({
   const queryClient = useQueryClient();
   const { isViewer } = useRole();
 
-  const [q, setQ] = useState("");
-  const [sector, setSector] = useState("");
-  const [district, setDistrict] = useState("");
-  const [subdistrict, setSubdistrict] = useState("");
-  const [neighborhood, setNeighborhood] = useState("");
+  // م8.9 · تصمد الفلاتر/البحث عبر فتح/إغلاق التاب (التاب الفرعي status يصمد عبر app-sidebar)
+  const [q, setQ] = usePersistentState("lic:q", "");
+  const [sector, setSector] = usePersistentState("lic:sector", "");
+  const [district, setDistrict] = usePersistentState("lic:district", "");
+  const [subdistrict, setSubdistrict] = usePersistentState("lic:subdistrict", "");
+  const [neighborhood, setNeighborhood] = usePersistentState("lic:neighborhood", "");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<License | null>(null);
   const [visitsFor, setVisitsFor] = useState<License | null>(null);
+
+  // م8.9 · يصمد موضع التمرير عبر فتح/إغلاق التاب
+  const scrollRef = useRef<HTMLDivElement>(null);
+  usePersistentScroll("lic", scrollRef, !isLoading && !isError);
 
   const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.record_id ?? 0) - (a.record_id ?? 0)), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
@@ -292,7 +298,7 @@ export function LicensesPanel({
         </div>
       </div>
 
-      <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-3">
+      <div ref={scrollRef} className="scroll-slim min-h-0 flex-1 overflow-y-auto p-3">
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}

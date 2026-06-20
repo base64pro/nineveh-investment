@@ -12,7 +12,7 @@ import destination from "@turf/destination";
 import distance from "@turf/distance";
 import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
-import { ChevronDown, FilterX, Layers, Maximize2, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, FilterX, Layers, MapPinned, Maximize2, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -53,7 +53,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -546,6 +546,7 @@ export default function InvestmentMap() {
   const [nbhFilter, setNbhFilter] = useState("");
   const [nbhQuery, setNbhQuery] = useState(""); // بحث قائمة الأحياء المدمجة (م7.9 — لا منسدلة منبثقة بعد اليوم)
   const [showLayers, setShowLayers] = useState(false);
+  const [showNbh, setShowNbh] = useState(false); // م8.9 · منسدلة فلتر الحي العائمة (مستقلة عن لوحة الطبقات)
   const [drawOpen, setDrawOpen] = useState(false); // طيّ/فتح استوديو الرسم — لا يتعارض مع لوحة الطبقات
   const [sfxMuted, setSfxMutedState] = useState(false); // كتم الصوت العام (يُهيّأ من localStorage بعد الترطيب)
   useEffect(() => setSfxMutedState(isSfxMuted()), []);
@@ -898,6 +899,16 @@ export default function InvestmentMap() {
   useEffect(() => {
     return onResetView(() => resetView());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- resetView مستقرّ (refs)
+  }, []);
+
+  // تكبير/تصغير من أزرار الزوم في الدوك على الجوال (م8.9) — حركة سلسة مماثلة لأزرار MapLibre
+  useEffect(() => {
+    return onZoom((delta) => {
+      const m = mapRef.current;
+      if (!m) return;
+      if (delta > 0) m.zoomIn();
+      else m.zoomOut();
+    });
   }, []);
 
   // بدء رسم وربط هندسة بقطعة موجودة (من بطاقة فرصة/رخصة)
@@ -1479,7 +1490,7 @@ export default function InvestmentMap() {
       <div ref={containerRef} className="h-full w-full" />
 
       {/* م8.8 · مؤشّر «مسافة الارتفاع الجوي عن الخريطة» — رقم ثلاثي الأبعاد عائم أسفل-يمين يتحدّث لحظياً */}
-      <div className="pointer-events-none absolute bottom-[5.75rem] right-3 z-[13] flex flex-col items-end gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] lg:right-[6.5rem]">
+      <div className="pointer-events-none absolute bottom-[calc(var(--sab)+5.5rem)] left-3 z-[13] flex flex-col items-start gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] md:left-auto md:right-3 md:items-end lg:right-[6.5rem]">
         <span className="text-[9px] font-semibold leading-none text-foreground/70">الارتفاع الجوي</span>
         <span dir="ltr" className="bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-lg font-extrabold tabular-nums leading-none tracking-tight text-transparent drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
           {altText}
@@ -1523,7 +1534,10 @@ export default function InvestmentMap() {
             onClick={() =>
               setShowLayers((v) => {
                 const next = !v;
-                if (next) setDrawOpen(false); // فتح الطبقات يطوي استوديو الرسم (لا تعارض)
+                if (next) {
+                  setDrawOpen(false); // فتح الطبقات يطوي استوديو الرسم (لا تعارض)
+                  setShowNbh(false); // ويطوي منسدلة فلتر الحي
+                }
                 return next;
               })
             }
@@ -1563,7 +1577,35 @@ export default function InvestmentMap() {
           </button>
         </div>
 
-        {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس · الحي — انسدال بسلاسة استوديو الرسم (م7.6) */}
+        {/* م8.9 · فلتر الحي — زر عائم مستقل تحت زر الصوت يفتح منسدلة قابلة للتمرير (نُقل من لوحة الطبقات) */}
+        <div className={cn("flex rounded-2xl p-1", GLASS)}>
+          <button
+            type="button"
+            onClick={() =>
+              setShowNbh((v) => {
+                const next = !v;
+                if (next) {
+                  setShowLayers(false);
+                  setDrawOpen(false);
+                }
+                return next;
+              })
+            }
+            title="فلترة حسب الحي"
+            aria-label="فلترة حسب الحي"
+            aria-expanded={showNbh}
+            className={cn(
+              "grid size-10 place-items-center rounded-xl transition active:scale-95",
+              nbhFilter || showNbh
+                ? "bg-primary/20 text-primary shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)] ring-1 ring-inset ring-primary/40"
+                : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
+            )}
+          >
+            <MapPinned className="size-4" aria-hidden />
+          </button>
+        </div>
+
+        {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس — انسدال بسلاسة استوديو الرسم (م7.6) */}
         <AnimatePresence initial={false}>
           {showLayers ? (
             <motion.div
@@ -1608,56 +1650,6 @@ export default function InvestmentMap() {
                       </label>
                     ))}
                   </div>
-                  <div className="border-t border-border/50 pt-1.5">
-                    {/* م7.9: قائمة أحياء مدمجة قابلة للتمرير — واضحة دائماً، لا منسدلة منبثقة (حُلّت علّة عدم الظهور) */}
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">حسب الحي</span>
-                      {nbhFilter ? (
-                        <span className="max-w-24 truncate rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary ring-1 ring-inset ring-primary/40" title={nbhFilter}>
-                          {nbhFilter}
-                        </span>
-                      ) : null}
-                    </div>
-                    <input
-                      value={nbhQuery}
-                      onChange={(e) => setNbhQuery(e.target.value)}
-                      placeholder="ابحث عن حي…"
-                      className="mb-1 w-full rounded-lg border border-input bg-background/60 px-2 py-1 text-[11px] outline-none transition focus:ring-2 focus:ring-ring"
-                    />
-                    <div className="scroll-slim max-h-36 space-y-0.5 overflow-y-auto pe-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setNbhFilter("")}
-                        className={cn(
-                          "flex w-full items-center justify-between rounded-lg px-2 py-1 text-right text-[11px] transition",
-                          !nbhFilter ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
-                        )}
-                      >
-                        كل الأحياء
-                      </button>
-                      {neighborhoodOptions
-                        .filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim()))
-                        .map((n) => (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setNbhFilter(nbhFilter === n ? "" : n)}
-                            className={cn(
-                              "flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1 text-right text-[11px] transition",
-                              nbhFilter === n ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
-                            )}
-                          >
-                            <span className="truncate" title={n}>{n}</span>
-                            {nbhFilter === n ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_6px_1px_rgba(148,175,209,0.9)]" /> : null}
-                          </button>
-                        ))}
-                      {neighborhoodOptions.length === 0 ? (
-                        <p className="px-2 py-2 text-[10px] text-muted-foreground">لا أحياء معرّفة بعد — تُضاف من نوافذ القطع</p>
-                      ) : neighborhoodOptions.filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim())).length === 0 ? (
-                        <p className="px-2 py-2 text-[10px] text-muted-foreground">لا تطابق</p>
-                      ) : null}
-                    </div>
-                  </div>
                 </>
               ) : null}
               {hiddenStates.size > 0 || nbhFilter || !showBoundaries || !showParcels || !showAnnotations ? (
@@ -1675,6 +1667,68 @@ export default function InvestmentMap() {
                   <FilterX className="size-3.5" /> إظهار الكل
                 </button>
               ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        {/* م8.9 · منسدلة فلتر الحي — حقل بحث + قائمة طولية قابلة للتمرير (تظهر تحت زر الحي) */}
+        <AnimatePresence initial={false}>
+          {showNbh ? (
+            <motion.div
+              key="nbh-panel"
+              initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+              animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+              exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className={cn("flex w-48 flex-col rounded-2xl p-3 text-xs text-foreground/90", GLASS)}
+            >
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-foreground/85">فلترة حسب الحي</span>
+                {nbhFilter ? (
+                  <span className="max-w-24 truncate rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary ring-1 ring-inset ring-primary/40" title={nbhFilter}>
+                    {nbhFilter}
+                  </span>
+                ) : null}
+              </div>
+              <input
+                value={nbhQuery}
+                onChange={(e) => setNbhQuery(e.target.value)}
+                placeholder="ابحث عن حي…"
+                className="mb-1.5 w-full rounded-lg border border-input bg-background/60 px-2 py-1.5 text-[11px] outline-none transition focus:ring-2 focus:ring-ring"
+              />
+              <div className="scroll-slim max-h-60 space-y-0.5 overflow-y-auto pe-0.5">
+                <button
+                  type="button"
+                  onClick={() => setNbhFilter("")}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-right text-[11px] transition",
+                    !nbhFilter ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
+                  )}
+                >
+                  كل الأحياء
+                </button>
+                {neighborhoodOptions
+                  .filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim()))
+                  .map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setNbhFilter(nbhFilter === n ? "" : n)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-right text-[11px] transition",
+                        nbhFilter === n ? "bg-primary/15 font-bold text-primary ring-1 ring-inset ring-primary/35" : "text-foreground/85 hover:bg-white/8",
+                      )}
+                    >
+                      <span className="truncate" title={n}>{n}</span>
+                      {nbhFilter === n ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_6px_1px_rgba(148,175,209,0.9)]" /> : null}
+                    </button>
+                  ))}
+                {neighborhoodOptions.length === 0 ? (
+                  <p className="px-2 py-2 text-[10px] text-muted-foreground">لا أحياء معرّفة بعد — تُضاف من نوافذ القطع</p>
+                ) : neighborhoodOptions.filter((n) => !nbhQuery.trim() || n.includes(nbhQuery.trim())).length === 0 ? (
+                  <p className="px-2 py-2 text-[10px] text-muted-foreground">لا تطابق</p>
+                ) : null}
+              </div>
             </motion.div>
           ) : null}
         </AnimatePresence>

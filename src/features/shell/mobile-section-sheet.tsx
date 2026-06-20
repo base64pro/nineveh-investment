@@ -13,34 +13,26 @@ import { setSheetHeight } from "./mobile-sheet-store";
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 32 };
 
-// تمرير الورقة السفلية (الخيار ج · م8.8): قائمة نظيفة ثابتة — **scroll-snap لطيف فقط بلا تكبير/تعتيم**.
-// أُزيل تأثير coverflow بالكامل (أفضل ممارسة لقوائم المحتوى · أقصى ثبات بلا أي اهتزاز).
-function useFocusedScroll(rootRef: React.RefObject<HTMLElement | null>): void {
+// م8.9 · تمرير الورقة السفلية: **زخم حرّ كامل كقسم الشركات** (أُزيل scroll-snap الذي كان يكبح الزخم
+// ويمنع الوصول لآخر بطاقة)، مع **حشو سفلي** يضمن ظهور آخر بطاقة فوق حافة الورقة (كانت تنحجب).
+function useFreeScroll(rootRef: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    let scroller: HTMLElement | null = null;
-    const tuneItems = (): void => {
-      scroller?.querySelectorAll<HTMLElement>("ul > li").forEach((li) => {
-        li.style.scrollSnapAlign = "center";
-      });
+    const apply = (): boolean => {
+      const scroller = root.querySelector<HTMLElement>(".overflow-y-auto");
+      if (!scroller) return false;
+      scroller.style.scrollSnapType = "none"; // لا التقام — انسياب وزخم حرّ بلا تباطؤ قسري
+      scroller.style.paddingBottom = "3.5rem"; // ضمان وصول آخر بطاقة فوق الحافة (مساحة تمرير زائدة)
+      return true;
     };
-    const mo = new MutationObserver(tuneItems);
-    // أرجئ الربط حتى تظهر حاوية التمرير (اللوحة تُركَّب مع الورقة)
-    const timers: number[] = [];
-    timers.push(
-      window.setTimeout(() => {
-        scroller = root.querySelector<HTMLElement>(".overflow-y-auto");
-        if (!scroller) return;
-        scroller.style.scrollSnapType = "y proximity"; // التقام لطيف فقط (بلا أي تحويل على البطاقات)
-        tuneItems();
-        mo.observe(scroller, { childList: true, subtree: true });
-      }, 60),
-    );
-    return () => {
-      timers.forEach((t) => window.clearTimeout(t));
-      mo.disconnect();
-    };
+    if (apply()) return;
+    // حاوية التمرير تظهر مع تركيب اللوحة — راقبها وطبّق فور ظهورها
+    const mo = new MutationObserver(() => {
+      if (apply()) mo.disconnect();
+    });
+    mo.observe(root, { childList: true, subtree: true });
+    return () => mo.disconnect();
   }, [rootRef]);
 }
 
@@ -60,7 +52,15 @@ export function MobileSectionSheet({
   const dimsRef = useRef<{ expanded: number; half: number } | null>(null);
   if (dimsRef.current === null) {
     const h = typeof window !== "undefined" ? window.innerHeight : 800;
-    dimsRef.current = { expanded: Math.round(h * 0.9), half: Math.round(h * 0.65) };
+    // م8.9 · سقف الارتفاع: عند الرفع الكامل يستقرّ شريط التابات (الدوك الأفقي) أسفل الشريط العلوي
+    // (الهيدبار + مؤشّرات KPI) بفجوة 8px مطابقة تماماً للفجوة بين الشريط والورقة — فلا يدخل تحت الهيدبار.
+    const DOCK_BAR_H = 58; // ارتفاع شريط التابات الأفقي (أزرار size-11 + حشو)
+    const GAP = 8;
+    const topBottom =
+      typeof document !== "undefined" ? (document.querySelector("[data-kpibar]")?.getBoundingClientRect().bottom ?? h * 0.16) : h * 0.16;
+    const capExpanded = Math.round(h - topBottom - DOCK_BAR_H - 2 * GAP);
+    const expanded = Math.max(Math.round(h * 0.5), Math.min(Math.round(h * 0.9), capExpanded));
+    dimsRef.current = { expanded, half: Math.min(Math.round(h * 0.65), expanded) };
   }
   const dims = dimsRef.current;
   const snapHalf = dims.expanded - dims.half;
@@ -70,7 +70,7 @@ export function MobileSectionSheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  useFocusedScroll(rootRef);
+  useFreeScroll(rootRef);
 
   const report = (): void => setSheetHeight(Math.max(0, dims.expanded - y.get()));
 

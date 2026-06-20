@@ -13,9 +13,9 @@ export const SPACETIME_WAVE_LAYER = "spacetime-wave";
 
 // حضور خفيف يتلاشى للصفر مع التقريب (تجربة عملية: التفاصيل تتقدّم والنسيج ينسحب)
 const OPACITY_STOPS: ReadonlyArray<readonly [number, number]> = [
-  [5, 0.62],
-  [8, 0.47],
-  [10, 0.22],
+  [5, 0.78],
+  [8, 0.6],
+  [10, 0.31],
   [12, 0],
 ];
 const FADE_END_ZOOM = 12.2; // بعده لا رسم ولا إعادة إطارات — راحة وأداء
@@ -79,10 +79,11 @@ void main() {
   v_uv = (a_pos - u_origin) / u_extent;
   vec2 p = (a_pos - u_origin) / u_extent.x; // مقياس موحّد = موجات متجانسة الاتجاهات
   float t = u_time;
-  // ثلاث أوكتافات هادئة بسرعات واتجاهات متباينة — تموّج مائي سلس متجدّد بلا توقف (تسريع طفيف إضافي ×1.18)
-  float h = snoise(p * 7.0  + vec2( 0.200,  0.135) * t) * 0.55
-          + snoise(p * 16.0 + vec2(-0.283,  0.189) * t) * 0.30
-          + snoise(p * 33.0 + vec2( 0.177, -0.366) * t) * 0.15;
+  // ثلاث أوكتافات هادئة بسرعات واتجاهات متباينة — تموّج مائي سلس متجدّد بلا توقف
+  // (حركة أبطأ ~12% وأنعم؛ خفض الأوكتاف الأعلى تردداً قليلاً لانسياب أرشق بلا رجفة)
+  float h = snoise(p * 7.0  + vec2( 0.176,  0.119) * t) * 0.56
+          + snoise(p * 16.0 + vec2(-0.249,  0.166) * t) * 0.31
+          + snoise(p * 33.0 + vec2( 0.156, -0.322) * t) * 0.13;
   v_wave = h;
   // الإزاحة «العمودية» للمشهد العلوي: محور Y الميركاتوري + رجفة X مائية طفيفة
   vec2 disp = vec2(0.22, 1.0) * (h * u_amp);
@@ -120,8 +121,8 @@ void main() {
     a = u_opacity * m * (0.018 + 0.065 * c01 + 0.035 * contour);
   } else {
     // الشبكة الشعرية: حضور أبرز للخطوط حصراً (ألفا أعلى = شفافية أقل حدّة + رفع لوني مكتوم) — نفس السمك والشكل، مات بلا بياض
-    col *= 1.12;
-    a = u_opacity * m * (0.34 + 0.62 * c01) * (0.6 + 0.4 * u_detail);
+    col *= 1.16;
+    a = u_opacity * m * (0.42 + 0.66 * c01) * (0.62 + 0.38 * u_detail);
   }
   gl_FragColor = vec4(col * a, a); // premultiplied
 }
@@ -397,7 +398,7 @@ export function createSpacetimeWave(gov: FeatureCollection): CustomLayerInterfac
       gl.uniform1f(uTime, (performance.now() - t0) / 1000);
       gl.uniform2f(uOrigin, mesh.origin[0], mesh.origin[1]);
       gl.uniform2f(uExtent, mesh.extent[0], mesh.extent[1]);
-      gl.uniform1f(uAmp, mesh.cell * 1.5); // سعة بمقياس الخلية الشعرية — تموّج ظاهر ناعم بلا تمزّق
+      gl.uniform1f(uAmp, mesh.cell * 1.8); // سعة بمقياس الخلية الشعرية — تموّج أبرز ناعم بلا تمزّق
       gl.uniform1f(uOpacity, op);
       // عامل التفصيل: عند الإبعاد تخفّ الخطوط أكثر (نينوى مظلَّلة بخفّة) وتكتمل العين القريبة
       gl.uniform1f(uDetail, Math.min(1, Math.max(0.3, (zoom - 5.5) / 3)));

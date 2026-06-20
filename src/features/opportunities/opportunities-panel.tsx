@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -27,6 +27,7 @@ import { useTable } from "@/lib/data/use-table";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useSettings } from "@/features/settings/use-settings";
 import { cn } from "@/lib/utils";
+import { usePersistentScroll, usePersistentState } from "@/lib/panel-state";
 import { exportTable } from "@/lib/export-table";
 import { exportParcelPdf } from "@/lib/export-parcel-pdf";
 import { formatArea, orNA } from "@/lib/display";
@@ -74,18 +75,23 @@ export function OpportunitiesPanel() {
   const queryClient = useQueryClient();
   const { isViewer } = useRole();
 
-  const [q, setQ] = useState("");
-  const [sector, setSector] = useState("");
-  const [district, setDistrict] = useState("");
-  const [neighborhood, setNeighborhood] = useState("");
-  const [muqataa, setMuqataa] = useState("");
-  const [oppStatus, setOppStatus] = useState("");
-  const [availableOnly, setAvailableOnly] = useState(false);
+  // م8.9 · تصمد الفلاتر/البحث عبر فتح/إغلاق التاب (تُصفَّر عند دخول/خروج النظام فقط)
+  const [q, setQ] = usePersistentState("opp:q", "");
+  const [sector, setSector] = usePersistentState("opp:sector", "");
+  const [district, setDistrict] = usePersistentState("opp:district", "");
+  const [neighborhood, setNeighborhood] = usePersistentState("opp:neighborhood", "");
+  const [muqataa, setMuqataa] = usePersistentState("opp:muqataa", "");
+  const [oppStatus, setOppStatus] = usePersistentState("opp:oppStatus", "");
+  const [availableOnly, setAvailableOnly] = usePersistentState("opp:availableOnly", false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Opportunity | null>(null);
+
+  // م8.9 · يصمد موضع التمرير عبر فتح/إغلاق التاب
+  const scrollRef = useRef<HTMLDivElement>(null);
+  usePersistentScroll("opp", scrollRef, !isLoading && !isError);
 
   const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.record_id ?? 0) - (a.record_id ?? 0)), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
@@ -248,7 +254,7 @@ export function OpportunitiesPanel() {
         </div>
       </div>
 
-      <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-3">
+      <div ref={scrollRef} className="scroll-slim min-h-0 flex-1 overflow-y-auto p-3">
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
