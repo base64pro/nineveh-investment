@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, ChevronLeft, Eye, ImageOff, Maximize2, PencilRuler, Trash2, X } from "lucide-react";
+import { ChevronRight, ChevronLeft, Eye, ImageOff, Maximize2, Minimize2, PencilRuler, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatArea, orNA } from "@/lib/display";
 import { sectorLabel } from "@/lib/sectors";
@@ -86,6 +86,7 @@ export function SelectedParcelCard({
   // الجوال يُحدَّد بعرض الـviewport (مثل بقية النظام) لا بعرض حاوية الخريطة — كي لا تتحوّل البطاقة لوضع الجوال
   // على md+ في النطاق 768–847px (حيث حاوية الخريطة = العرض − شريط 80px).
   const [isMobile, setIsMobile] = useState(false);
+  const [expanded, setExpanded] = useState(false); // م8.8 · تصغير/تكبير بطاقة الصور (الجوال فقط)
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const apply = (): void => setIsMobile(mq.matches);
@@ -93,10 +94,11 @@ export function SelectedParcelCard({
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
-  const cardW = isMobile ? Math.min(CARD_W, container.w - 24) : CARD_W;
   const topPad = isMobile ? 50 : 8; // شريط KPI تحت الهيدبار (صفّ واحد · م8.7)
   const botPad = isMobile ? Math.max(70, sheetH) : 8; // الأكبر بين شريط البحث والورقة السفلية الحيّة (الورقة تغطّي البحث)
-  const cardH = isMobile ? Math.max(240, Math.min(CARD_H, container.h - topPad - botPad)) : CARD_H;
+  // م8.8 · الجوال: حجم افتراضي أصغر، يتبدّل تصغيراً/تكبيراً — الأبعاد الفعلية تُغذّي الخط القائد فلا ينفصل
+  const cardW = isMobile ? (expanded ? Math.min(CARD_W, container.w - 24) : Math.min(296, container.w - 40)) : CARD_W;
+  const cardH = isMobile ? Math.max(220, Math.min(expanded ? CARD_H : 330, container.h - topPad - botPad)) : CARD_H;
 
   // البطاقة على الجهة الأرحب من نقطة القطعة + حجب داخل المنطقة المرئية
   const flip = anchor.x > container.w / 2; // القطعة يميناً ← البطاقة يساراً
@@ -111,7 +113,7 @@ export function SelectedParcelCard({
   return (
     <>
       {/* الخط الرشيق + نبضة المرساة — يتبعان القطعة حيّاً */}
-      <svg aria-hidden className="pointer-events-none absolute inset-0 z-[14] size-full overflow-visible">
+      <svg aria-hidden className={cn("pointer-events-none absolute inset-0 size-full overflow-visible", isMobile ? "z-[59]" : "z-[14]")}>
         <motion.path
           d={`M ${anchor.x} ${anchor.y} L ${elbowX} ${anchor.y} L ${elbowX} ${attachY} L ${attachX} ${attachY}`}
           fill="none"
@@ -145,7 +147,7 @@ export function SelectedParcelCard({
         animate={{ opacity: 1, scale: 1, x: 0 }}
         exit={{ opacity: 0, scale: 0.86, x: flip ? 10 : -10 }}
         transition={{ type: "spring", stiffness: 280, damping: 26 }}
-        className="absolute z-[15] rounded-2xl p-px shadow-[0_18px_50px_-16px_rgba(0,0,0,0.8),0_0_34px_-10px_rgba(148,175,209,0.5)]"
+        className={cn("absolute rounded-2xl p-px shadow-[0_18px_50px_-16px_rgba(0,0,0,0.8),0_0_34px_-10px_rgba(148,175,209,0.5)]", isMobile ? "z-[60]" : "z-[15]")}
         style={{ left: cardX, top: cardY, width: cardW, background: `linear-gradient(135deg, ${accent}b3, rgba(148,175,209,0.4), rgba(139,111,176,0.45))` }}
       >
         <div
@@ -172,6 +174,17 @@ export function SelectedParcelCard({
             />
             <h4 className="min-w-0 flex-1 truncate text-[12.5px] font-bold leading-snug" title={props.label}>{orNA(props.label)}</h4>
             <StateBadge state={props.state as ParcelState} />
+            {isMobile ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "تصغير" : "تكبير"}
+                title={expanded ? "تصغير البطاقة" : "تكبير البطاقة"}
+                className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground ring-1 ring-inset ring-border/50 transition hover:bg-accent hover:text-foreground active:scale-90"
+              >
+                {expanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
