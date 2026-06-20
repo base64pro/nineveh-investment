@@ -53,9 +53,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, type ParcelKind, requestFlyTo, requestFlyToCoords, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
-import { MarginLabels, layoutMarginLabels, type MarginCand, type MarginItem } from "./margin-labels";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
 import { getSheetHeight } from "@/features/shell/mobile-sheet-store";
@@ -586,8 +585,6 @@ export default function InvestmentMap() {
   const [labelOpacity, setLabelOpacity] = useState(0);
   const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
   const [altM, setAltM] = useState(0); // م8.8 · ارتفاع الكاميرا الفعلي (متر) من MapLibre — مؤشّر الارتفاع الجوي
-  const [marginLabels, setMarginLabels] = useState<MarginItem[]>([]); // م8.8 · بطاقات التسمية خارج نينوى
-  const [marginOp, setMarginOp] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const { data: settingsData } = useSettings();
   const startApplied = useRef(false);
@@ -1388,67 +1385,6 @@ export default function InvestmentMap() {
     };
   }, [mapReady]);
 
-  // م8.8 · بطاقات التسمية خارج نينوى (§هـ.4): توزيع محيطي على 4 جوانب + خطوط قادة، ظاهرة في العرض الواسع وتتلاشى بالزوم إن.
-  useEffect(() => {
-    const m = mapRef.current;
-    if (!m || !mapReady) return;
-    const HIDE = 11; // فوقها تختفي (تسليم لتسميات الدبوس القريبة عند ~5كم)
-    const FADE = 1.5;
-    const CAP = 48;
-    let raf = 0;
-    const compute = (): void => {
-      raf = 0;
-      const mm = mapRef.current;
-      const bounds = dataRef.current?.bounds;
-      if (!mm || !bounds) return;
-      const op = Math.max(0, Math.min(1, (HIDE - mm.getZoom()) / FADE));
-      setMarginOp(op);
-      if (op <= 0.01 || !showParcelsRef.current) {
-        setMarginLabels((prev) => (prev.length ? [] : prev));
-        return;
-      }
-      const el = mm.getContainer();
-      const W = el.clientWidth;
-      const Ht = el.clientHeight;
-      const [w, s, e, n] = bounds as [number, number, number, number];
-      const cs = [mm.project([w, n]), mm.project([e, n]), mm.project([w, s]), mm.project([e, s])];
-      const box = {
-        minX: Math.min(...cs.map((p) => p.x)),
-        maxX: Math.max(...cs.map((p) => p.x)),
-        minY: Math.min(...cs.map((p) => p.y)),
-        maxY: Math.max(...cs.map((p) => p.y)),
-      };
-      const hidden = hiddenStatesRef.current;
-      const cands: MarginCand[] = [];
-      for (const f of fcRef.current.features) {
-        if (!f.geometry) continue;
-        const p = f.properties ?? {};
-        if (hidden.has(String(p.state ?? ""))) continue;
-        if (nbhFilterRef.current && p.neighborhood !== nbhFilterRef.current) continue;
-        const eid = typeof p.entity_id === "string" ? p.entity_id : "";
-        if (!eid) continue; // الرسمات غير المربوطة (بلا كيان) تُستثنى من البطاقات الهامشية
-        const name = typeof p.label === "string" && p.label ? p.label : typeof p.parcel_no === "string" ? p.parcel_no : "";
-        if (!name) continue;
-        const cc = centroid(f as Feature).geometry.coordinates as [number, number];
-        const pt = mm.project(cc);
-        cands.push({ key: String(p.ref_id ?? eid), name, kind: (typeof p.kind === "string" ? p.kind : "assumed") as ParcelKind, entityId: eid, lng: cc[0], lat: cc[1], ax: pt.x, ay: pt.y });
-        if (cands.length >= CAP) break;
-      }
-      setMarginLabels(layoutMarginLabels(cands, box, W, Ht));
-    };
-    const onMove = (): void => {
-      if (!raf) raf = requestAnimationFrame(compute);
-    };
-    m.on("move", onMove);
-    m.on("zoom", onMove);
-    compute();
-    return () => {
-      m.off("move", onMove);
-      m.off("zoom", onMove);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [mapReady, fc]);
-
   // تتبّع بطاقة الإشارة (م7.8): إسقاط شاشة حيّ لموقع الإشارة مع كل حركة/تكبير — كالشارة تماماً
   useEffect(() => {
     const m = mapRef.current;
@@ -1525,11 +1461,6 @@ export default function InvestmentMap() {
   );
 
   const altText = altM >= 1000 ? `${(altM / 1000).toLocaleString("en-US", { maximumFractionDigits: altM >= 10000 ? 0 : 1 })} كم` : `${Math.round(altM).toLocaleString("en-US")} م`;
-  const onOpenMargin = (it: MarginItem): void => {
-    requestFlyToCoords({ lng: it.lng, lat: it.lat, label: it.name }); // طيران للقطعة
-    requestOpenParcelDetail({ kind: it.kind, id: it.entityId }); // + فتح نافذتها
-  };
-
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
@@ -1753,9 +1684,6 @@ export default function InvestmentMap() {
           />
         ) : null}
       </div>
-
-      {/* م8.8 · بطاقات التسمية خارج نينوى (§هـ.4) — خطوط قادة + بطاقات في الهوامش الأربعة، تتلاشى بالزوم */}
-      <MarginLabels items={marginLabels} opacity={marginOp} onOpen={onOpenMargin} />
 
       {/* م8.8 · نبضة الموقع — حلقتان متوسّعتان متلاشيتان من قاعدة كل دبوس مرئي (بلون الحالة) */}
       {pinPings.length ? (
