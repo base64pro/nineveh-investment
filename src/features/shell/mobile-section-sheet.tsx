@@ -13,7 +13,9 @@ import { setSheetHeight } from "./mobile-sheet-store";
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 32 };
 
-// تمرير «منصبّ» (coverflow): البطاقة الأقرب لمركز الحاوية أكبر وأوضح، والأبعد أصغر وأخفت — حركة جرافيكية مميّزة.
+// تمرير «منصبّ» (coverflow · م8.6): التقام مغناطيسي رصين (scroll-snap proximity) + إبراز البطاقة في بؤرة
+// المنتصف، والمجاورتان أصغر/أخفت تدريجياً. التحسينات: حركة مباشرة بلا انتقال يطارد القيمة (سلاسة)، وتمريرتان
+// قراءة/كتابة (بلا layout thrash)، وبلا حشوة علوية مقحَمة (إزالة الفراغ فوق أوّل بطاقة)، واحترام تقليل الحركة.
 function useFocusedScroll(rootRef: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const root = rootRef.current;
@@ -21,43 +23,44 @@ function useFocusedScroll(rootRef: React.RefObject<HTMLElement | null>): void {
     let scroller: HTMLElement | null = null;
     let raf = 0;
     let ro: ResizeObserver | null = null;
-    // البؤرة = أعلى-وسط المنطقة المرئية (40%) لا منتصف الحاوية — لأنّ الحاوية أطول من المساحة المرئية
-    // (الورقة بارتفاع «موسّع» مزاحة بـtransform). الحشوة العلوية الصغيرة تُبرز البطاقة الأولى، والسفلية الكبيرة
-    // (أغلبها خارج الشاشة) تتيح للأخيرة بلوغ البؤرة — فكلّ البطاقات تتمركز وتبرز عند تمريرها.
-    const visibleH = (rect: DOMRect): number => Math.max(120, Math.min(rect.bottom, window.innerHeight) - rect.top);
-    const FOCAL = 0.4; // نسبة البؤرة من أعلى المنطقة المرئية
-    const applyPadding = (): void => {
-      if (!scroller) return;
-      const rect = scroller.getBoundingClientRect();
-      const firstLi = scroller.querySelector<HTMLElement>("ul > li");
-      const cardH = firstLi ? firstLi.getBoundingClientRect().height : 88;
-      const focalOffset = visibleH(rect) * FOCAL;
-      const padTop = `${Math.max(8, Math.round(focalOffset - cardH / 2))}px`;
-      const padBottom = `${Math.max(8, Math.round(scroller.clientHeight - focalOffset - cardH / 2))}px`;
-      if (scroller.style.paddingTop !== padTop) scroller.style.paddingTop = padTop;
-      if (scroller.style.paddingBottom !== padBottom) scroller.style.paddingBottom = padBottom;
+    const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const FOCAL = 0.5; // البؤرة = منتصف المنطقة المرئية (متّسقة مع التقام المنتصف scroll-snap)
+    const SCALE = 0.12; // عمق تصغير المجاورات (رصين)
+    const FADE = 0.32; // عمق تعتيم المجاورات
+    const tuneItems = (): void => {
+      scroller?.querySelectorAll<HTMLElement>("ul > li").forEach((li) => {
+        li.style.scrollSnapAlign = "center";
+        li.style.transformOrigin = "center";
+        li.style.willChange = "transform, opacity";
+      });
     };
+    // البؤرة = منتصف المنطقة المرئية فعلياً (المرئي = تقاطع الحاوية مع نافذة العرض، لأنّ الورقة قد تتجاوز الشاشة).
     const apply = (): void => {
       raf = 0;
       if (!scroller) return;
+      const lis = scroller.querySelectorAll<HTMLElement>("ul > li");
       const rect = scroller.getBoundingClientRect();
-      const vH = visibleH(rect);
-      const focalY = rect.top + vH * FOCAL; // أعلى-وسط المرئي
-      const half = vH * 0.55 || 1;
-      scroller.querySelectorAll<HTMLElement>("ul > li").forEach((li) => {
+      const vH = Math.max(120, Math.min(rect.bottom, window.innerHeight) - rect.top);
+      const focalY = rect.top + vH * FOCAL;
+      const half = vH * 0.5 || 1;
+      // تمريرة قراءة: نجمع كل المسافات أولاً (بلا كتابة بينها) لتفادي layout thrash القسري.
+      const ds: number[] = [];
+      lis.forEach((li) => {
         const r = li.getBoundingClientRect();
-        const t = Math.min(1, Math.abs(r.top + r.height / 2 - focalY) / half);
-        li.style.transformOrigin = "center";
-        li.style.transition = "transform 0.2s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease-out";
-        li.style.transform = `scale(${(1 - t * 0.17).toFixed(3)})`;
-        li.style.opacity = (1 - t * 0.52).toFixed(2);
+        ds.push(Math.min(1, Math.abs(r.top + r.height / 2 - focalY) / half));
+      });
+      // تمريرة كتابة: نطبّق المقياس/الشفافية مباشرةً (بلا transition يطارد قيمة متحرّكة ← سلاسة تامّة).
+      lis.forEach((li, i) => {
+        const t = ds[i] ?? 1;
+        li.style.transform = reduce ? "" : `scale(${(1 - t * SCALE).toFixed(3)})`;
+        li.style.opacity = reduce ? "" : (1 - t * FADE).toFixed(2);
       });
     };
     const onScroll = (): void => {
       if (!raf) raf = requestAnimationFrame(apply);
     };
     const mo = new MutationObserver(() => {
-      applyPadding();
+      tuneItems();
       onScroll();
     });
     // أرجئ الربط حتى تظهر حاوية التمرير (اللوحة تُركَّب مع الورقة)
@@ -66,27 +69,15 @@ function useFocusedScroll(rootRef: React.RefObject<HTMLElement | null>): void {
       window.setTimeout(() => {
         scroller = root.querySelector<HTMLElement>(".overflow-y-auto");
         if (!scroller) return;
-        applyPadding();
+        scroller.style.scrollSnapType = "y proximity"; // التقام لطيف يتوافق مع البطاقات متغيّرة الارتفاع/القابلة للطيّ
+        tuneItems();
         scroller.addEventListener("scroll", onScroll, { passive: true });
         mo.observe(scroller, { childList: true, subtree: true });
-        ro = new ResizeObserver(() => {
-          applyPadding();
-          onScroll();
-        });
+        ro = new ResizeObserver(onScroll);
         ro.observe(scroller);
         apply();
-        // المنطقة المرئية تتغيّر بالـtransform (حركة الفتح) لا بحجم الحاوية، فلا يلتقطها ResizeObserver —
-        // أعِد حساب الحشوة/المقياس بعد استقرار حركة الفتح.
-        timers.push(
-          window.setTimeout(() => {
-            applyPadding();
-            apply();
-          }, 380),
-          window.setTimeout(() => {
-            applyPadding();
-            apply();
-          }, 780),
-        );
+        // المنطقة المرئية تتغيّر بحركة الفتح (transform) لا بحجم الحاوية ← أعِد الحساب بعد استقرارها.
+        timers.push(window.setTimeout(apply, 380), window.setTimeout(apply, 780));
       }, 60),
     );
     return () => {
