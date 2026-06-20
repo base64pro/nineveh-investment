@@ -13,98 +13,32 @@ import { setSheetHeight } from "./mobile-sheet-store";
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 32 };
 
-// تمرير «منصبّ» (coverflow · م8.7): التقام مغناطيسي + إبراز البطاقة المركزية **عند استقرار التمرير فقط** —
-// لا تُكتَب أي transform أثناء السحب (ثبات تامّ بلا اهتزاز): عند بدء التمرير تُسطَّح البطاقات بانتقال ناعم،
-// وعند التوقّف (scrollend + احتياطي debounce) تكبر بطاقة البؤرة وتصغر/تخفت المجاورات. (أُزيل content-visibility
-// عن بطاقات الفرص/الرخص لأنه كان يفسد القياس ويسبّب الاهتزاز.)
+// تمرير الورقة السفلية (الخيار ج · م8.8): قائمة نظيفة ثابتة — **scroll-snap لطيف فقط بلا تكبير/تعتيم**.
+// أُزيل تأثير coverflow بالكامل (أفضل ممارسة لقوائم المحتوى · أقصى ثبات بلا أي اهتزاز).
 function useFocusedScroll(rootRef: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
     let scroller: HTMLElement | null = null;
-    let settleTimer = 0;
-    let scrolling = false;
-    const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const FOCAL = 0.5; // البؤرة = منتصف المنطقة المرئية (متّسقة مع التقام المنتصف)
-    const SCALE = 0.12; // عمق تصغير المجاورات (رصين)
-    const FADE = 0.32; // عمق تعتيم المجاورات
-    const SETTLE_MS = 140; // احتياطي لمتصفّحات بلا scrollend
-
     const tuneItems = (): void => {
       scroller?.querySelectorAll<HTMLElement>("ul > li").forEach((li) => {
         li.style.scrollSnapAlign = "center";
-        li.style.transformOrigin = "center";
-        li.style.transition = "transform 0.24s cubic-bezier(0.22,1,0.36,1), opacity 0.24s ease-out";
       });
     };
-    const flatten = (): void => {
-      scroller?.querySelectorAll<HTMLElement>("ul > li").forEach((li) => {
-        li.style.transform = "";
-        li.style.opacity = "";
-      });
-    };
-    // إبراز بطاقة البؤرة (منتصف المرئي) — يُستدعى عند الاستقرار فقط فلا يصارع رسم التمرير الزخمي.
-    const apply = (): void => {
-      if (!scroller || reduce) return;
-      const lis = scroller.querySelectorAll<HTMLElement>("ul > li");
-      const rect = scroller.getBoundingClientRect();
-      const vH = Math.max(120, Math.min(rect.bottom, window.innerHeight) - rect.top);
-      const focalY = rect.top + vH * FOCAL;
-      const half = vH * 0.5 || 1;
-      const ds: number[] = [];
-      lis.forEach((li) => {
-        const r = li.getBoundingClientRect();
-        ds.push(Math.min(1, Math.abs(r.top + r.height / 2 - focalY) / half));
-      });
-      lis.forEach((li, i) => {
-        const t = ds[i] ?? 1;
-        li.style.transform = `scale(${(1 - t * SCALE).toFixed(3)})`;
-        li.style.opacity = (1 - t * FADE).toFixed(2);
-      });
-    };
-    const settle = (): void => {
-      scrolling = false;
-      if (settleTimer) {
-        window.clearTimeout(settleTimer);
-        settleTimer = 0;
-      }
-      apply();
-    };
-    const onScroll = (): void => {
-      if (reduce) return;
-      if (!scrolling) {
-        scrolling = true;
-        flatten(); // أثناء التمرير: بطاقات مسطّحة متساوية — صفر كتابة لكل إطار ← صفر اهتزاز
-      }
-      if (settleTimer) window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(settle, SETTLE_MS);
-    };
-
-    const mo = new MutationObserver(() => {
-      tuneItems();
-      if (!scrolling) apply();
-    });
+    const mo = new MutationObserver(tuneItems);
     // أرجئ الربط حتى تظهر حاوية التمرير (اللوحة تُركَّب مع الورقة)
     const timers: number[] = [];
     timers.push(
       window.setTimeout(() => {
         scroller = root.querySelector<HTMLElement>(".overflow-y-auto");
         if (!scroller) return;
-        scroller.style.scrollSnapType = "y proximity"; // التقام لطيف يتوافق مع البطاقات متغيّرة الارتفاع/القابلة للطيّ
+        scroller.style.scrollSnapType = "y proximity"; // التقام لطيف فقط (بلا أي تحويل على البطاقات)
         tuneItems();
-        scroller.addEventListener("scroll", onScroll, { passive: true });
-        scroller.addEventListener("scrollend", settle, { passive: true });
         mo.observe(scroller, { childList: true, subtree: true });
-        apply();
-        // المنطقة المرئية تتغيّر بحركة الفتح (transform) لا بحجم الحاوية ← أعِد الحساب بعد استقرارها.
-        timers.push(window.setTimeout(apply, 420), window.setTimeout(apply, 820));
       }, 60),
     );
     return () => {
       timers.forEach((t) => window.clearTimeout(t));
-      if (settleTimer) window.clearTimeout(settleTimer);
-      scroller?.removeEventListener("scroll", onScroll);
-      scroller?.removeEventListener("scrollend", settle);
       mo.disconnect();
     };
   }, [rootRef]);
