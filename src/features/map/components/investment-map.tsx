@@ -74,7 +74,7 @@ type MapData = {
 type PadOpt = number | { top: number; bottom: number; left: number; right: number };
 function framePadding(base: number): PadOpt {
   if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return base;
-  const KPI = 74; // شريط المؤشّرات تحت الهيدبار (صفّان 3+3 · م8.6)
+  const KPI = 50; // شريط المؤشّرات تحت الهيدبار (صفّ واحد · م8.7)
   const SEARCH = 70; // شريط البحث السفلي + هامش
   // الورقة المفتوحة تغطّي شريط البحث ← الإقصاء السفلي = الأكبر بينهما (لا جمع مزدوج)
   return { top: base + KPI, bottom: base + Math.max(SEARCH, getSheetHeight()), left: base, right: base };
@@ -1283,24 +1283,20 @@ export default function InvestmentMap() {
     };
   }, [selectedProps]);
 
-  // م8.3 · تسميات الدبابيس عند الزوم القريب (~1كم على شريط المقياس): بطاقات زجاجية صغيرة فوق الدبابيس
-  // المرئية باسم القطعة المختصر — تظهر بالزوم إن (≥~13.5) وتتلاشى خارجه. تتبّع حيّ بـrAF كالشارة.
+  // م8.3/م8.7 · تسميات الدبابيس فوق الدبابيس المرئية باسم القطعة المختصر — تبدأ بالظهور عند ~5كم (z≈11)
+  // على كل الشاشات وتكتمل بالاقتراب، مع فرز بالأقرب لمركز الشاشة (cap). تتبّع حيّ بـrAF كالشارة.
   useEffect(() => {
     const m = mapRef.current;
     if (!m || !mapReady) return;
-    const SHOW = 13.5; // مستوى ~1كم
-    const FADE = 0.7;
+    const SHOW = 12.0; // م8.7 · مستوى ~5كم على شريط المقياس (كان 13.5 ≈ ~1كم)
+    const FADE = 1.0; // مدى تلاشٍ أوسع — تبدأ بالظهور عند ~5كم وتكتمل بالاقتراب
+    const CAP = 60; // حدّ التسميات المرئية مع فرز بالأقرب لمركز الشاشة (أولوية حتمية لا اقتطاع عشوائي)
     let raf = 0;
     const compute = (): void => {
       raf = 0;
       const mm = mapRef.current;
       if (!mm) return;
-      // جوال فقط (< md) — صفر حساب وصفر تسميات على md+/الديسكتوب
-      if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) {
-        setLabelOpacity(0);
-        setPinLabels((prev) => (prev.length ? [] : prev));
-        return;
-      }
+      // م8.7: تظهر على كل الشاشات (جوال + حاسوب) — أُزيل قصر الجوال
       const op = Math.max(0, Math.min(1, (mm.getZoom() - (SHOW - FADE)) / FADE));
       setLabelOpacity(op);
       if (op <= 0.01 || !showParcelsRef.current) {
@@ -1310,8 +1306,10 @@ export default function InvestmentMap() {
       const el = mm.getContainer();
       const W = el.clientWidth;
       const Ht = el.clientHeight;
+      const cx = W / 2;
+      const cy = Ht / 2;
       const hidden = hiddenStatesRef.current;
-      const out: { x: number; y: number; name: string; key: string }[] = [];
+      const cand: { x: number; y: number; name: string; key: string; d: number }[] = [];
       for (const f of fcRef.current.features) {
         if (!f.geometry) continue;
         const p = f.properties ?? {};
@@ -1323,10 +1321,10 @@ export default function InvestmentMap() {
         const c = centroid(f as Feature).geometry.coordinates as [number, number];
         const pt = mm.project(c);
         if (pt.x < -30 || pt.x > W + 30 || pt.y < -30 || pt.y > Ht + 30) continue;
-        out.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name) });
-        if (out.length >= 26) break;
+        cand.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name), d: Math.hypot(pt.x - cx, pt.y - cy) });
       }
-      setPinLabels(out);
+      cand.sort((a, b) => a.d - b.d); // الأقرب لمركز الشاشة أولاً
+      setPinLabels(cand.slice(0, CAP).map((r) => ({ x: r.x, y: r.y, name: r.name, key: r.key })));
     };
     const onMove = (): void => {
       if (!raf) raf = requestAnimationFrame(compute);
@@ -1630,9 +1628,9 @@ export default function InvestmentMap() {
         ) : null}
       </div>
 
-      {/* م8.3 · تسميات الدبابيس عند الزوم ~1كم — بطاقات زجاجية رشيقة فوق الدبابيس، تتلاشى عند الإبعاد */}
+      {/* م8.3/م8.7 · تسميات الدبابيس — تبدأ بالظهور عند ~5كم على كل الشاشات، بطاقات زجاجية فوق الدبابيس، تتلاشى عند الإبعاد */}
       {pinLabels.length ? (
-        <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden md:hidden" style={{ opacity: labelOpacity }}>
+        <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden" style={{ opacity: labelOpacity }}>
           {pinLabels.map((l) => (
             <span
               key={l.key}

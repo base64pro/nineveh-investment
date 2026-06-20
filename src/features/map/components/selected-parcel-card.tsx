@@ -94,7 +94,7 @@ export function SelectedParcelCard({
     return () => mq.removeEventListener("change", apply);
   }, []);
   const cardW = isMobile ? Math.min(CARD_W, container.w - 24) : CARD_W;
-  const topPad = isMobile ? 74 : 8; // شريط KPI تحت الهيدبار (صفّان 3+3 · م8.6)
+  const topPad = isMobile ? 50 : 8; // شريط KPI تحت الهيدبار (صفّ واحد · م8.7)
   const botPad = isMobile ? Math.max(70, sheetH) : 8; // الأكبر بين شريط البحث والورقة السفلية الحيّة (الورقة تغطّي البحث)
   const cardH = isMobile ? Math.max(240, Math.min(CARD_H, container.h - topPad - botPad)) : CARD_H;
 
