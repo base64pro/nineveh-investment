@@ -54,6 +54,8 @@ export function AdvisorChat() {
   async function send() {
     const q = input.trim();
     if (!q || loading) return;
+    // الجوال: طيّ الكيبورد بعد الإرسال لإظهار الإجابة كاملة (الإرسال بالزر فقط)
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) taRef.current?.blur();
     const history = messages;
     setMessages((m) => [...m, { role: "user", content: q }]);
     setInput("");
@@ -131,12 +133,14 @@ export function AdvisorChat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
+              if (e.key !== "Enter" || e.shiftKey) return;
+              // الجوال: Enter = سطر جديد (الإرسال بالزر فقط)؛ الديسكتوب: Enter = إرسال
+              if (window.matchMedia("(max-width: 767px)").matches) return;
+              e.preventDefault();
+              void send();
             }}
             rows={2}
+            enterKeyHint="enter"
             placeholder="اكتب سؤالك القانوني…"
             disabled={loading}
             className="scroll-slim min-h-[2.75rem] w-full resize-none rounded-xl border border-input bg-background/60 px-3 py-2 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
