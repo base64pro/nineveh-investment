@@ -584,6 +584,7 @@ export default function InvestmentMap() {
   const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]);
   const [labelOpacity, setLabelOpacity] = useState(0);
   const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
+  const [altM, setAltM] = useState(0); // م8.8 · ارتفاع الكاميرا الفعلي (متر) من MapLibre — مؤشّر الارتفاع الجوي
   const [mapReady, setMapReady] = useState(false);
   const { data: settingsData } = useSettings();
   const startApplied = useRef(false);
@@ -1354,6 +1355,36 @@ export default function InvestmentMap() {
     // fc ضمن التبعيات: يُعيد الحساب عند تحميل/تغيّر القطع دون انتظار حركة المستخدم (مهمّ للنبضات في العرض الساكن)
   }, [mapReady, fc]);
 
+  // م8.8 · مؤشّر الارتفاع الجوي: ارتفاع الكاميرا فوق المركز محسوباً **حتمياً** من الزوم/خط العرض/مجال الرؤية
+  // (هندسة ميركاتور — قيمة فعلية لا مؤلَّفة)، يتحدّث لحظياً مع الزوم.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !mapReady) return;
+    let raf = 0;
+    const FOV = 0.6435011087932844; // المجال الرأسي الافتراضي لكاميرا MapLibre (rad)
+    const upd = (): void => {
+      raf = 0;
+      const mm = mapRef.current;
+      if (!mm) return;
+      const lat = mm.getCenter().lat;
+      const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, mm.getZoom()); // متر/بكسل عند المركز
+      const h = mm.getCanvas().clientHeight || mm.getContainer().clientHeight || 1;
+      const alt = (0.5 / Math.tan(FOV / 2)) * h * mpp; // مسافة الكاميرا للمركز (بكسل) × متر/بكسل = الارتفاع بالمتر
+      if (Number.isFinite(alt)) setAltM(alt);
+    };
+    const onMove = (): void => {
+      if (!raf) raf = requestAnimationFrame(upd);
+    };
+    m.on("move", onMove);
+    m.on("zoom", onMove);
+    upd();
+    return () => {
+      m.off("move", onMove);
+      m.off("zoom", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mapReady]);
+
   // تتبّع بطاقة الإشارة (م7.8): إسقاط شاشة حيّ لموقع الإشارة مع كل حركة/تكبير — كالشارة تماماً
   useEffect(() => {
     const m = mapRef.current;
@@ -1429,9 +1460,19 @@ export default function InvestmentMap() {
     [fc, fieldOpts],
   );
 
+  const altText = altM >= 1000 ? `${(altM / 1000).toLocaleString("en-US", { maximumFractionDigits: altM >= 10000 ? 0 : 1 })} كم` : `${Math.round(altM).toLocaleString("en-US")} م`;
+
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* م8.8 · مؤشّر «مسافة الارتفاع الجوي عن الخريطة» — رقم ثلاثي الأبعاد عائم أسفل-يمين يتحدّث لحظياً */}
+      <div className="pointer-events-none absolute bottom-[5.75rem] right-3 z-[13] flex flex-col items-end gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] lg:right-[6.5rem]">
+        <span className="text-[8.5px] font-medium leading-none text-foreground/65">مسافة الارتفاع الجوي عن الخريطة</span>
+        <span dir="ltr" className="bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-base font-extrabold tabular-nums leading-none tracking-tight text-transparent drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
+          {altText}
+        </span>
+      </div>
 
       {/* عمود الأدوات العائمة: القاعدة · العودة · الطبقات ← ثم استوديو الرسم — فوق الجارت دائماً (z-20).
           م8.7: على lg تُزاح يسار الدوك العائم (end-[6.5rem]) كي لا تتداخل معه على الخريطة الكاملة. */}
