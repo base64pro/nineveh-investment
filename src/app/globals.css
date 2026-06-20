@@ -216,6 +216,39 @@
   }
 }
 
+/* م8.8 · أزرار الزوم على الحاسوب (≥768px): زجاج كحلي بهوية النظام، أصغر للماوس + أيقونات فاتحة */
+@media (min-width: 768px) {
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group {
+    border-radius: 0.85rem;
+    overflow: hidden;
+    background: linear-gradient(160deg, hsl(221 40% 17% / 0.95), hsl(221 44% 9% / 0.95));
+    border: 1px solid rgba(159, 192, 232, 0.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 10px 26px -10px rgba(0, 0, 0, 0.85),
+      0 0 20px -8px rgba(148, 175, 209, 0.55);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group button {
+    width: 40px !important;
+    height: 40px !important;
+    background-color: transparent;
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group button + button {
+    border-top: 1px solid rgba(159, 192, 232, 0.25);
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    filter: invert(1) brightness(1.7) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group button:hover {
+    background-color: rgba(159, 192, 232, 0.12);
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group button:active {
+    background-color: rgba(159, 192, 232, 0.22);
+  }
+}
+
 /* م8.2 · أدوات MapLibre على الجوال فقط (< md): ترفعها فوق شريط البحث السفلي، وتكبّر أزرار الزوم
    لقوس الإبهام، وتُكسيها زجاجاً كحلياً بهوية النظام (§هـ.3). الديسكتوب بلا أي تغيير. */
 @media (max-width: 767px) {

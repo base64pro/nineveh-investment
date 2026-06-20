@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { LogOut, X } from "lucide-react";
+import { LogOut, Maximize2, X } from "lucide-react";
+import { requestResetView } from "@/features/map/lib/map-nav-store";
 import { signOut } from "@/app/actions";
 import { useRealtimeSync } from "@/lib/data/realtime";
 import { useCounts } from "@/lib/data/use-counts";
@@ -167,7 +168,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       )}
 
       {/* الشريط — يمين الشاشة (§هـ.1) · ديسكتوب فقط (md+) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق */}
-      <nav className="absolute inset-y-0 right-0 z-30 hidden w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur md:flex lg:inset-y-3 lg:right-3 lg:rounded-2xl lg:border lg:border-[rgba(148,175,209,0.5)] lg:py-4 lg:shadow-[0_18px_50px_-16px_rgba(0,0,0,0.85),0_0_40px_-12px_rgba(148,175,209,0.5)] lg:ring-1 lg:ring-inset lg:ring-white/[0.06]">
+      <nav className="absolute inset-y-0 right-0 z-30 hidden w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur md:flex lg:top-3 lg:bottom-[5.5rem] lg:right-3 lg:rounded-2xl lg:border lg:border-[rgba(148,175,209,0.5)] lg:py-4 lg:shadow-[0_18px_50px_-16px_rgba(0,0,0,0.85),0_0_40px_-12px_rgba(148,175,209,0.5)] lg:ring-1 lg:ring-inset lg:ring-white/[0.06]">
         <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent lg:hidden" />
         {sections.map((s) => {
           const Icon = s.icon;
@@ -230,6 +231,18 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
           </button>
         </form>
       </nav>
+
+      {/* م8.8 · قرص «كامل نينوى» ثلاثي الأبعاد على الحاسوب (lg) — أسفل الدوك العائم، كنسخة الجوال. data-sfx=off: صوت طيران فقط */}
+      <button
+        type="button"
+        data-sfx="off"
+        onClick={() => requestResetView()}
+        aria-label="كامل نينوى"
+        title="العودة إلى كامل نينوى"
+        className="absolute bottom-3 right-6 z-40 hidden size-14 place-items-center rounded-full text-[#eaf2ff] ring-1 ring-inset ring-[rgba(159,192,232,0.7)] bg-[radial-gradient(125%_125%_at_50%_16%,rgba(176,205,240,0.6),rgba(139,111,176,0.34)_52%,rgba(17,24,43,0.92))] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.85),0_0_24px_-4px_rgba(159,192,232,0.9),inset_0_1.5px_0_rgba(255,255,255,0.45),inset_0_-3px_6px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-[transform,box-shadow] duration-150 hover:ring-[rgba(159,192,232,0.95)] active:translate-y-0.5 active:shadow-[0_4px_12px_-8px_rgba(0,0,0,0.85),0_0_14px_-4px_rgba(159,192,232,0.8),inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-2px_4px_rgba(0,0,0,0.5)] lg:grid"
+      >
+        <Maximize2 className="size-[26px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]" strokeWidth={2} />
+      </button>
 
       {/* الدوك العائم — جوال فقط (يحوي نفس الأقسام المفلترة بالأدوار) */}
       <MobileDock sections={sections} active={active} onSelect={selectSection} userEmail={userEmail} />

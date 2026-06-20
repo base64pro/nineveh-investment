@@ -1498,10 +1498,11 @@ export default function InvestmentMap() {
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           <button
             type="button"
+            data-sfx="off"
             onClick={resetView}
             title="إعادة العرض إلى كامل نينوى"
             aria-label="كامل نينوى"
-            className="grid size-10 place-items-center rounded-xl text-foreground/80 transition hover:bg-white/8 hover:text-foreground active:scale-95 max-md:hidden"
+            className="grid size-10 place-items-center rounded-xl text-foreground/80 transition hover:bg-white/8 hover:text-foreground active:scale-95 max-md:hidden lg:hidden"
           >
             <Maximize2 className="size-4 text-primary/80" aria-hidden />
           </button>
