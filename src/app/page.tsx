@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/features/shell/app-sidebar";
 import { Headbar } from "@/features/shell/headbar";
 import { MobileKpis } from "@/features/shell/mobile-kpis";
-import { SearchOverlay } from "@/features/search/search-overlay";
 import { SettingsApplier } from "@/features/settings/settings-applier";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { SfxEvents } from "@/components/ui/sfx-events";
@@ -42,7 +41,6 @@ export default async function Home() {
           </div>
           <MobileKpis />
           <AppSidebar userEmail={user?.email ?? null} />
-          <SearchOverlay />
           <SettingsApplier />
           <ConnectivityBanner />
           <SfxEvents />

@@ -7,12 +7,12 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Ruler, Search, User } from "lucide-react";
+import { Ruler, User } from "lucide-react";
 import { useDashboardStats, type DashboardStats } from "@/lib/data/use-dashboard-stats";
 import { useCountUp } from "@/components/ui/use-count-up";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { openSearch } from "@/features/search/search-store";
+import { HeadbarSearch } from "@/features/search/headbar-search";
 import { requestOpenSection } from "./shell-store";
 
 export interface ChipDef {
@@ -162,16 +162,7 @@ export function Headbar() {
 
       {/* ===== md+ (لوحي 8–13″ + لابتوب): مستوى أفقي واحد — بحث · الأرقام · فاصل · الهوية ===== */}
       <div className="relative hidden h-[68px] items-center gap-2.5 px-3 md:flex 2xl:h-20 2xl:gap-4 2xl:px-6">
-        <button
-          type="button"
-          onClick={openSearch}
-          title="بحث فائق (Ctrl K)"
-          className="flex h-9 shrink-0 items-center gap-2 rounded-xl border border-[rgba(148,175,209,0.45)] bg-white/5 px-2.5 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[rgba(148,175,209,0.9)] hover:bg-white/10 hover:text-foreground hover:shadow-[0_0_18px_-6px_rgba(148,175,209,0.8)] md:w-36 lg:w-44 xl:w-56 2xl:h-11 2xl:w-72 2xl:px-3"
-        >
-          <Search className="size-4 shrink-0" />
-          <span className="flex-1 truncate text-right text-[11px] lg:text-xs 2xl:text-sm">ابحث في نينوى…</span>
-          <kbd className="hidden rounded bg-black/25 px-1.5 py-0.5 text-[9px] lg:inline">Ctrl K</kbd>
-        </button>
+        <HeadbarSearch />
 
         <div className="flex min-w-0 flex-1 justify-center">
           <CountersBar stats={stats} />
