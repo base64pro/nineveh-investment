@@ -1468,8 +1468,8 @@ export default function InvestmentMap() {
 
       {/* م8.8 · مؤشّر «مسافة الارتفاع الجوي عن الخريطة» — رقم ثلاثي الأبعاد عائم أسفل-يمين يتحدّث لحظياً */}
       <div className="pointer-events-none absolute bottom-[5.75rem] right-3 z-[13] flex flex-col items-end gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] lg:right-[6.5rem]">
-        <span className="text-[8.5px] font-medium leading-none text-foreground/65">مسافة الارتفاع الجوي عن الخريطة</span>
-        <span dir="ltr" className="bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-base font-extrabold tabular-nums leading-none tracking-tight text-transparent drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
+        <span className="text-[9px] font-semibold leading-none text-foreground/70">الارتفاع الجوي</span>
+        <span dir="ltr" className="bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-lg font-extrabold tabular-nums leading-none tracking-tight text-transparent drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
           {altText}
         </span>
       </div>

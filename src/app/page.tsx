@@ -30,7 +30,7 @@ export default async function Home() {
       {/* الارتفاع = منطقة العرض المرئية (--app-h يضبطها VisualViewport فوق الكيبورد)، fallback dvh — ثبات صارم */}
       <main className="flex w-screen flex-col overflow-hidden" style={{ height: "var(--app-h, 100dvh)" }}>
         {/* الهيدبار — في سياق التدفّق، يأخذ ارتفاعه الطبيعي (يلتفّ على الجوال بلا تمرير أفقي) */}
-        <div className="relative z-30 shrink-0">
+        <div className="relative z-50 shrink-0">
           <Headbar />
         </div>
 
