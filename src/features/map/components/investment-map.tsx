@@ -584,6 +584,7 @@ export default function InvestmentMap() {
   const [labelOpacity, setLabelOpacity] = useState(0);
   const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
   const [pingScale, setPingScale] = useState(1); // م8.8.2 · حجم النبضة المرن مع الزوم (يصغر عند الإبعاد لتفادي التداخل)
+  const [pingTilt, setPingTilt] = useState({ deg: 48, persp: 1200 }); // م8.12.1 · ميل حلقات النبضة لتنبسط على الأرض في 3D (rotateX = ميل الكاميرا · perspective ≈ مسافة الكاميرا)
   const [altM, setAltM] = useState(0); // م8.8 · ارتفاع الكاميرا الفعلي (متر) من MapLibre — مؤشّر الارتفاع الجوي
   const [mapReady, setMapReady] = useState(false);
   const { data: settingsData } = useSettings();
@@ -1388,6 +1389,11 @@ export default function InvestmentMap() {
       const zt = Math.max(0, Math.min(1, (mm.getZoom() - PING_Z_OUT) / (PING_Z_IN - PING_Z_OUT)));
       const ps = +(PING_S_MIN + (1 - PING_S_MIN) * (zt * zt * (3 - 2 * zt))).toFixed(3);
       setPingScale((prev) => (prev === ps ? prev : ps));
+      // م8.12.1 · ميل الحلقات لتنبسط على الأرض في 3D: rotateX = ميل الكاميرا الحالي (الحلقات دوائر فالاتجاه/البيرنغ لا يؤثّر)،
+      // وperspective ≈ مسافة الكاميرا بالبكسل ((0.5/tan(fov/2))·الارتفاع) فيطابق منظور الخريطة — يتحدّث حيّاً مع easeTo الميل.
+      const tiltDeg = Math.round(mm.getPitch() * 10) / 10;
+      const persp = Math.max(600, Math.round((0.5 / Math.tan(0.6435011087932844 / 2)) * Ht));
+      setPingTilt((prev) => (prev.deg === tiltDeg && prev.persp === persp ? prev : { deg: tiltDeg, persp }));
       cand.sort((a, b) => a.d - b.d); // الأقرب لمركز الشاشة أولاً
       setPinLabels(wantLabels ? cand.slice(0, CAP).map((r) => ({ x: r.x, y: r.y, name: r.name, key: r.key })) : []);
     };
@@ -1803,11 +1809,13 @@ export default function InvestmentMap() {
         ) : null}
       </div>
 
-      {/* م8.8.2 · نبضة الموقع — جبهة موجية سونار تحت الدبابيس (z-9 < deck): الحجم مرن مع الزوم */}
+      {/* م8.8.2/م8.12.1 · نبضة الموقع — جبهة موجية سونار تحت الدبابيس (z-9 < deck): الحجم مرن مع الزوم.
+          في 3D تنبسط الحلقات على الأرض (rotateX = ميل الكاميرا · perspective بمركز الشاشة = نقطة الكاميرا الرئيسة)
+          فتبدو كأنها جزء من الرسمة لا حلقات عمودية عائمة؛ في 2D (ميل 0) = دوائر كما هي (rotateX(0) محايد). */}
       {pinPings.length ? (
-        <div className="pointer-events-none absolute inset-0 z-[9] overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 z-[9] overflow-hidden" style={{ perspective: `${pingTilt.persp}px` }}>
           {pinPings.map((p) => (
-            <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color, transform: `scale(${pingScale})`, transformOrigin: "0 0" }}>
+            <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color, transform: `rotateX(${pingTilt.deg}deg) scale(${pingScale})`, transformOrigin: "0 0" }}>
               <span className="pin-ping pin-ping--l1" />
               <span className="pin-ping pin-ping--l2" />
               <span className="pin-ping pin-ping--l3" />
