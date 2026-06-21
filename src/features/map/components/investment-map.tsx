@@ -40,7 +40,6 @@ import { useMapAnnotations } from "../lib/use-map-annotations";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useRole } from "@/features/auth/role-context";
 import { isSfxMuted, setSfxMuted, sfxFly } from "@/lib/sfx";
-import { createSpacetimeWave, SPACETIME_WAVE_LAYER } from "../lib/spacetime-wave";
 import { createMapElement, deleteMapElement, renameMapElement } from "../lib/annotation-actions";
 import { DrawDock, type DrawModeId } from "./draw-dock";
 import { DimensionDialog, type DimShape } from "./dimension-dialog";
@@ -146,6 +145,10 @@ function overlayLayers(): StyleLayer[] {
   const subdLabelFade = ["interpolate", ["linear"], ["zoom"], 9, 0, 10.5, 1];
   return [
     { id: "dim-mask", type: "fill", source: "dim-mask", paint: { "fill-color": DIM_COLOR } },
+    // م8.11 · تعتيم داخل نينوى ليكون داكناً كالخارج وأكثر (بعد إلغاء نسيج الزمكان) — أرضية هادئة تبرز فوقها العناصر
+    { id: "inside-dim", type: "fill", source: "bnd-governorate", paint: { "fill-color": "rgba(1,3,8,0.5)" } },
+    // م8.11 · توهّج نابض هادئ لشريط حدود نينوى — تُحرَّك line-opacity بـrAF (يعلو ويخفت بسلاسة)
+    { id: "bnd-governorate-glow", type: "line", source: "bnd-governorate", paint: { "line-color": C.governorate.line, "line-width": 7, "line-blur": 5, "line-opacity": 0.3 } },
     line("governorate", C.governorate.line, C.governorate.width, 0, 0.9),
     label("governorate", 0, 18, govLabelFade),
     line("districts", C.districts.line, C.districts.width, 0, districtFade),
@@ -399,21 +402,6 @@ function mixColor(color: string, amt: number, toWhite: boolean): string {
 }
 const lightenColor = (c: string, a: number): string => mixColor(c, a, true);
 const darkenColor = (c: string, a: number): string => mixColor(c, a, false);
-
-// م7.6 · نسيج الزمكان الحي: طبقة مخصّصة بمظلّل رأسي (Simplex Noise + زمن) — التنفيذ في lib/spacetime-wave.ts.
-function applySpacetime(map: GLMap | null, gov: FeatureCollection | null): void {
-  if (!map || !gov) return;
-  try {
-    if (!map.getLayer(SPACETIME_WAVE_LAYER)) {
-      const layer = createSpacetimeWave(gov);
-      if (!layer) return;
-      const before = map.getLayer("bnd-districts-line") ? "bnd-districts-line" : undefined;
-      map.addLayer(layer, before);
-    }
-  } catch {
-    // النمط قيد التبديل — تُعاد عند idle
-  }
-}
 
 // مربّعات إظهار القطع حسب الحالة (§هـ.4): قيمة الحالة ← {تسمية · لون accent}.
 const STATE_TOGGLES = [
@@ -808,7 +796,6 @@ export default function InvestmentMap() {
         applyStats(m, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
         applyVisibility(m, showBoundariesRef.current);
         applyAnnotations(m, annFcRef.current, showAnnotationsRef.current);
-        applySpacetime(m, dataRef.current?.gov ?? null);
 
         m.fitBounds(bounds, { padding: framePadding(48), duration: 2200 }); // دخول متسارع (حشوة جوال تؤطّر المحافظة فوق شريط البحث)
         m.once("moveend", lockView);
@@ -915,6 +902,33 @@ export default function InvestmentMap() {
     });
   }, []);
 
+  // م8.11 · توهّج نابض هادئ لشريط حدود نينوى — يعلو ويخفت بسلاسة (sine) عبر تحريك line-opacity للطبقة المتوهّجة.
+  useEffect(() => {
+    if (!mapReady) return;
+    let raf = 0;
+    let last = 0;
+    const t0 = performance.now();
+    const tick = (): void => {
+      raf = requestAnimationFrame(tick);
+      const now = performance.now();
+      if (now - last < 40) return; // ~25fps يكفي لنبض بطيء سلس — تقليل إعادة رسم الخريطة (أوفر للبطارية)
+      last = now;
+      const mm = mapRef.current;
+      if (!mm || !mm.getLayer("bnd-governorate-glow")) return;
+      const t = (now - t0) / 1000;
+      const op = 0.16 + 0.34 * (0.5 + 0.5 * Math.sin(t * 1.05)); // 0.16..0.5 · نبض ~6ث هادئ
+      try {
+        mm.setPaintProperty("bnd-governorate-glow", "line-opacity", op);
+      } catch {
+        /* النمط قيد التبديل */
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mapReady]);
+
   // بدء رسم وربط هندسة بقطعة موجودة (من بطاقة فرصة/رخصة)
   useEffect(() => {
     return onStartDraw((target) => {
@@ -971,7 +985,6 @@ export default function InvestmentMap() {
       applyStats(mapRef.current, dataRef.current, oppsRef.current, licsRef.current, assumedRef.current);
       applyVisibility(mapRef.current, showBoundariesRef.current);
       applyAnnotations(mapRef.current, annFcRef.current, showAnnotationsRef.current); // النمط الجديد مسح المصدر
-      applySpacetime(mapRef.current, dataRef.current?.gov ?? null);
       // إعادة تشغيل أداة الرسم على النمط الجديد — حارس مستقل كي لا يُسقطها أي فشل آخر
       try {
         if (d && !d.enabled) d.start();
@@ -1778,7 +1791,7 @@ export default function InvestmentMap() {
       {pinLabels.length ? (
         <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden" style={{ opacity: labelOpacity }}>
           {pinLabels.map((l) => (
-            <span key={l.key} className="absolute" style={{ left: l.x, top: l.y - 30, transform: "translate(-50%, -100%)" }}>
+            <span key={l.key} className="absolute" style={{ left: l.x, top: l.y - 54, transform: "translate(-50%, -100%)" }}>
               <span
                 className="pin-label-in block max-w-[110px] truncate rounded-full border border-[rgba(159,192,232,0.3)] bg-[hsl(221_42%_11%/0.42)] px-1.5 py-0.5 text-center text-[8.5px] font-semibold leading-tight text-[#e6eefb] shadow-[0_3px_10px_-4px_rgba(0,0,0,0.6)] backdrop-blur-md"
                 title={l.name}

@@ -196,8 +196,8 @@
   height: 22px;
   margin: -11px 0 0 -11px;
   border-radius: 9999px;
-  border: 2.25px solid currentColor;      /* ثابت — لا يُحرَّك (أبرز قليلاً) */
-  box-shadow: 0 0 10px -1px currentColor; /* ثابت — لا يُحرَّك */
+  border: 2.5px solid currentColor;       /* ثابت — لا يُحرَّك (م8.11 · أبرز) */
+  box-shadow: 0 0 14px 0 currentColor;    /* ثابت — هالة لونية أقوى لتبرز (م8.11) */
   opacity: 0;
   transform: scale(0.35);
   /* تباطؤ ease-out لطيف وبطيء: انطلاق هادئ ثم انزلاق متّسع كموجة تتبدّد (لا قفزة حادّة) */
@@ -212,7 +212,7 @@
 .pin-ping--l5 { animation-delay: -4s; }
 @keyframes pin-ping {
   0% { transform: scale(0.35); opacity: 0; }
-  14% { opacity: 0.6; } /* انبثاق ناعم — لا ومضة حادة (أبرز قليلاً · أقل شفافية) */
+  14% { opacity: 0.8; } /* م8.11 · شدة لونية أكبر لتبرز */
   100% { transform: scale(3.1); opacity: 0; } /* العتمة تبلغ 0 عند أقصى اتّساع (بلا مسافة ميّتة)؛ الأبعد أخفت = عمق */
 }
 @media (prefers-reduced-motion: reduce) {
