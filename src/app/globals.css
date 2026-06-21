@@ -219,6 +219,16 @@
   .pin-ping { animation: none; opacity: 0; }
 }
 
+/* م8.10 · ظهور سلس لبطاقة اسم القطعة الشفافة فوق الدبوس (transform/opacity فقط) */
+@keyframes pin-label-in {
+  from { opacity: 0; transform: scale(0.86) translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.pin-label-in { animation: pin-label-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .pin-label-in { animation: none; }
+}
+
 /* م8.7 · الشاشات الكبيرة (≥1024px): الخريطة ملء الشاشة والشريط دوك عائم يميناً —
    نُزيح أدوات الزوم (الركن السفلي الأيمن) يساراً كي لا تختفي خلف الدوك العائم. */
 @media (min-width: 1024px) {

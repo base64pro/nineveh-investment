@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { flushSync } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,6 +9,11 @@ import { cn } from "@/lib/utils";
 /**
  * حقل تصفية combobox أنيق: منسدلة منبثقة بالكامل عند كل نقرة (لا تتقلّص للعنصر المحدّد)،
  * خيار «الكل» دائماً، تصفية أثناء الكتابة فقط، تمرير رشيق وحركة سلسة، تنقّل بلوحة المفاتيح.
+ *
+ * م8.10 · سلوك النقرتين (لمنع ظهور الكيبورد فوراً على الجوال):
+ *  - النقرة الأولى وسط الحقل ← **تفتح المنسدلة فقط** (الحقل `readOnly` ← لا كيبورد).
+ *  - النقرة الثانية وسط الحقل ← تفعيل التحرير + إظهار الكيبورد (`flushSync` ثم blur+focus داخل إيماءة المستخدم).
+ *  - النقر على سهم المنسدلة ← فتح/إغلاق فقط (لا تحرير).
  */
 export function FilterCombo({
   value,
@@ -24,8 +30,10 @@ export function FilterCombo({
 }) {
   const [open, setOpen] = useState(false);
   const [typing, setTyping] = useState(false);
+  const [editable, setEditable] = useState(false); // الكيبورد لا يظهر إلا بعد التفعيل (النقرة الثانية)
   const [highlight, setHighlight] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
 
   // عند النقر/الفتح: كل الخيارات. أثناء الكتابة فقط: تصفية بالاحتواء.
@@ -38,10 +46,20 @@ export function FilterCombo({
 
   const items = useMemo(() => [allLabel, ...list], [allLabel, list]);
 
+  function close() {
+    setOpen(false);
+    setEditable(false);
+    inputRef.current?.blur();
+  }
+
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setEditable(false);
+        inputRef.current?.blur(); // م8.10 · أغلق الكيبورد عند النقر خارج الحقل (لا يكفي تبديل readOnly على الجوال)
+      }
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -49,14 +67,29 @@ export function FilterCombo({
 
   function commit(v: string) {
     onChange(v);
-    setOpen(false);
     setTyping(false);
+    close();
   }
 
   function openAll() {
     setOpen(true);
     setTyping(false);
     setHighlight(0);
+  }
+
+  // النقرة الثانية وسط الحقل: فعّل التحرير وأظهر الكيبورد داخل إيماءة المستخدم (مهمّ لـiOS)
+  function enableEdit() {
+    flushSync(() => setEditable(true));
+    const el = inputRef.current;
+    if (el) {
+      el.blur();
+      el.focus();
+    }
+  }
+
+  function onInputClick() {
+    if (!open) openAll(); // الأولى: فتح فقط (readOnly ← لا كيبورد)
+    else if (!editable) enableEdit(); // الثانية وسط الحقل: تحرير + كيبورد
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -72,17 +105,19 @@ export function FilterCombo({
       const sel = items[highlight];
       if (sel !== undefined) commit(highlight === 0 ? "" : sel);
     } else if (e.key === "Escape") {
-      setOpen(false);
+      close();
     }
   }
 
   return (
     <div ref={rootRef} className="relative">
       <input
+        ref={inputRef}
         value={value}
+        readOnly={!editable}
+        inputMode={editable ? "text" : "none"}
         onChange={(e) => { onChange(e.target.value); setOpen(true); setTyping(true); setHighlight(0); }}
-        onFocus={openAll}
-        onClick={openAll}
+        onClick={onInputClick}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         role="combobox"
@@ -90,10 +125,15 @@ export function FilterCombo({
         aria-controls={listId}
         className="w-full rounded-lg border border-input bg-background/60 px-2 py-1.5 pe-6 outline-none transition focus:ring-2 focus:ring-ring"
       />
-      <ChevronDown
-        className={cn("pointer-events-none absolute end-1.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground transition-transform duration-200", open && "rotate-180")}
-        aria-hidden
-      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={open ? "إغلاق الخيارات" : "فتح الخيارات"}
+        onClick={(e) => { e.stopPropagation(); if (open) close(); else openAll(); }}
+        className="absolute end-1 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-muted-foreground"
+      >
+        <ChevronDown className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} aria-hidden />
+      </button>
       <AnimatePresence>
         {open ? (
           <motion.ul

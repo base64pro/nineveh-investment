@@ -108,7 +108,6 @@ export function MobileDock({
         <div className="flex flex-col overflow-hidden rounded-2xl border border-[rgba(159,192,232,0.5)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.92),hsl(221_44%_9%/0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_12px_30px_-12px_rgba(0,0,0,0.85),0_0_22px_-8px_rgba(148,175,209,0.55)] backdrop-blur-xl">
           <button
             type="button"
-            data-sfx="off"
             onClick={() => requestZoom(1)}
             aria-label="تكبير"
             title="تكبير"
@@ -119,7 +118,6 @@ export function MobileDock({
           <span aria-hidden className="h-px bg-[rgba(159,192,232,0.28)]" />
           <button
             type="button"
-            data-sfx="off"
             onClick={() => requestZoom(-1)}
             aria-label="تصغير"
             title="تصغير"

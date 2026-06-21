@@ -55,6 +55,7 @@ import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
 import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
+import { setMapBase } from "../lib/map-base-store";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
 import { getSheetHeight } from "@/features/shell/mobile-sheet-store";
@@ -72,12 +73,15 @@ type MapData = {
 // أعلى = شريط مؤشّرات KPI تحت الهيدبار، أسفل = شريط البحث + ارتفاع الورقة الحيّ (§6). على الديسكتوب تُعيد
 // الرقم الأساس حرفياً (صفر تغيير على md+). ممنوع تغيير حجم canvas — التأطير عبر هذه الحشوة فقط.
 type PadOpt = number | { top: number; bottom: number; left: number; right: number };
-function framePadding(base: number): PadOpt {
+function framePadding(base: number, ignoreSheet = false): PadOpt {
   if (typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches) return base;
   const KPI = 50; // شريط المؤشّرات تحت الهيدبار (صفّ واحد · م8.7)
   const SEARCH = 70; // شريط البحث السفلي + هامش
-  // الورقة المفتوحة تغطّي شريط البحث ← الإقصاء السفلي = الأكبر بينهما (لا جمع مزدوج)
-  return { top: base + KPI, bottom: base + Math.max(SEARCH, getSheetHeight()), left: base, right: base };
+  // الورقة المفتوحة تغطّي شريط البحث ← الإقصاء السفلي = الأكبر بينهما (لا جمع مزدوج).
+  // م8.10: عند الطيران تُغلق الورقة معه، فنتجاهل ارتفاعها (ignoreSheet) كي لا يتجاوز الحشو الرأسي
+  // ارتفاع الخريطة فيفشل fitBounds (كان الطيران لا يعمل عند رفع الورقة للأقصى — يعمل الصوت فقط).
+  const sheet = ignoreSheet ? 0 : getSheetHeight();
+  return { top: base + KPI, bottom: base + Math.max(SEARCH, sheet), left: base, right: base };
 }
 
 type StyleSource = { url?: string; tiles?: string[]; [k: string]: unknown };
@@ -340,14 +344,14 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
       if (layer.id === "water") layer.paint = { ...layer.paint, "fill-color": NAVY.water };
       const paint = (layer.paint ?? {}) as Record<string, unknown>;
       if (layer.type === "line" && typeof paint["line-color"] === "string") {
-        paint["line-color"] = lightenColor(paint["line-color"], 0.3); // طرق/ممرات أكثر حدّة وبياضاً
+        paint["line-color"] = lightenColor(paint["line-color"], 0.46); // م8.10 · طرق/ممرات أنصع لتباين أعلى فوق الأرضية الكحلية الداكنة
         layer.paint = paint as never;
       } else if (layer.type === "symbol") {
-        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.35);
+        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.52); // م8.10 · تسميات أنصع
         paint["text-halo-color"] = NAVY.background;
         layer.paint = paint as never;
       } else if (layer.type === "fill" && layer.id !== "water" && typeof paint["fill-color"] === "string") {
-        paint["fill-color"] = darkenColor(paint["fill-color"], 0.34); // أرضية المضلّعات أعمق غموقاً تحت الشبكة (م7.6+++)
+        paint["fill-color"] = darkenColor(paint["fill-color"], 0.2); // م8.10 (مُحدَّث) · أرضية المعالم أعمق (طلب: أرضية أدكن) — الطرق/التسميات تبقى بارزة فتُميَّز العناصر والقطع
         layer.paint = paint as never;
       }
     }
@@ -582,7 +586,7 @@ export default function InvestmentMap() {
   const editingRef = useRef(editing);
   editingRef.current = editing;
   // م8.3 · تسميات الدبابيس عند الزوم القريب (~1كم): بطاقات زجاجية صغيرة فوق الدبابيس، تظهر/تتلاشى مع الزوم
-  const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]);
+  const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]); // م8.10 · بطاقات شفافة صغيرة فوق الدبوس
   const [labelOpacity, setLabelOpacity] = useState(0);
   const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
   const [pingScale, setPingScale] = useState(1); // م8.8.2 · حجم النبضة المرن مع الزوم (يصغر عند الإبعاد لتفادي التداخل)
@@ -876,7 +880,7 @@ export default function InvestmentMap() {
       if (m && f?.geometry) {
         sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
-        m.fitBounds(b, { padding: framePadding(80), maxZoom: 16, duration: 1000 }); // الجوال: القطعة في الـ50% العلوية فوق الورقة (§6)
+        m.fitBounds(b, { padding: framePadding(80, true), maxZoom: 16, duration: 1000 }); // م8.10: تجاهل ارتفاع الورقة (تُغلق مع الطيران) فلا يفشل التأطير
         // ملاحظة: لا تنبثق بطاقة الصور تلقائياً عند الطيران — انبثاقها حصراً عند النقر على رسمة القطعة (طلب معتمد).
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
@@ -890,7 +894,7 @@ export default function InvestmentMap() {
       const m = mapRef.current;
       if (!m) return;
       sfxFly(); // أثر طيران تقني ناعم (م7.9)
-      m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400, padding: framePadding(0) });
+      m.flyTo({ center: [lng, lat], zoom: 14, duration: 1400, padding: framePadding(0, true) });
       if (label) toast.info(label);
     });
   }, []);
@@ -937,12 +941,14 @@ export default function InvestmentMap() {
     const prev = baseRef.current;
     baseRef.current = next;
     setBase(next);
+    setMapBase(next); // م8.10 · أبلغ مؤشّرات KPI بتغيّر القاعدة (قرص كحلي فوق الخريطة الفاتحة)
     let style: StyleSpecification;
     try {
       style = await buildStyle(next, data);
     } catch {
       baseRef.current = prev; // §ز: فشل الجلب لا يُعلّق الزر على قاعدة لم تُحمَّل
       setBase(prev);
+      setMapBase(prev);
       toast.error("تعذّر تحميل قاعدة الخريطة — تحقّق من الاتصال وأعد المحاولة");
       return;
     }
@@ -1767,16 +1773,18 @@ export default function InvestmentMap() {
         </div>
       ) : null}
 
-      {/* م8.3/م8.7 · تسميات الدبابيس — تبدأ بالظهور عند ~5كم على كل الشاشات، بطاقات زجاجية فوق الدبابيس، تتلاشى عند الإبعاد */}
+      {/* م8.10 (مُحدَّث) · تسميات الدبابيس (§هـ.4) — تبدأ عند ~5كم: بطاقة **شفافة صغيرة فوق رأس الدبوس**،
+          تظهر بحركة سلسة (CSS) وتتبع الدبوس حيّاً، وتتلاشى عند الإبعاد عبر labelOpacity. */}
       {pinLabels.length ? (
         <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden" style={{ opacity: labelOpacity }}>
           {pinLabels.map((l) => (
-            <span
-              key={l.key}
-              className="absolute max-w-[130px] truncate rounded-full border border-[rgba(159,192,232,0.5)] bg-[hsl(221_42%_10%/0.8)] px-2 py-0.5 text-[10px] font-semibold text-[#dbe7fb] shadow-[0_5px_16px_-5px_rgba(0,0,0,0.85),0_0_14px_-5px_rgba(148,175,209,0.75)] ring-1 ring-inset ring-white/10 backdrop-blur-md"
-              style={{ left: l.x, top: l.y - 52, transform: "translate(-50%, -100%)" }}
-            >
-              {l.name}
+            <span key={l.key} className="absolute" style={{ left: l.x, top: l.y - 30, transform: "translate(-50%, -100%)" }}>
+              <span
+                className="pin-label-in block max-w-[110px] truncate rounded-full border border-[rgba(159,192,232,0.3)] bg-[hsl(221_42%_11%/0.42)] px-1.5 py-0.5 text-center text-[8.5px] font-semibold leading-tight text-[#e6eefb] shadow-[0_3px_10px_-4px_rgba(0,0,0,0.6)] backdrop-blur-md"
+                title={l.name}
+              >
+                {l.name}
+              </span>
             </span>
           ))}
         </div>

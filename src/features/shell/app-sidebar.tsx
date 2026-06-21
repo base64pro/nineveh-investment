@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { OpportunitiesPanel } from "@/features/opportunities/opportunities-panel";
 import { LicensesPanel } from "@/features/licenses/licenses-panel";
+import { usePersistentState } from "@/lib/panel-state";
 import { LicenseStatusCounters } from "@/features/licenses/status-counters";
 import { CompaniesPanel } from "@/features/companies/companies-panel";
 import { CriteriaPanel } from "@/features/criteria/criteria-panel";
@@ -77,7 +78,8 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   const { isViewer } = useRole();
   const sections = isViewer ? SECTIONS.filter((s) => !VIEWER_HIDDEN.has(s.id)) : SECTIONS;
   const [active, setActive] = useState<string | null>(null);
-  const [licenseStatus, setLicenseStatus] = useState("");
+  // م8.10 · التاب الفرعي للرخص يصمد عبر فتح/إغلاق التاب (يُصفَّر عند دخول/خروج النظام فقط)
+  const [licenseStatus, setLicenseStatus] = usePersistentState("lic:status", "");
   // الجوال (< md): يقرّر مسار العرض (ورقة سفلية/ملء شاشة) بدل لوحة الديسكتوب — يمنع تركيب اللوحة مرّتين.
   const [isMobile, setIsMobile] = useState(false);
 
@@ -96,6 +98,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
         setActive(id);
         if (id === "licenses" && status) setLicenseStatus(status);
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setLicenseStatus مستقرّ (setter من usePersistentState)
     [],
   );
 
@@ -105,7 +108,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
 
   // اختيار قسم من الشريط/الدوك (إعادة استخدام لمنطق الفلتر النظيف للرخص)
   const selectSection = (id: string): void => {
-    if (id === "licenses" && active !== id) setLicenseStatus(""); // فتح جديد ← فلتر نظيف (لا فلتر عالق)
+    // م8.10 · لا تصفير للتاب الفرعي عند الفتح — يصمد كبقية إجراءات التاب (usePersistentState)
     setActive(active === id ? null : id);
   };
 

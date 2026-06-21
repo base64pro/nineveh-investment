@@ -1,7 +1,8 @@
 "use client";
 
-// م8.3 · البحث المضمَّن على الجوال (§هـ.2.ج) — شريط سفلي ثابت هو حقل البحث نفسه (لا مربّع منفصل ينبثق).
-// عند التركيز يتمدّد لملء المنطقة المرئية (--app-h فوق الكيبورد) فتظهر النتائج فوق الحقل ذاته. يُخفى تحت الورقة.
+// م8.3/م8.10 · البحث المضمَّن على الجوال (§هـ.2.ج) — شريط سفلي ثابت هو حقل البحث نفسه (لا مربّع منفصل ينبثق).
+// م8.10: نافذة النتائج تتولّد **من أسفل بمحاذاة الحقل وتتمدّد للأعلى** بقدر النتائج، وتتوقّف قبل الهيدبار ثم
+// يظهر سكرول-بار للوصول لبقيّتها (بدل ملء الشاشة من الأعلى). تُخفى تحت الورقة السفلية.
 import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { BadgeCheck, Building2, Loader2, MapPin, MapPinned, Megaphone, Search, Shapes, X } from "lucide-react";
@@ -54,56 +55,68 @@ export function MobileSearch() {
         ) : null}
       </AnimatePresence>
 
+      {/* الحقل أسفل؛ النتائج فوقه تتمدّد للأعلى (مقيَّدة تحت الهيدبار). عند التفعيل: الحاوية بحجم المنطقة المرئية
+          (--app-h فوق الكيبورد) مع justify-end فيبقى الحقل فوق الكيبورد والنتائج تنمو لأعلى منه (إصلاح ارتطام الكيبورد). */}
       <div
-        className={cn("fixed inset-x-0 z-40 flex flex-col md:hidden", active ? "top-0" : "bottom-0")}
+        className={cn("fixed inset-x-0 z-40 flex flex-col md:hidden", active ? "top-0 justify-end" : "bottom-0")}
         style={active ? { height: "var(--app-h, 100dvh)", paddingTop: "var(--sat)" } : undefined}
       >
-        {/* النتائج فوق الحقل نفسه (عند التفعيل) — لا مربّع بحث منفصل */}
-        {active ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {warning ? (
-              <p className="mb-2 rounded-xl bg-state-announced/10 px-3 py-2 text-xs text-state-announced ring-1 ring-inset ring-state-announced/35">{warning}</p>
-            ) : null}
-            {q.length < 2 ? (
-              <p className="px-2 py-8 text-center text-sm text-muted-foreground">اكتب حرفين على الأقل — بياناتنا أولاً ثم مواقع نينوى.</p>
-            ) : results.length === 0 ? (
-              <p className="px-2 py-8 text-center text-sm text-muted-foreground">{loading ? "يبحث…" : "لا نتائج مطابقة ضمن نينوى."}</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {results.map((r, i) => {
-                  const m = META[r.kind];
-                  const Icon = m.Icon;
-                  return (
-                    <li key={`${r.kind}-${i}-${r.label}`}>
-                      <button
-                        type="button"
-                        onClick={() => onGo(r)}
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-2xl border border-[rgba(148,175,209,0.28)] bg-[hsl(221_42%_12%/0.85)] px-3 py-2.5 text-right ring-1 ring-inset ring-white/[0.05] backdrop-blur-md transition active:scale-[0.99]",
-                          i === sel && "border-[rgba(159,192,232,0.55)]",
-                        )}
-                      >
-                        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-inset ring-border/40", m.cls)}>
-                          <Icon className="size-4" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-foreground">{r.label}</span>
-                            <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] bg-white/5", m.cls)}>{m.label}</span>
+        <AnimatePresence>
+          {active ? (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              // تتوقّف قبل الهيدبار (الحدّ الأقصى) ثم سكرول؛ تنمو للأعلى لأنّ الحاوية مرساة أسفل
+              style={{ maxHeight: "calc(var(--app-h, 100dvh) - var(--sat) - var(--sab) - 9rem)" }}
+              className="mx-3 mb-2 overflow-y-auto rounded-2xl border border-[rgba(148,175,209,0.32)] bg-[hsl(221_42%_9%/0.94)] p-2 shadow-[0_-14px_46px_-14px_rgba(0,0,0,0.9),0_0_28px_-12px_rgba(148,175,209,0.5)] ring-1 ring-inset ring-white/[0.06] backdrop-blur-xl [scrollbar-width:thin]"
+            >
+              {warning ? (
+                <p className="mb-2 rounded-xl bg-state-announced/10 px-3 py-2 text-xs text-state-announced ring-1 ring-inset ring-state-announced/35">{warning}</p>
+              ) : null}
+              {q.length < 2 ? (
+                <p className="px-2 py-5 text-center text-sm text-muted-foreground">اكتب حرفين على الأقل — بياناتنا أولاً ثم مواقع نينوى.</p>
+              ) : results.length === 0 ? (
+                <p className="px-2 py-5 text-center text-sm text-muted-foreground">{loading ? "يبحث…" : "لا نتائج مطابقة ضمن نينوى."}</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {results.map((r, i) => {
+                    const m = META[r.kind];
+                    const Icon = m.Icon;
+                    return (
+                      <li key={`${r.kind}-${i}-${r.label}`}>
+                        <button
+                          type="button"
+                          onClick={() => onGo(r)}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-2xl border border-[rgba(148,175,209,0.28)] bg-[hsl(221_42%_12%/0.85)] px-3 py-2.5 text-right ring-1 ring-inset ring-white/[0.05] backdrop-blur-md transition active:scale-[0.99]",
+                            i === sel && "border-[rgba(159,192,232,0.55)]",
+                          )}
+                        >
+                          <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-inset ring-border/40", m.cls)}>
+                            <Icon className="size-4" />
                           </span>
-                          {r.sublabel ? <span className="block truncate text-xs text-muted-foreground">{r.sublabel}</span> : <span className="block truncate text-[11px] text-muted-foreground/80">{navHint(r)}</span>}
-                        </span>
-                        {r.parcel_no ? (
-                          <span className="shrink-0 rounded bg-secondary/50 px-1.5 py-0.5 text-[11px] tabular-nums text-secondary-foreground">{r.parcel_no}</span>
-                        ) : null}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        ) : null}
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <span className="truncate text-sm font-semibold text-foreground">{r.label}</span>
+                              <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] bg-white/5", m.cls)}>{m.label}</span>
+                            </span>
+                            {r.sublabel ? <span className="block truncate text-xs text-muted-foreground">{r.sublabel}</span> : <span className="block truncate text-[11px] text-muted-foreground/80">{navHint(r)}</span>}
+                          </span>
+                          {r.parcel_no ? (
+                            <span className="shrink-0 rounded bg-secondary/50 px-1.5 py-0.5 text-[11px] tabular-nums text-secondary-foreground">{r.parcel_no}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         {/* الحقل نفسه — في الأسفل دائماً (فوق الكيبورد عند التفعيل) */}
         <div style={{ paddingBottom: "var(--sab)" }} className="px-3 pb-2 pt-2">

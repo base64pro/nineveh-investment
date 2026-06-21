@@ -10,8 +10,9 @@ import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { requestOpenSection } from "./shell-store";
 import { CHIPS, NUM_GRADIENT } from "./headbar";
+import { useMapBase } from "@/features/map/lib/map-base-store";
 
-function Pill({ dot, value, label, onClick }: { dot: string; value: number; label: string; onClick: () => void }) {
+function Pill({ dot, value, label, onClick, lightMap }: { dot: string; value: number; label: string; onClick: () => void; lightMap: boolean }) {
   const display = useCountUp(value);
   return (
     <button
@@ -19,19 +20,26 @@ function Pill({ dot, value, label, onClick }: { dot: string; value: number; labe
       onClick={onClick}
       title={`${label} — انتقل للقسم`}
       dir="rtl"
-      className="flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-[rgba(148,175,209,0.42)] bg-white/[0.12] px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] ring-1 ring-inset ring-white/[0.08] backdrop-blur-md transition active:scale-95"
+      className={cn(
+        "flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1 ring-1 ring-inset backdrop-blur-md transition active:scale-95",
+        // م8.10 · فوق الخريطة الفاتحة: قرص كحلي ممتلئ ليبرز؛ في الداكن/القمر: زجاج أبيض كما هو
+        lightMap
+          ? "border-[rgba(159,192,232,0.6)] bg-[hsl(221_44%_13%/0.94)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_18px_-8px_rgba(0,0,0,0.55)] ring-white/[0.06]"
+          : "border-[rgba(148,175,209,0.42)] bg-white/[0.12] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] ring-white/[0.08]",
+      )}
     >
       <span className="flex items-center gap-1">
         <span className={cn("size-1.5 shrink-0 rounded-full shadow-[0_0_6px_1px] shadow-current", dot)} />
         <span className={cn("text-[15px] font-extrabold tabular-nums leading-none tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]", NUM_GRADIENT)}>{formatNumber(display)}</span>
       </span>
-      <span className="max-w-full truncate text-[8px] font-medium leading-none text-foreground/70">{label}</span>
+      <span className={cn("max-w-full truncate text-[8px] font-medium leading-none", lightMap ? "text-[#cfe3ff]/85" : "text-foreground/70")}>{label}</span>
     </button>
   );
 }
 
 export function MobileKpis() {
   const { data: stats } = useDashboardStats();
+  const lightMap = useMapBase() === "light"; // م8.10 · لون القرص يتبع قاعدة الخريطة
   const z = (n: number | undefined): number => n ?? 0;
   const items = CHIPS.map((c) => ({ ...c, value: z(stats?.[c.key]) }));
 
@@ -46,6 +54,7 @@ export function MobileKpis() {
             value={c.value}
             label={c.shortLabel ?? c.label}
             onClick={() => requestOpenSection(c.section, c.status)}
+            lightMap={lightMap}
           />
         ))}
       </div>
