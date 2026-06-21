@@ -145,8 +145,6 @@ function overlayLayers(): StyleLayer[] {
   const subdLabelFade = ["interpolate", ["linear"], ["zoom"], 9, 0, 10.5, 1];
   return [
     { id: "dim-mask", type: "fill", source: "dim-mask", paint: { "fill-color": DIM_COLOR } },
-    // م8.11 · تعتيم داخل نينوى ليكون داكناً كالخارج وأكثر (بعد إلغاء نسيج الزمكان) — أرضية هادئة تبرز فوقها العناصر
-    { id: "inside-dim", type: "fill", source: "bnd-governorate", paint: { "fill-color": "rgba(1,3,8,0.5)" } },
     // م8.11 · توهّج نابض هادئ لشريط حدود نينوى — تُحرَّك line-opacity بـrAF (يعلو ويخفت بسلاسة)
     { id: "bnd-governorate-glow", type: "line", source: "bnd-governorate", paint: { "line-color": C.governorate.line, "line-width": 7, "line-blur": 5, "line-opacity": 0.3 } },
     line("governorate", C.governorate.line, C.governorate.width, 0, 0.9),
@@ -344,17 +342,24 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
     }
     if (base === "dark") {
       if (layer.id === "background") layer.paint = { ...layer.paint, "background-color": NAVY.background };
-      if (layer.id === "water") layer.paint = { ...layer.paint, "fill-color": NAVY.water };
       const paint = (layer.paint ?? {}) as Record<string, unknown>;
+      const id = layer.id.toLowerCase();
+      // م8.12 · الأرضية تبقى داكنة، ومعالم نينوى (شوارع/أفرع/أنهار/مبانٍ/خطوط) تُفتَّح بتوهّج خفيف جداً لتبرز.
       if (layer.type === "line" && typeof paint["line-color"] === "string") {
-        paint["line-color"] = lightenColor(paint["line-color"], 0.46); // م8.10 · طرق/ممرات أنصع لتباين أعلى فوق الأرضية الكحلية الداكنة
+        paint["line-color"] = lightenColor(paint["line-color"], 0.58); // شوارع/أفرع/أنهار/خطوط أنصع
+        paint["line-blur"] = 0.6; // توهّج خفيف جداً
         layer.paint = paint as never;
       } else if (layer.type === "symbol") {
-        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.52); // م8.10 · تسميات أنصع
+        if (typeof paint["text-color"] === "string") paint["text-color"] = lightenColor(paint["text-color"], 0.55);
         paint["text-halo-color"] = NAVY.background;
         layer.paint = paint as never;
-      } else if (layer.type === "fill" && layer.id !== "water" && typeof paint["fill-color"] === "string") {
-        paint["fill-color"] = darkenColor(paint["fill-color"], 0.2); // م8.10 (مُحدَّث) · أرضية المعالم أعمق (طلب: أرضية أدكن) — الطرق/التسميات تبقى بارزة فتُميَّز العناصر والقطع
+      } else if (layer.type === "fill-extrusion" && typeof paint["fill-extrusion-color"] === "string") {
+        paint["fill-extrusion-color"] = lightenColor(paint["fill-extrusion-color"], 0.32); // مبانٍ ثلاثية بارزة
+        layer.paint = paint as never;
+      } else if (layer.type === "fill" && typeof paint["fill-color"] === "string") {
+        if (id.includes("water")) paint["fill-color"] = lightenColor(paint["fill-color"], 0.24); // أنهار/مياه أوضح
+        else if (id.includes("building")) paint["fill-color"] = lightenColor(paint["fill-color"], 0.3); // مبانٍ بارزة
+        else paint["fill-color"] = darkenColor(paint["fill-color"], 0.34); // أرضية الأراضي/الاستعمالات تبقى داكنة
         layer.paint = paint as never;
       }
     }
@@ -518,6 +523,7 @@ export default function InvestmentMap() {
   const dataRef = useRef<MapData | null>(null);
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
+  const [map3D, setMap3D] = useState(true); // م8.12 · عرض الخريطة 3D/2D (الافتراضي 3D)
   const overlayRef = useRef<MapboxOverlay | null>(null);
   // نافذة إشارة القطعة (م7.8): بطاقة هولوكرامية بخط ربط تتبع الإشارة حيّاً — بدل Popup (كانت تختفي خلف طبقة الإشارات)
   const [mkSel, setMkSel] = useState<{ refId: string; label: string | null; kind: ParcelKind; entityId: string; lngLat: [number, number] } | null>(null);
@@ -629,6 +635,7 @@ export default function InvestmentMap() {
         center: MAP_CENTER,
         zoom: INITIAL_ZOOM,
         maxZoom: MAX_ZOOM,
+        pitch: 48, // م8.12 · العرض الافتراضي ثلاثي الأبعاد (3D) — قابل للتبديل لـ2D (fitBounds/flyTo تحفظ الميل)
         attributionControl: false, // م8.8: لا زرّ «!» منبثق
       });
       mapRef.current = map;
@@ -1621,6 +1628,31 @@ export default function InvestmentMap() {
             )}
           >
             <MapPinned className="size-4" aria-hidden />
+          </button>
+        </div>
+
+        {/* م8.12 · تبديل عرض الخريطة 3D/2D — تحت زر فلتر الحي (الافتراضي 3D) */}
+        <div className={cn("flex rounded-2xl p-1", GLASS)}>
+          <button
+            type="button"
+            onClick={() => {
+              const m = mapRef.current;
+              if (!m) return;
+              const next = !map3D;
+              setMap3D(next);
+              m.easeTo({ pitch: next ? 48 : 0, duration: 600 });
+            }}
+            title={map3D ? "تبديل إلى عرض ثنائي الأبعاد 2D" : "تبديل إلى عرض ثلاثي الأبعاد 3D"}
+            aria-label="تبديل عرض الخريطة 3D/2D"
+            aria-pressed={map3D}
+            className={cn(
+              "grid size-10 place-items-center rounded-xl text-[11px] font-extrabold tracking-tight transition active:scale-95",
+              map3D
+                ? "bg-primary/20 text-primary shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)] ring-1 ring-inset ring-primary/40"
+                : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
+            )}
+          >
+            {map3D ? "3D" : "2D"}
           </button>
         </div>
 
