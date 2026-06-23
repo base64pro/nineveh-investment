@@ -42,7 +42,7 @@ const STATE_META: Record<string, { label: string; color: string; section: string
   "in-progress": { label: "قيد الإنجاز", color: "#5775A8", section: "licenses", status: "in-progress" },
   completed: { label: "منجزة", color: "#5E977A", section: "licenses", status: "completed" },
   withdrawn: { label: "مسحوبة", color: "#B5616A", section: "licenses", status: "withdrawn" },
-  assumed: { label: "مفترضة", color: "#8B6FB0", section: "opportunity-design" },
+  assumed: { label: "مفترضة", color: "#22C3F3", section: "opportunity-design" },
 };
 
 const STATE_OPTIONS = [

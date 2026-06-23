@@ -821,9 +821,9 @@ export default function InvestmentMap() {
 
         // استوديو الرسم (terra-draw · م7.1): مضلّع · مستطيل · دائرة · تحرير (select) — بنمط بنفسجي موحّد
         const SHAPE_STYLE = {
-          fillColor: "#8B6FB0",
+          fillColor: "#22C3F3",
           fillOpacity: 0.25,
-          outlineColor: "#8B6FB0",
+          outlineColor: "#22C3F3",
           outlineWidth: 2,
         } as const;
         const draw = new TerraDraw({
@@ -1457,7 +1457,7 @@ export default function InvestmentMap() {
     const PING_Z_OUT = 8.5; // م8.8.2 · عند هذا الزوم وأدنى (عرض المحافظة) → أصغر حجم (القطع متقاربة)
     const PING_Z_IN = 12.5; // م8.8.2 · عند هذا الزوم وأعلى (~5كم فأقرب) → الحجم الكامل (القطع متباعدة)
     const PING_S_MIN = 0.4; // م8.8.2 · أصغر معامل حجم عند أقصى إبعاد
-    const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#8B6FB0" };
+    const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#22C3F3" };
     let raf = 0;
     // مرور واحد على القطع: نبضات الموقع (كل مستويات الزوم) + تسميات الدبابيس (عند الاقتراب op>0) — تفادياً لمرورين.
     const compute = (): void => {

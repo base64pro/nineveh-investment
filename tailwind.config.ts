@@ -61,7 +61,7 @@ const config: Config = {
           inprogress: "#5775A8", // قيد الإنجاز
           completed: "#5E977A", // منجزة
           withdrawn: "#B5616A", // مسحوبة
-          assumed: "#8B6FB0", // مفترضة
+          assumed: "#22C3F3", // مفترضة
         },
       },
       borderRadius: {

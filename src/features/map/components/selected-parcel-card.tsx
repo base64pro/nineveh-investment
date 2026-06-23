@@ -25,7 +25,7 @@ const STATE_HEX: Record<string, string> = {
   "in-progress": "#5775A8",
   completed: "#5E977A",
   withdrawn: "#B5616A",
-  assumed: "#8B6FB0",
+  assumed: "#22C3F3",
 };
 
 const CARD_W = 340;
