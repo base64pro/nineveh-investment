@@ -157,7 +157,7 @@ function overlayLayers(): StyleLayer[] {
 }
 
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
-function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
+function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelFocusId: string | null) {
   const stateOf = (f: Feature): string | undefined => (typeof f.properties?.state === "string" ? f.properties.state : undefined);
   const refOf = (f: Feature): string | undefined => (typeof f.properties?.ref_id === "string" ? f.properties.ref_id : undefined);
   const sel = (f: Feature): boolean => selectedId !== null && refOf(f) === selectedId;
@@ -197,6 +197,8 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       autoHighlight: true,
       highlightColor: [255, 255, 255, 38],
       getFillColor: (f: Feature) => {
+        // م9.3 · القطعة قيد التركيز ثلاثي الأبعاد: تُخفى تعبئتها المسطّحة ليحلّ محلّها الكيان الهولوكرامي المجسّم.
+        if (modelFocusId !== null && refOf(f) === modelFocusId) return [0, 0, 0, 0];
         // المحدّد يمتلئ بلون/شدّة الحدّ (≈235) — مع توهّج هولوكرامي من طبقة الهالة.
         const [r, g, b] = fillRgba(stateOf(f));
         return [r, g, b, alpha(64, 232, f)];
@@ -208,7 +210,7 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       getLineWidth: (f: Feature) => (sel(f) ? 4 : 2),
       lineWidthUnits: "pixels",
       lineWidthMinPixels: 1.5,
-      updateTriggers: { getFillColor: selectedId, getLineColor: selectedId, getLineWidth: selectedId },
+      updateTriggers: { getFillColor: [selectedId, modelFocusId], getLineColor: selectedId, getLineWidth: selectedId },
     }),
   ];
   // إشارة لكل قطعة (ساق + قرص بلون الحالة) — ظاهرة من أبعد زوم، قابلة للنقر.
@@ -230,15 +232,15 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       }),
     );
   }
-  // م9.3 · مجسّم تصوّري هولوكرامي (كتلة مستخرَجة من حدود القطعة) للقطعة المفترضة المحدّدة —
-  // بديل بلا قاعدة، يُستبدَل بنموذج glb المرفوع لاحقاً (م9.3ب). إصدار/تعبئة منبعثة + إطار سلكي = هولوكرام.
-  const selFeat = selectedId !== null ? fc.features.find((f) => refOf(f) === selectedId) : undefined;
-  if (selFeat?.geometry && selFeat.properties?.kind === "assumed") {
+  // م9.3 · مجسّم تصوّري هولوكرامي (كتلة مستخرَجة من حدود القطعة) للقطعة المفترضة **قيد التركيز** (الطيران) —
+  // يظهر فور الطيران ويحلّ محلّ الرسمة المسطّحة؛ بديل بلا قاعدة يُستبدَل بنموذج glb لاحقاً (م9.3ب).
+  const focusFeat = modelFocusId !== null ? fc.features.find((f) => refOf(f) === modelFocusId) : undefined;
+  if (focusFeat?.geometry && focusFeat.properties?.kind === "assumed") {
     const [r, g, b] = lineRgba("assumed");
     layers.push(
       new GeoJsonLayer({
         id: "parcel-massing",
-        data: { type: "FeatureCollection", features: [selFeat] } as FeatureCollection,
+        data: { type: "FeatureCollection", features: [focusFeat] } as FeatureCollection,
         extruded: true,
         filled: true,
         stroked: false,
@@ -249,7 +251,7 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
         getLineColor: [r, g, b, 230],
         getLineWidth: 1.5,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: selectedId, getLineColor: selectedId },
+        updateTriggers: { getFillColor: modelFocusId, getLineColor: modelFocusId },
       }),
     );
   }
@@ -591,6 +593,11 @@ export default function InvestmentMap() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
   selectedIdRef.current = selectedId;
+  // م9.3 · القطعة المفترضة المعروضة ككيان ثلاثي هولوكرامي (حالة «تركيز» مستقلّة عن التحديد/البطاقة):
+  // تُضبَط عند الطيران إليها (بلا فتح بطاقة) أو نقرها، وتُصفَّر عند العودة لكامل نينوى أو نقر الفراغ.
+  const [modelFocusId, setModelFocusId] = useState<string | null>(null);
+  const modelFocusRef = useRef<string | null>(modelFocusId);
+  modelFocusRef.current = modelFocusId;
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
   const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
@@ -703,7 +710,7 @@ export default function InvestmentMap() {
         const m = mapRef.current;
         if (cancelled || !m) return;
         // طبقة القطع الملوّنة (deck.gl فوق الخريطة)
-        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current) });
+        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current, modelFocusRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
         // م8.8.2 · ارفع لوحة deck (القطع + الإشارات) فوق طبقة النبضات (z-9) كي تظهر النبضات **تحت** الدبابيس
@@ -761,7 +768,10 @@ export default function InvestmentMap() {
           }
           const info = ov.pickObject({ x: e.point.x, y: e.point.y, radius: 5, layerIds: ["parcels"] });
           const ref = info?.object?.properties?.ref_id;
+          const knd = info?.object?.properties?.kind;
           setSelectedId(typeof ref === "string" ? ref : null);
+          // م9.3 · نقر قطعة مفترضة يعرض كيانها الهولوكرامي أيضاً؛ نقر الفراغ/نوع آخر يصفّره.
+          setModelFocusId(typeof ref === "string" && knd === "assumed" ? ref : null);
           setMkSel(null);
         });
 
@@ -861,8 +871,8 @@ export default function InvestmentMap() {
           }),
         }
       : null;
-    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
-  }, [fc, selectedId, showParcels, hiddenStates, nbhFilter, editing]);
+    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId, modelFocusId) : [] });
+  }, [fc, selectedId, modelFocusId, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {
@@ -898,13 +908,30 @@ export default function InvestmentMap() {
       if (m && f?.geometry) {
         sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
-        m.fitBounds(b, { padding: framePadding(80, true), maxZoom: 16, duration: 1000 }); // م8.10: تجاهل ارتفاع الورقة (تُغلق مع الطيران) فلا يفشل التأطير
-        // ملاحظة: لا تنبثق بطاقة الصور تلقائياً عند الطيران — انبثاقها حصراً عند النقر على رسمة القطعة (طلب معتمد).
-        // م9.3 · الطيران لقطعة مفترضة (نطاق «الخارطة الاستثمارية») يحدّدها فيُظهر مجسّمها التصوّري — بدائية تركيز يحتاجها التجوّل التلقائي (م9.5).
         if (f.properties?.kind === "assumed") {
-          const r = f.properties?.ref_id;
-          setSelectedId(typeof r === "string" ? r : null);
+          // م9.3 · الطيران لقطعة مفترضة يعرض كيانها الهولوكرامي فوراً (يحلّ محلّ الرسمة المسطّحة) **بلا فتح بطاقة**،
+          //        مع حركة سينمائية: اقتراب قريب ثلاثي الأبعاد ثم التفاف «درون» نصف دائرة بسلاسة ثم توقّف.
+          const r = typeof f.properties?.ref_id === "string" ? (f.properties.ref_id as string) : null;
+          setModelFocusId(r);
+          setSelectedId(null); // لا تُفتَح البطاقة عند الطيران (طلب معتمد)
           setMkSel(null);
+          const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+          const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: 16.5 });
+          const center = centroid(f).geometry.coordinates as [number, number]; // مركز القطعة = محور الالتفاف
+          const zoom = cam?.zoom ?? 15.5;
+          if (reduce) {
+            m.easeTo({ center, zoom, pitch: 58, duration: 800 }); // احترام تقليل الحركة: اقتراب قصير بلا التفاف
+          } else {
+            const startBearing = m.getBearing();
+            m.flyTo({ center, zoom, pitch: 60, bearing: startBearing, duration: 2200, curve: 1.5, essential: true }); // (1) اقتراب سينمائي
+            m.once("moveend", () => {
+              if (modelFocusRef.current !== r) return; // أُلغِيَ التركيز (غادر المستخدم) → لا التفاف
+              m.easeTo({ bearing: startBearing + 180, pitch: 60, duration: 5000, easing: (t) => -(Math.cos(Math.PI * t) - 1) / 2, essential: true }); // (2) التفاف درون نصف دائرة بسلاسة
+            });
+          }
+        } else {
+          m.fitBounds(b, { padding: framePadding(80, true), maxZoom: 16, duration: 1000 }); // م8.10: تجاهل ارتفاع الورقة (تُغلق مع الطيران) فلا يفشل التأطير
+          // ملاحظة: لا تنبثق بطاقة الصور تلقائياً عند الطيران — انبثاقها حصراً عند النقر على رسمة القطعة (طلب معتمد).
         }
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
@@ -925,7 +952,10 @@ export default function InvestmentMap() {
 
   // العودة لكامل نينوى (زر «كامل نينوى» في الدوك على الجوال)
   useEffect(() => {
-    return onResetView(() => resetView());
+    return onResetView(() => {
+      resetView();
+      setModelFocusId(null); // م9.3 · العودة لكامل نينوى تُنهي عرض الكيان الهولوكرامي
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- resetView مستقرّ (refs)
   }, []);
 
