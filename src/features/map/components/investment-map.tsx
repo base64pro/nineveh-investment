@@ -55,6 +55,8 @@ import { inferName } from "../lib/spatial-inference";
 import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
+import { buildModelLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh } from "../lib/model-render";
+import { useAssumedModels } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
 import { getSheetHeight } from "@/features/shell/mobile-sheet-store";
@@ -157,7 +159,7 @@ function overlayLayers(): StyleLayer[] {
 }
 
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
-function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
+function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelRefIds: Set<string> = new Set()) {
   const stateOf = (f: Feature): string | undefined => (typeof f.properties?.state === "string" ? f.properties.state : undefined);
   const refOf = (f: Feature): string | undefined => (typeof f.properties?.ref_id === "string" ? f.properties.ref_id : undefined);
   const sel = (f: Feature): boolean => selectedId !== null && refOf(f) === selectedId;
@@ -234,7 +236,8 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
   }
   // م9.3 · كل قطعة مفترضة = كيان ثلاثي ممدود **دائم** يدمج الرسمة بالكتلة بنفس المادة واللون الكثيف —
   // لا يختفي بالنقر خارجه؛ كتلة من حدود القطعة، يُستبدَل بنموذج glb المرفوع لاحقاً (م9.3ب).
-  const assumedFeats = fc.features.filter((f) => f.properties?.kind === "assumed" && f.geometry);
+  // القطع التي لها نموذج مرفوع تُستثنى من الكتلة الإجرائية (نموذجها الحقيقي يحلّ محلّها — م9.3ب).
+  const assumedFeats = fc.features.filter((f) => f.properties?.kind === "assumed" && f.geometry && !modelRefIds.has(refOf(f) ?? ""));
   if (assumedFeats.length) {
     const [fr, fg, fb] = fillRgba("assumed");
     const [lr, lg, lb] = lineRgba("assumed");
@@ -598,6 +601,39 @@ export default function InvestmentMap() {
   const [modelFocusId, setModelFocusId] = useState<string | null>(null);
   const modelFocusRef = useRef<string | null>(modelFocusId);
   modelFocusRef.current = modelFocusId;
+  // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
+  const { data: assumedModels = [] } = useAssumedModels();
+  const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
+  useEffect(() => {
+    registerModelLoaders();
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    const pending = assumedModels.filter((m) => m.format === "stl" && !stlMeshes.has(m.id));
+    if (!pending.length) return;
+    void Promise.all(
+      pending.map(async (m) => {
+        try {
+          const buf = await (await fetch(m.url)).arrayBuffer();
+          return [m.id, parseBinaryStl(buf)] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((pairs) => {
+      const fresh = pairs.filter(Boolean) as (readonly [string, StlMesh])[];
+      if (!alive || !fresh.length) return;
+      setStlMeshes((prev) => {
+        const next = new Map(prev);
+        for (const [id, mesh] of fresh) next.set(id, mesh);
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stlMeshes حارس تخطٍّ فقط؛ التحميل يتبع تغيّر النماذج
+  }, [assumedModels]);
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
   const [hiddenStates, setHiddenStates] = useState<Set<string>>(() => new Set());
@@ -871,8 +907,20 @@ export default function InvestmentMap() {
           }),
         }
       : null;
-    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
-  }, [fc, selectedId, showParcels, hiddenStates, nbhFilter, editing]);
+    // م9.3ب · طبقات النماذج المرفوعة (نموذج لكل قطعة مفترضة لها نموذج) + استثناؤها من الكتلة الإجرائية.
+    const refIds = new Set(assumedModels.map((m) => m.refId));
+    const items: ModelRenderItem[] = vis
+      ? (assumedModels
+          .map((m) => {
+            const f = vis.features.find((ft) => ft.properties?.ref_id === m.refId);
+            if (!f?.geometry) return null;
+            const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
+            return { model: m, center, mesh: m.format === "stl" ? stlMeshes.get(m.id) : undefined } satisfies ModelRenderItem;
+          })
+          .filter(Boolean) as ModelRenderItem[])
+      : [];
+    overlayRef.current?.setProps({ layers: vis ? [...parcelLayers(vis, selectedId, refIds), ...buildModelLayers(items)] : [] });
+  }, [fc, selectedId, assumedModels, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {

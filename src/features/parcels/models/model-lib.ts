@@ -22,6 +22,7 @@ export interface ModelTransform {
 
 export interface ParcelModel {
   id: string;
+  refId: string;
   path: string;
   format: ModelFormat;
   title: string | null;
@@ -112,7 +113,31 @@ export function useParcelModels(kind: ParcelKind, refId: string) {
       const rows = (data ?? []) as { id: string; storage_path: string; format: ModelFormat; title: string | null; is_conceptual: boolean; transform: ModelTransform | null }[];
       const urls = await signedUrlsForModels(rows.map((r) => r.storage_path));
       return rows
-        .map((r) => ({ id: r.id, path: r.storage_path, format: r.format, title: r.title, isConceptual: r.is_conceptual, transform: r.transform ?? {}, url: urls[r.storage_path] ?? "" }))
+        .map((r) => ({ id: r.id, refId, path: r.storage_path, format: r.format, title: r.title, isConceptual: r.is_conceptual, transform: r.transform ?? {}, url: urls[r.storage_path] ?? "" }))
+        .filter((m) => m.url);
+    },
+  });
+}
+
+/** كل مجسّمات القطع المفترضة (للعرض على الخريطة) — صفوف + روابط موقّعة · مفتاح ["parcel_models","assumed-all"]. */
+export function useAssumedModels() {
+  return useQuery({
+    queryKey: ["parcel_models", "assumed-all"],
+    queryFn: async (): Promise<ParcelModel[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("parcel_models")
+        .select("id, ref_id, storage_path, format, title, is_conceptual, transform")
+        .eq("kind", "assumed")
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as { id: string; ref_id: string; storage_path: string; format: ModelFormat; title: string | null; is_conceptual: boolean; transform: ModelTransform | null }[];
+      // أحدث نموذج لكل قطعة (refId) — نموذج واحد فعّال للعرض
+      const seen = new Set<string>();
+      const latest = rows.filter((r) => (seen.has(r.ref_id) ? false : (seen.add(r.ref_id), true)));
+      const urls = await signedUrlsForModels(latest.map((r) => r.storage_path));
+      return latest
+        .map((r) => ({ id: r.id, refId: r.ref_id, path: r.storage_path, format: r.format, title: r.title, isConceptual: r.is_conceptual, transform: r.transform ?? {}, url: urls[r.storage_path] ?? "" }))
         .filter((m) => m.url);
     },
   });
