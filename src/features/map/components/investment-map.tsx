@@ -230,6 +230,29 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
       }),
     );
   }
+  // م9.3 · مجسّم تصوّري هولوكرامي (كتلة مستخرَجة من حدود القطعة) للقطعة المفترضة المحدّدة —
+  // بديل بلا قاعدة، يُستبدَل بنموذج glb المرفوع لاحقاً (م9.3ب). إصدار/تعبئة منبعثة + إطار سلكي = هولوكرام.
+  const selFeat = selectedId !== null ? fc.features.find((f) => refOf(f) === selectedId) : undefined;
+  if (selFeat?.geometry && selFeat.properties?.kind === "assumed") {
+    const [r, g, b] = lineRgba("assumed");
+    layers.push(
+      new GeoJsonLayer({
+        id: "parcel-massing",
+        data: { type: "FeatureCollection", features: [selFeat] } as FeatureCollection,
+        extruded: true,
+        filled: true,
+        stroked: false,
+        wireframe: true,
+        material: false, // مسطّح منبعث (بلا تظليل) → توهّج هولوكرامي موحّد
+        getElevation: 60, // متر — ارتفاع تصوّري مبدئي (مؤشَّر «تصوّر تصميمي»)
+        getFillColor: [r, g, b, 70],
+        getLineColor: [r, g, b, 230],
+        getLineWidth: 1.5,
+        lineWidthUnits: "pixels",
+        updateTriggers: { getFillColor: selectedId, getLineColor: selectedId },
+      }),
+    );
+  }
   return layers;
 }
 
