@@ -157,7 +157,7 @@ function overlayLayers(): StyleLayer[] {
 }
 
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
-function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelFocusId: string | null) {
+function parcelLayers(fc: FeatureCollection, selectedId: string | null) {
   const stateOf = (f: Feature): string | undefined => (typeof f.properties?.state === "string" ? f.properties.state : undefined);
   const refOf = (f: Feature): string | undefined => (typeof f.properties?.ref_id === "string" ? f.properties.ref_id : undefined);
   const sel = (f: Feature): boolean => selectedId !== null && refOf(f) === selectedId;
@@ -197,10 +197,10 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelFoc
       autoHighlight: true,
       highlightColor: [255, 255, 255, 38],
       getFillColor: (f: Feature) => {
-        // م9.3 · القطعة قيد التركيز ثلاثي الأبعاد: تُخفى تعبئتها المسطّحة ليحلّ محلّها الكيان الهولوكرامي المجسّم.
-        if (modelFocusId !== null && refOf(f) === modelFocusId) return [0, 0, 0, 0];
-        // المحدّد يمتلئ بلون/شدّة الحدّ (≈235) — مع توهّج هولوكرامي من طبقة الهالة.
         const [r, g, b] = fillRgba(stateOf(f));
+        // م9.3 · المفترضة كيان ثلاثي دائم: تعبئة أرضها كثيفة دائماً فتندمج الرسمة بالكتلة بنفس المادة واللون الكثيف.
+        if (stateOf(f) === "assumed") return [r, g, b, alpha(205, 235, f)];
+        // المحدّد يمتلئ بلون/شدّة الحدّ (≈232) — مع توهّج هولوكرامي من طبقة الهالة.
         return [r, g, b, alpha(64, 232, f)];
       },
       getLineColor: (f: Feature) => {
@@ -210,7 +210,7 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelFoc
       getLineWidth: (f: Feature) => (sel(f) ? 4 : 2),
       lineWidthUnits: "pixels",
       lineWidthMinPixels: 1.5,
-      updateTriggers: { getFillColor: [selectedId, modelFocusId], getLineColor: selectedId, getLineWidth: selectedId },
+      updateTriggers: { getFillColor: selectedId, getLineColor: selectedId, getLineWidth: selectedId },
     }),
   ];
   // إشارة لكل قطعة (ساق + قرص بلون الحالة) — ظاهرة من أبعد زوم، قابلة للنقر.
@@ -232,26 +232,26 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelFoc
       }),
     );
   }
-  // م9.3 · مجسّم تصوّري هولوكرامي (كتلة مستخرَجة من حدود القطعة) للقطعة المفترضة **قيد التركيز** (الطيران) —
-  // يظهر فور الطيران ويحلّ محلّ الرسمة المسطّحة؛ بديل بلا قاعدة يُستبدَل بنموذج glb لاحقاً (م9.3ب).
-  const focusFeat = modelFocusId !== null ? fc.features.find((f) => refOf(f) === modelFocusId) : undefined;
-  if (focusFeat?.geometry && focusFeat.properties?.kind === "assumed") {
-    const [r, g, b] = lineRgba("assumed");
+  // م9.3 · كل قطعة مفترضة = كيان ثلاثي ممدود **دائم** يدمج الرسمة بالكتلة بنفس المادة واللون الكثيف —
+  // لا يختفي بالنقر خارجه؛ كتلة من حدود القطعة، يُستبدَل بنموذج glb المرفوع لاحقاً (م9.3ب).
+  const assumedFeats = fc.features.filter((f) => f.properties?.kind === "assumed" && f.geometry);
+  if (assumedFeats.length) {
+    const [fr, fg, fb] = fillRgba("assumed");
+    const [lr, lg, lb] = lineRgba("assumed");
     layers.push(
       new GeoJsonLayer({
         id: "parcel-massing",
-        data: { type: "FeatureCollection", features: [focusFeat] } as FeatureCollection,
+        data: { type: "FeatureCollection", features: assumedFeats } as FeatureCollection,
         extruded: true,
         filled: true,
         stroked: false,
         wireframe: true,
-        material: false, // مسطّح منبعث (بلا تظليل) → توهّج هولوكرامي موحّد
+        material: false, // مسطّح منبعث = نفس مادة أرض القطعة (بلا تظليل)
         getElevation: 60, // متر — ارتفاع تصوّري مبدئي (مؤشَّر «تصوّر تصميمي»)
-        getFillColor: [r, g, b, 70],
-        getLineColor: [r, g, b, 230],
+        getFillColor: [fr, fg, fb, 232], // كثيف كحالة التحديد (اشتداد غمق اللون)
+        getLineColor: [lr, lg, lb, 255],
         getLineWidth: 1.5,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: modelFocusId, getLineColor: modelFocusId },
       }),
     );
   }
@@ -710,7 +710,7 @@ export default function InvestmentMap() {
         const m = mapRef.current;
         if (cancelled || !m) return;
         // طبقة القطع الملوّنة (deck.gl فوق الخريطة)
-        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current, modelFocusRef.current) });
+        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
         // م8.8.2 · ارفع لوحة deck (القطع + الإشارات) فوق طبقة النبضات (z-9) كي تظهر النبضات **تحت** الدبابيس
@@ -871,8 +871,8 @@ export default function InvestmentMap() {
           }),
         }
       : null;
-    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId, modelFocusId) : [] });
-  }, [fc, selectedId, modelFocusId, showParcels, hiddenStates, nbhFilter, editing]);
+    overlayRef.current?.setProps({ layers: vis ? parcelLayers(vis, selectedId) : [] });
+  }, [fc, selectedId, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {
