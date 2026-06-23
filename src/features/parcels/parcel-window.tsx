@@ -19,6 +19,7 @@ import { CompanyField } from "@/features/parcels/company-field";
 import { TransferLogView, type TransferEntry } from "@/features/parcels/transfer-log-view";
 import { VisitsLog } from "@/features/licenses/visits/visits-log";
 import { PhotosSection } from "@/features/parcels/photos/photos-section";
+import { ModelsSection } from "@/features/parcels/models/models-section";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
@@ -341,6 +342,12 @@ export function ParcelWindow({
               <div className="sm:col-span-2">
                 <PhotosSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
               </div>
+              {/* م9.2 · المجسّم ثلاثي الأبعاد (الخارطة الاستثمارية) — للقطع المفترضة فقط */}
+              {kind === "assumed" ? (
+                <div className="sm:col-span-2">
+                  <ModelsSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
+                </div>
+              ) : null}
               {kind === "license" && (state === "in-progress" || state === "completed") ? (
                 <div className="sm:col-span-2">
                   <VisitsLog parcelRef={String(entity.record_id ?? "")} />
