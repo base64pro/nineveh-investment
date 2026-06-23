@@ -900,6 +900,12 @@ export default function InvestmentMap() {
         const b = bbox(f) as [number, number, number, number];
         m.fitBounds(b, { padding: framePadding(80, true), maxZoom: 16, duration: 1000 }); // م8.10: تجاهل ارتفاع الورقة (تُغلق مع الطيران) فلا يفشل التأطير
         // ملاحظة: لا تنبثق بطاقة الصور تلقائياً عند الطيران — انبثاقها حصراً عند النقر على رسمة القطعة (طلب معتمد).
+        // م9.3 · الطيران لقطعة مفترضة (نطاق «الخارطة الاستثمارية») يحدّدها فيُظهر مجسّمها التصوّري — بدائية تركيز يحتاجها التجوّل التلقائي (م9.5).
+        if (f.properties?.kind === "assumed") {
+          const r = f.properties?.ref_id;
+          setSelectedId(typeof r === "string" ? r : null);
+          setMkSel(null);
+        }
       } else {
         toast.info("لا حدود مرسومة لهذه القطعة بعد — ارسمها واربطها");
       }
