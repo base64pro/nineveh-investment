@@ -74,7 +74,13 @@ export function buildModelLayers(items: ModelRenderItem[]): Layer[] {
         new SimpleMeshLayer({
           id: `model-${it.model.id}`,
           data: [{ position }],
-          mesh: { positions: it.mesh.positions, normals: it.mesh.normals } as never,
+          // deck.gl 9: الشبكة تحتاج attributes بصيغة {value,size} (لا مصفوفات مباشرة) — وإلا يتعطّل normalizeGeometryAttributes.
+          mesh: {
+            attributes: {
+              positions: { value: it.mesh.positions, size: 3 },
+              normals: { value: it.mesh.normals, size: 3 },
+            },
+          } as never,
           getPosition: (d: { position: [number, number, number] }) => d.position,
           getOrientation: [0, yaw, 0],
           sizeScale,

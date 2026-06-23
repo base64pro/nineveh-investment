@@ -28,6 +28,7 @@ import {
   type BaseStyle,
 } from "../lib/map-config";
 import { MapboxOverlay } from "@deck.gl/mapbox";
+import { AmbientLight, DirectionalLight, LightingEffect } from "@deck.gl/core";
 import { GeoJsonLayer, IconLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import { type ParcelProps, useMapParcels } from "../lib/use-map-parcels";
@@ -159,6 +160,13 @@ function overlayLayers(): StyleLayer[] {
 }
 
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
+// م9.3ب · إضاءة للنماذج المرفوعة (pbr) كي تظهر فوق الأرضية الداكنة بدل أن تُعتِم — إضاءة محيطة قوية + اتجاهيّتان.
+const MODEL_LIGHTING = new LightingEffect({
+  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.6 }),
+  sun: new DirectionalLight({ color: [255, 255, 255], intensity: 1.3, direction: [-1, -2, -3] }),
+  fill: new DirectionalLight({ color: [205, 220, 255], intensity: 0.8, direction: [2, 1, -1] }),
+});
+
 function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelRefIds: Set<string> = new Set()) {
   const stateOf = (f: Feature): string | undefined => (typeof f.properties?.state === "string" ? f.properties.state : undefined);
   const refOf = (f: Feature): string | undefined => (typeof f.properties?.ref_id === "string" ? f.properties.ref_id : undefined);
@@ -746,7 +754,7 @@ export default function InvestmentMap() {
         const m = mapRef.current;
         if (cancelled || !m) return;
         // طبقة القطع الملوّنة (deck.gl فوق الخريطة)
-        const overlay = new MapboxOverlay({ interleaved: false, layers: parcelLayers(fcRef.current, selectedIdRef.current) });
+        const overlay = new MapboxOverlay({ interleaved: false, effects: [MODEL_LIGHTING], layers: parcelLayers(fcRef.current, selectedIdRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
         // م8.8.2 · ارفع لوحة deck (القطع + الإشارات) فوق طبقة النبضات (z-9) كي تظهر النبضات **تحت** الدبابيس
