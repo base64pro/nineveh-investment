@@ -27,6 +27,6 @@ export const SECTIONS: readonly SectionDef[] = [
   { id: "companies", label: "الشركات", short: "الشركات", icon: Building2, table: "companies", note: "بنك الشركات المؤهّلة (CRUD + إثراء) — م2.2." },
   { id: "criteria", label: "مكتبة المعايير", short: "المعايير", icon: Library, table: "criteria", note: "أرشيف المعايير المحفوظة — م2.2." },
   { id: "reports", label: "التقارير الذكية", short: "التقارير", icon: BarChart3, table: null, note: "لوحات وتشارتات وتقارير — م5." },
-  { id: "opportunity-design", label: "تصميم فرصة", short: "تصميم", icon: PencilRuler, table: "assumed_parcels", note: "الفرص المفترضة — م2.2." },
+  { id: "opportunity-design", label: "الخارطة الاستثمارية", short: "الخارطة", icon: PencilRuler, table: "assumed_parcels", note: "الفرص المفترضة + مجسّم 3D هولوكرامي وجولة — م9." },
   { id: "settings", label: "إعدادات المستخدم", short: "الإعدادات", icon: Settings, table: null, note: "الحساب والعرض والذكاء والتصدير — م5." },
 ];

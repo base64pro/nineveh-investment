@@ -98,7 +98,7 @@ const MOVE_DEST: Record<ParcelState, { section: string; color: string }> = {
   "in-progress": { section: "الرخص · قيد الإنجاز", color: "زرقاء" },
   completed: { section: "الرخص · منجزة", color: "خضراء" },
   withdrawn: { section: "الرخص · مسحوبة", color: "حمراء" },
-  assumed: { section: "تصميم فرصة · مفترضة", color: "بنفسجية" },
+  assumed: { section: "الخارطة الاستثمارية · مفترضة", color: "بنفسجية" },
 };
 
 // حقول يُؤشَّر لإكمالها بعد النقل (لا مانعة — تُملأ لاحقاً).

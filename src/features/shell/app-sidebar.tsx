@@ -26,7 +26,7 @@ import { useRole } from "@/features/auth/role-context";
 import { MobileDock } from "./mobile-dock";
 import { MobileSectionSheet, MobileFullscreen } from "./mobile-section-sheet";
 
-// أقسام محظورة على المستخدم الثاني (م8.1): تصميم فرصة + الإعدادات.
+// أقسام محظورة على المستخدم الثاني (م8.1): الخارطة الاستثمارية + الإعدادات.
 const VIEWER_HIDDEN = new Set(["opportunity-design", "settings"]);
 
 // جسم اللوحة لكل قسم — مصدر واحد يُعاد استخدامه في الديسكتوب (aside) والجوال (ورقة/ملء شاشة) بلا تكرار منطق.

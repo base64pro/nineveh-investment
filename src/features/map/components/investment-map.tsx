@@ -1483,7 +1483,7 @@ export default function InvestmentMap() {
     if (!p) return;
     const msg =
       p.kind === "assumed"
-        ? `إزالة حدود «${p.label}» من الخريطة؟ يبقى سجلّها محفوظاً في «تصميم فرصة».`
+        ? `إزالة حدود «${p.label}» من الخريطة؟ يبقى سجلّها محفوظاً في «الخارطة الاستثمارية».`
         : `إزالة رسمة «${p.label}» من الخريطة؟ بيانات القطعة تبقى محفوظة في قسمها.`;
     if (!window.confirm(msg)) return;
     const res = await deleteParcelGeometry(p.kind, p.ref_id);
