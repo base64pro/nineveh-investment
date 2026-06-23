@@ -18,6 +18,7 @@ const TABLES = [
   "field_options",
   "parcel_insights",
   "parcel_photos",
+  "parcel_models",
 ] as const;
 
 // جداول تؤثّر في طبقة قطع الخريطة (view map_parcels) ← إبطالها أيضاً.
@@ -41,6 +42,7 @@ export function useRealtimeSync(): void {
         if (table === "parcel_insights") void queryClient.invalidateQueries({ queryKey: ["insights"] });
         if (table === "map_elements") void queryClient.invalidateQueries({ queryKey: ["map_elements_geo"] });
         if (table === "parcel_photos") void queryClient.invalidateQueries({ queryKey: ["parcel_photos"] });
+        if (table === "parcel_models") void queryClient.invalidateQueries({ queryKey: ["parcel_models"] });
         if (PARCEL_TABLES.has(table)) {
           void queryClient.invalidateQueries({ queryKey: ["map_parcels"] });
           // القاموس الموحّد (view م7.7) يستمدّ من هذه الجداول ← قيمة جديدة تظهر فوراً في كل المنسدلات
