@@ -56,7 +56,7 @@ import { inferName } from "../lib/spatial-inference";
 import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
-import { buildModelLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
+import { buildModelLayers, buildRingLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
 import { generateContactShadow, generateGroundRings, generateModel, type Mesh3, type ModelKind, type TowerMeshes } from "../lib/parametric-tower";
 import { useAssumedModels, useAssumedParametric } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
@@ -629,6 +629,10 @@ export default function InvestmentMap() {
   const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
   // م9.7.1ج/هـ/و · م9.7.2 · ذاكرة شبكات النماذج البارامترية + الحلقات + ظلّ التماس لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
   const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3; shadow: Mesh3; kind: ModelKind }>>(new Map());
+  // م9.7.7 · طبقات ثابتة + عناصر الأبراج (للنبض المتحرّك) + طور النبض — يحدّثها effect الطبقات، ويحرّكها RAF
+  const staticLayersRef = useRef<Layer[]>([]);
+  const towerItemsRef = useRef<TowerItem[]>([]);
+  const ringPhaseRef = useRef(0);
   useEffect(() => {
     registerModelLoaders();
   }, []);
@@ -973,8 +977,8 @@ export default function InvestmentMap() {
           const cellWm = wM / cols;
           const cellDm = dM / rows;
           const tower = generateModel(kind, Math.max(8, cellWm * fmul), Math.max(8, cellDm * fmul));
-          const bMin = Math.min(cellWm, cellDm) * fmul; // بصمة المبنى الصغرى — الحلقات/الظلّ تحت قاعدته (طلب المستخدم)
-          const rings = generateGroundRings(bMin * 0.46, 4);
+          const bMin = Math.min(cellWm, cellDm) * fmul; // بصمة المبنى الصغرى
+          const rings = generateGroundRings(Math.max(cellWm, cellDm) * fmul * 0.5, 1); // حلقة أساس بنصف قطر بصمة المجسّم (تنبض من تحته للخارج)
           const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
           cached = { tower, rings, shadow, kind };
@@ -1004,10 +1008,32 @@ export default function InvestmentMap() {
         towerRefIds.add(rid);
       }
     }
-    overlayRef.current?.setProps({
-      layers: vis ? [...parcelLayers(vis, selectedId, refIds, towerRefIds), ...buildModelLayers(items), ...buildTowerLayers(towerItems)] : [],
-    });
+    // م9.7.7 · الطبقات الثابتة تُخبّأ؛ الحلقات النابضة تُضاف فوقها ويحرّكها RAF (تحت المجسّم).
+    const staticLayers = vis ? [...parcelLayers(vis, selectedId, refIds, towerRefIds), ...buildModelLayers(items), ...buildTowerLayers(towerItems)] : [];
+    staticLayersRef.current = staticLayers;
+    towerItemsRef.current = towerItems;
+    overlayRef.current?.setProps({ layers: [...staticLayers, ...buildRingLayers(towerItems, ringPhaseRef.current)] });
   }, [fc, selectedId, assumedModels, parametricCfg, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
+
+  // م9.7.7 · تحريك نبض الحلقات (RAF، ~30 إطار/ث، فقط عند التقرّب z>12.5 لصون الأداء) — يعيد بناء طبقات الحلقات فقط فوق الثابتة.
+  useEffect(() => {
+    if (!mapReady) return;
+    let raf = 0;
+    let last = 0;
+    const PERIOD = 3200; // مدّة دورة النبض (مللي)
+    const tick = (now: number): void => {
+      raf = requestAnimationFrame(tick);
+      const m = mapRef.current;
+      const items = towerItemsRef.current;
+      if (!m || !overlayRef.current || items.length === 0 || m.getZoom() < 13) return; // لا نبض في العرض البعيد (صون الأداء)
+      if (now - last < 90) return; // خنق ~11 إطار/ث (نبض بطيء سلس + أداء خفيف)
+      last = now;
+      ringPhaseRef.current = (now % PERIOD) / PERIOD;
+      overlayRef.current.setProps({ layers: [...staticLayersRef.current, ...buildRingLayers(items, ringPhaseRef.current)] });
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mapReady]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {

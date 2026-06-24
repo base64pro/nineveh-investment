@@ -136,7 +136,7 @@ const PALETTES: Record<ModelKind, Palette> = {
   mall: { body: [104, 108, 120, 255], glassA: [70, 120, 150, 255], glassB: [48, 86, 116, 255], winCool: [205, 230, 250, 255], winWarm: [255, 196, 120, 255], accent: [120, 236, 255, 255] },
   hotel: { body: [128, 116, 96, 255], glassA: [78, 110, 140, 255], glassB: [52, 80, 110, 255], winCool: [255, 228, 180, 255], winWarm: [255, 190, 110, 255], accent: [245, 206, 130, 255] },
 };
-const MAT_GLASS = { ambient: 0.45, diffuse: 0.5, shininess: 110, specularColor: [150, 210, 255] as [number, number, number] }; // زجاج لمّاع
+const MAT_GLASS = { ambient: 0.55, diffuse: 0.46, shininess: 160, specularColor: [190, 232, 255] as [number, number, number] }; // زجاج لمّاع عالي البريق
 const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
 const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
 
@@ -173,9 +173,8 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
   const layers: Layer[] = [];
   for (const it of items) {
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
-    // الترتيب من الأسفل للأعلى: ظلّ التماس → الحلقات → المجسّم.
+    // الترتيب من الأسفل للأعلى: ظلّ التماس → المجسّم. (الحلقات تُرسَم نابضةً منفصلةً عبر buildRingLayers — تحت المجسّم.)
     if (it.shadow && it.shadow.positions.length) layers.push(meshLayer(`tower-shadow-${it.id}`, it.shadow, position, TOWER_SHADOW, false));
-    if (it.rings && it.rings.positions.length) layers.push(meshLayer(`tower-rings-${it.id}`, it.rings, position, TOWER_RING, false));
     if (it.glb) {
       // م9.7.5 · نموذج واقعيّ glb (PBR) محلّ الإجرائيّ — glTF محوره Y → roll 90 لتقويمه في Z
       layers.push(
@@ -195,7 +194,10 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
       const m = it.meshes;
       const pal = PALETTES[it.kind ?? "tower"];
       layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true));
-      if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS));
+      if (m.glassA.positions.length) {
+        layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS)); // زجاج لمّاع مُظلَّل
+        layers.push(meshLayer(`tower-glowA-${it.id}`, m.glassA, position, [pal.glassA[0] + 40, pal.glassA[1] + 50, pal.glassA[2] + 40, 64], false)); // توهّج زجاجيّ خفيف (المبنى يضيء أكثر)
+      }
       if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, true, MAT_GLASS));
       if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false));
       if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false));
@@ -203,6 +205,35 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
       (m.extras ?? []).forEach((ex, i) => {
         if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit));
       });
+    }
+  }
+  return layers;
+}
+
+// م9.7.7 · حلقات نابضة منفصلة تحت المجسّم — تتدفّق من قلبه نحو الخارج (موجتان متعاقبتان)، تظهر فقط بعد تجاوز حدوده.
+// phase ∈ [0,1) من حلقة الرسم؛ الحلقة الأساس بنصف قطر بصمة المجسّم، تتمدّد بالمقياس وتتلاشى.
+export function buildRingLayers(items: TowerItem[], phase: number): Layer[] {
+  const layers: Layer[] = [];
+  for (const it of items) {
+    if (!it.rings || !it.rings.positions.length) continue;
+    const position: [number, number, number] = [it.center[0], it.center[1], 0];
+    for (let wv = 0; wv < 2; wv++) {
+      const p = (phase + wv * 0.5) % 1; // موجتان متعاقبتان لتدفّق مستمرّ
+      const ss = 0.55 + 1.7 * p; // تتمدّد من تحت المجسّم (0.55×) إلى ما وراء حدوده (2.25×)
+      const a = Math.max(0, Math.round(245 * (1 - p) * (1 - p))); // تتلاشى مع التمدّد
+      layers.push(
+        new SimpleMeshLayer({
+          id: `ring-${it.id}-${wv}`,
+          data: [{ position }],
+          mesh: { attributes: { positions: { value: it.rings.positions, size: 3 }, normals: { value: it.rings.normals, size: 3 } } } as never,
+          getPosition: (d: { position: [number, number, number] }) => d.position,
+          getOrientation: [0, 0, 0],
+          sizeScale: ss,
+          getColor: [TOWER_RING[0], TOWER_RING[1], TOWER_RING[2], a],
+          material: false,
+          pickable: false,
+        }),
+      );
     }
   }
   return layers;
