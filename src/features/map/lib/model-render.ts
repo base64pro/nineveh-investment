@@ -117,58 +117,37 @@ export interface TowerItem {
   meshes: TowerMeshes;
   rings?: Mesh3; // م9.7.1هـ · حلقات أرضية متوهّجة تملأ القطعة (تحت البرج)
 }
-const TOWER_BODY: [number, number, number, number] = [12, 52, 96, 255]; // أزرق غامق (أغمق من الحلقات)
-const TOWER_WIN: [number, number, number, number] = [120, 225, 255, 255]; // نوافذ سماوية منبعثة
-const TOWER_RING: [number, number, number, number] = [40, 150, 240, 235]; // حلقات أرضية أزرق متوهّج (أفتح من الجسم → الجسم أغمق منها)
+const TOWER_BODY: [number, number, number, number] = [16, 42, 74, 255]; // هيكل أزرق غامق مضاء (أغمق من كلّ شيء)
+const GLASS_A: [number, number, number, number] = [72, 168, 232, 245]; // زجاج أزرق منبعث — نغمة فاتحة
+const GLASS_B: [number, number, number, number] = [40, 108, 176, 245]; // زجاج أزرق منبعث — نغمة غامقة (تفاوت ألواح)
+const TOWER_ACCENT: [number, number, number, number] = [95, 212, 255, 255]; // حلقة/خطوط مميِّزة منبعثة (هوية)
+const TOWER_RING: [number, number, number, number] = [40, 150, 240, 235]; // حلقات أرضية أزرق متوهّج
+
+function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean): SimpleMeshLayer {
+  return new SimpleMeshLayer({
+    id,
+    data: [{ position }],
+    mesh: { attributes: { positions: { value: mesh.positions, size: 3 }, normals: { value: mesh.normals, size: 3 } } } as never,
+    getPosition: (d: { position: [number, number, number] }) => d.position,
+    getOrientation: [0, 0, 0],
+    sizeScale: 1,
+    getColor: color,
+    material: lit, // مضاء (تظليل واقعي) أو منبعث (توهّج هولوكرامي)
+    pickable: false,
+  });
+}
 
 export function buildTowerLayers(items: TowerItem[]): Layer[] {
   const layers: Layer[] = [];
   for (const it of items) {
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
+    const m = it.meshes;
     // الحلقات أوّلاً (تحت البرج): مسطّحة منبعثة على الأرض، بارزة على القمر الصناعي.
-    if (it.rings && it.rings.positions.length) {
-      layers.push(
-        new SimpleMeshLayer({
-          id: `tower-rings-${it.id}`,
-          data: [{ position }],
-          mesh: { attributes: { positions: { value: it.rings.positions, size: 3 }, normals: { value: it.rings.normals, size: 3 } } } as never,
-          getPosition: (d: { position: [number, number, number] }) => d.position,
-          getOrientation: [0, 0, 0],
-          sizeScale: 1,
-          getColor: TOWER_RING,
-          material: false, // منبعث (توهّج أرضي)
-          pickable: false,
-        }),
-      );
-    }
-    layers.push(
-      new SimpleMeshLayer({
-        id: `tower-body-${it.id}`,
-        data: [{ position }],
-        mesh: { attributes: { positions: { value: it.meshes.body.positions, size: 3 }, normals: { value: it.meshes.body.normals, size: 3 } } } as never,
-        getPosition: (d: { position: [number, number, number] }) => d.position,
-        getOrientation: [0, 0, 0],
-        sizeScale: 1,
-        getColor: TOWER_BODY,
-        material: true, // مضاء (تظليل ثلاثي واقعي عبر LightingEffect)
-        pickable: false,
-      }),
-    );
-    if (it.meshes.windows.positions.length) {
-      layers.push(
-        new SimpleMeshLayer({
-          id: `tower-win-${it.id}`,
-          data: [{ position }],
-          mesh: { attributes: { positions: { value: it.meshes.windows.positions, size: 3 }, normals: { value: it.meshes.windows.normals, size: 3 } } } as never,
-          getPosition: (d: { position: [number, number, number] }) => d.position,
-          getOrientation: [0, 0, 0],
-          sizeScale: 1,
-          getColor: TOWER_WIN,
-          material: false, // منبعث (نوافذ مضيئة هولوكرامية)
-          pickable: false,
-        }),
-      );
-    }
+    if (it.rings && it.rings.positions.length) layers.push(meshLayer(`tower-rings-${it.id}`, it.rings, position, TOWER_RING, false));
+    layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, TOWER_BODY, true)); // الهيكل (مضاء)
+    if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, GLASS_A, false));
+    if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, GLASS_B, false));
+    if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, TOWER_ACCENT, false));
   }
   return layers;
 }

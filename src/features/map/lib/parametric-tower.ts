@@ -1,20 +1,28 @@
-// م9.7.1ج · توليد برج سكني بارامتري واقعي (هندسة إجرائية) — مبنيّ على بحث النِّسب المعمارية.
-// يُخرِج شبكتين: «الجسم» (أزرق غامق، مضاء — يقرأ ككتلة صلبة) و«النوافذ» (مربّعات سماوية منبعثة على الواجهات).
-// الأبعاد بالمتر (محور Z رأسي)، مركزه (0,0) — يُرسى عند مركز القطعة. الارتفاع/الطوابق يُشتقّان تلقائياً من البصمة (ملاءمة).
+// م9.7.1ج/و · توليد برج سكني بارامتري واقعي (هندسة إجرائية) — مواءَم من تصاميم فيكتور حقيقية
+// (شُرفات سكنية + زجاج أزرق ستائري + مونتينات + بوديوم + تتويج بحلقة مميِّزة)، منسجم مع الأزرق الرقمي الهولوكرامي.
+// أربع شبكات حسب الخامة: body (مضاء داكن) · glassA/glassB (زجاج أزرق منبعث بنغمتين) · accent (حلقة مميِّزة منبعثة).
+// الأبعاد بالمتر (Z رأسي)، مركزه (0,0). الارتفاع/الطوابق يُلائَمان تلقائياً من البصمة.
 
 export interface Mesh3 {
   positions: Float32Array;
   normals: Float32Array;
 }
 export interface TowerMeshes {
-  body: Mesh3;
-  windows: Mesh3;
+  body: Mesh3; // الهيكل المضاء (بوديوم/أعمدة/شُرفات/بارابيت/بنتهاوس)
+  glassA: Mesh3; // زجاج فاتح منبعث (نغمة 1)
+  glassB: Mesh3; // زجاج غامق منبعث (نغمة 2) — تفاوت الألواح = انعكاس واقعي
+  accent: Mesh3; // حلقة/خطوط مميِّزة منبعثة (هوية زرقاء)
   height: number;
 }
 
-const FLOOR_H = 3.2; // ارتفاع الطابق (م)
-const PODIUM_H = 5.5; // بوديوم (أرضي/لوبي)
-const ROOF_H = 4.5; // تتويج
+type Buf = { P: number[]; N: number[] };
+const buf = (): Buf => ({ P: [], N: [] });
+const freeze = (b: Buf): Mesh3 => ({ positions: new Float32Array(b.P), normals: new Float32Array(b.N) });
+
+const FLOOR_H = 3.3; // ارتفاع الطابق (م)
+const PODIUM_H = 6.0; // بوديوم/لوبي
+const ROOF_H = 6.5; // منطقة التتويج (بارابيت + بنتهاوس)
+const PLINTH_H = 1.1; // قاعدة أرضية
 
 function pushQuad(P: number[], N: number[], a: number[], b: number[], c: number[], d: number[], n: number[]): void {
   for (const v of [a, b, c, a, c, d]) {
@@ -23,71 +31,122 @@ function pushQuad(P: number[], N: number[], a: number[], b: number[], c: number[
   }
 }
 
-function pushBox(P: number[], N: number[], w: number, d: number, z0: number, z1: number): void {
-  const x = w / 2;
-  const y = d / 2;
-  pushQuad(P, N, [-x, -y, z0], [x, -y, z0], [x, -y, z1], [-x, -y, z1], [0, -1, 0]);
-  pushQuad(P, N, [x, -y, z0], [x, y, z0], [x, y, z1], [x, -y, z1], [1, 0, 0]);
-  pushQuad(P, N, [x, y, z0], [-x, y, z0], [-x, y, z1], [x, y, z1], [0, 1, 0]);
-  pushQuad(P, N, [-x, y, z0], [-x, -y, z0], [-x, -y, z1], [-x, y, z1], [-1, 0, 0]);
-  pushQuad(P, N, [-x, -y, z1], [x, -y, z1], [x, y, z1], [-x, y, z1], [0, 0, 1]); // سقف
+// صندوق محوريّ من زاوية (x0,y0,z0) إلى (x1,y1,z1) بأوجه اختيارية (نفس اصطلاح اللفّ المُختبَر).
+function box(b: Buf, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, opts?: { top?: boolean; bottom?: boolean; sides?: boolean }): void {
+  const top = opts?.top ?? true;
+  const bottom = opts?.bottom ?? true;
+  const sides = opts?.sides ?? true;
+  const { P, N } = b;
+  if (sides) {
+    pushQuad(P, N, [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0]); // -y
+    pushQuad(P, N, [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0]); // +x
+    pushQuad(P, N, [x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [0, 1, 0]); // +y
+    pushQuad(P, N, [x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [-1, 0, 0]); // -x
+  }
+  if (top) pushQuad(P, N, [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]);
+  if (bottom) pushQuad(P, N, [x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [x0, y0, z0], [0, 0, -1]);
 }
 
-/** يولّد برجاً من بصمة w×d (متر). الارتفاع/الطوابق تلقائية (سلندرنس ~6، محدودة 28..110م). */
+// يلحق محتوى مخزَّن محليّاً (واجهة أماميّة عند y=-perpHalf) بعد تدويره حول Z إلى أحد الأوجه الأربعة.
+function rotateAppend(src: Buf, dst: Buf, deg: number): void {
+  const r = (deg * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  for (let i = 0; i < src.P.length; i += 3) {
+    const x = src.P[i]!;
+    const y = src.P[i + 1]!;
+    const z = src.P[i + 2]!;
+    dst.P.push(x * c - y * s, x * s + y * c, z);
+    const nx = src.N[i]!;
+    const ny = src.N[i + 1]!;
+    const nz = src.N[i + 2]!;
+    dst.N.push(nx * c - ny * s, nx * s + ny * c, nz);
+  }
+}
+
+// يبني واجهة أماميّة واحدة (في إطار محليّ: مستوى الوجه عند y=-perpHalf، يمتدّ على X بعرض faceW، نحو الخارج -Y)
+// مُخرِجاً في خانات الخامات: زجاج بنغمتين + مونتينات + شُرفات بحاجز زجاجي.
+function buildFace(faceW: number, perpHalf: number, z0: number, z1: number, b: { body: Buf; gA: Buf; gB: Buf }): void {
+  const W2 = faceW / 2;
+  const fy = -perpHalf; // مستوى الوجه
+  const go = 0.04; // إزاحة الزجاج أمام الهيكل قليلاً
+  const floors = Math.max(4, Math.floor((z1 - z0) / FLOOR_H));
+  const cols = Math.max(2, Math.round(faceW / 3.6));
+  const cell = faceW / cols;
+
+  // زجاج ستائري لكل طابق بنغمتين متناوبتين (انعكاس واقعي) + حاجز شرفة زجاجي أمامه.
+  for (let f = 0; f < floors; f++) {
+    const fz0 = z0 + f * FLOOR_H;
+    const fz1 = fz0 + FLOOR_H;
+    const g = f % 2 === 0 ? b.gA : b.gB;
+    // لوح الزجاج (وجه مستوٍ نحو -Y)
+    pushQuad(g.P, g.N, [-W2, fy - go, fz0], [W2, fy - go, fz0], [W2, fy - go, fz1], [-W2, fy - go, fz1], [0, -1, 0]);
+    // شرفة: بلاطة بارزة عند مستوى الطابق + حاجز زجاجي
+    const bx = W2 * 0.9;
+    const balDepth = 0.95;
+    box(b.body, -bx, bx, fy - balDepth, fy, fz0 - 0.14, fz0, { bottom: true }); // بلاطة الشرفة (بارزة)
+    // حاجز زجاجي عند الحافة الأماميّة للبلاطة
+    const rg = f % 2 === 0 ? b.gB : b.gA;
+    box(rg, -bx, bx, fy - balDepth - 0.05, fy - balDepth, fz0, fz0 + 1.0, { top: false, bottom: false });
+  }
+
+  // مونتينات عموديّة (أعمدة هيكليّة رفيعة بارزة على الزجاج) على خطوط الأعمدة.
+  for (let cI = 0; cI <= cols; cI++) {
+    const x = -W2 + cI * cell;
+    box(b.body, x - 0.13, x + 0.13, fy - 0.16, fy + 0.02, z0, z1, { top: false, bottom: false });
+  }
+}
+
+/** يولّد برجاً واقعياً من بصمة w×d (متر). الارتفاع/الطوابق تلقائية (نحافة ~6، محدودة 30..120م). */
 export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
-  const ref = Math.max(wMeters, dMeters);
-  const totalH = Math.max(28, Math.min(110, ref * 6));
+  const w = wMeters;
+  const d = dMeters;
+  const w2 = w / 2;
+  const d2 = d / 2;
+  const ref = Math.max(w, d);
+  const totalH = Math.max(30, Math.min(120, ref * 6));
   const shaftTop = totalH - ROOF_H;
-  const floors = Math.max(4, Math.floor((shaftTop - PODIUM_H) / FLOOR_H));
-  const sw = wMeters;
-  const sd = dMeters; // الجذع = البصمة
-  const pw = wMeters * 1.08;
-  const pd = dMeters * 1.08; // بوديوم أعرض قليلاً
-  const cw = sw * 0.66;
-  const cd = sd * 0.66; // تتويج أضيق
+  const shaftZ0 = PODIUM_H;
 
-  const bP: number[] = [];
-  const bN: number[] = [];
-  pushBox(bP, bN, pw, pd, 0, PODIUM_H); // بوديوم
-  pushBox(bP, bN, sw, sd, PODIUM_H, shaftTop); // الجذع
-  pushBox(bP, bN, cw, cd, shaftTop, totalH); // تتويج
+  const body = buf();
+  const gA = buf();
+  const gB = buf();
+  const accent = buf();
 
-  // النوافذ: شبكة (أعمدة × طوابق) على وجوه الجذع الأربعة، مربّعات بارزة قليلاً.
-  const wP: number[] = [];
-  const wN: number[] = [];
-  const out = 0.15;
-  // along = "x" → الوجهان العموديّان على Y (يمتدّان على X بعرض sw)؛ "y" → العموديّان على X (يمتدّان على Y بعرض sd).
-  const addWindows = (along: "x" | "y", sign: number): void => {
-    const faceW = along === "x" ? sw : sd;
-    const cols = Math.max(3, Math.round(faceW / 3.2));
-    const cell = faceW / cols;
-    const winW = cell * 0.58;
-    const winH = FLOOR_H * 0.5;
-    for (let c = 0; c < cols; c++) {
-      const t = -faceW / 2 + (c + 0.5) * cell;
-      for (let f = 0; f < floors; f++) {
-        const z0 = PODIUM_H + f * FLOOR_H + (FLOOR_H - winH) / 2;
-        const z1 = z0 + winH;
-        if (along === "x") {
-          const yy = sign * (sd / 2 + out);
-          pushQuad(wP, wN, [t - winW / 2, yy, z0], [t + winW / 2, yy, z0], [t + winW / 2, yy, z1], [t - winW / 2, yy, z1], [0, sign, 0]);
-        } else {
-          const xx = sign * (sw / 2 + out);
-          pushQuad(wP, wN, [xx, t - winW / 2, z0], [xx, t + winW / 2, z0], [xx, t + winW / 2, z1], [xx, t - winW / 2, z1], [sign, 0, 0]);
-        }
-      }
-    }
-  };
-  addWindows("x", -1);
-  addWindows("x", 1);
-  addWindows("y", -1);
-  addWindows("y", 1);
+  // — القاعدة —
+  box(body, -w2 * 1.18, w2 * 1.18, -d2 * 1.18, d2 * 1.18, 0, PLINTH_H); // بلاطة أرضية (بلِنث)
+  box(body, -w2 * 1.06, w2 * 1.06, -d2 * 1.06, d2 * 1.06, PLINTH_H, PODIUM_H); // بوديوم/لوبي
+  // شريط زجاج اللوبي حول البوديوم
+  box(gA, -w2 * 1.07, w2 * 1.07, -d2 * 1.07, d2 * 1.07, PLINTH_H + 0.9, PODIUM_H - 1.0, { top: false, bottom: false });
 
-  return {
-    body: { positions: new Float32Array(bP), normals: new Float32Array(bN) },
-    windows: { positions: new Float32Array(wP), normals: new Float32Array(wN) },
-    height: totalH,
-  };
+  // — جذع هيكليّ صلب (نواة تمنع الشفافية بين الأوجه) —
+  box(body, -w2, w2, -d2, d2, shaftZ0, shaftTop);
+
+  // — الواجهات الأربع (زجاج + مونتينات + شُرفات) —
+  const front = { body: buf(), gA: buf(), gB: buf() };
+  buildFace(w, d2, shaftZ0, shaftTop, front); // ±y (عرض = w)
+  rotateAppend(front.body, body, 0);
+  rotateAppend(front.gA, gA, 0);
+  rotateAppend(front.gB, gB, 0);
+  rotateAppend(front.body, body, 180);
+  rotateAppend(front.gA, gA, 180);
+  rotateAppend(front.gB, gB, 180);
+  const side = { body: buf(), gA: buf(), gB: buf() };
+  buildFace(d, w2, shaftZ0, shaftTop, side); // ±x (عرض = d)
+  rotateAppend(side.body, body, 90);
+  rotateAppend(side.gA, gA, 90);
+  rotateAppend(side.gB, gB, 90);
+  rotateAppend(side.body, body, 270);
+  rotateAppend(side.gA, gA, 270);
+  rotateAppend(side.gB, gB, 270);
+
+  // — التتويج —
+  box(accent, -w2 - 0.22, w2 + 0.22, -d2 - 0.22, d2 + 0.22, shaftTop - 1.5, shaftTop - 0.7, { top: false, bottom: false }); // حلقة مميِّزة
+  box(body, -w2 - 0.12, w2 + 0.12, -d2 - 0.12, d2 + 0.12, shaftTop, shaftTop + 0.8); // بارابيت/كورنيش السطح
+  box(body, -w2 * 0.56, w2 * 0.56, -d2 * 0.56, d2 * 0.56, shaftTop + 0.8, totalH); // بنتهاوس ميكانيكي
+  box(accent, -w2 * 0.58, w2 * 0.58, -d2 * 0.58, d2 * 0.58, totalH - 0.35, totalH, { top: false, bottom: false }); // خطّ تتويج متوهّج
+
+  return { body: freeze(body), glassA: freeze(gA), glassB: freeze(gB), accent: freeze(accent), height: totalH };
 }
 
 // م9.7.1هـ · حلقات أرضية متوهّجة منبعثة (deck) تنبعث من مركز البرج وتملأ القطعة — تُرسَم فوق الأرضية
