@@ -6,6 +6,7 @@
 export interface Mesh3 {
   positions: Float32Array;
   normals: Float32Array;
+  colors?: Float32Array; // م9.7.6 · لون رأسيّ (تدرّج قاعدة→قمّة + AO) يضاعف لون الخامة — عمق وتظليل واقعيّ بلا كساء
 }
 // م9.7.3 · «ملحق» = شبكة مرفق/عنصر إضافي بلونه وخامته (باركات/حدائق/أشجار/قبّة...) — تُرسَم بطبقة مستقلّة.
 export interface Extra {
@@ -26,7 +27,28 @@ export interface TowerMeshes {
 
 type Buf = { P: number[]; N: number[] };
 const buf = (): Buf => ({ P: [], N: [] });
-const freeze = (b: Buf): Mesh3 => ({ positions: new Float32Array(b.P), normals: new Float32Array(b.N) });
+// م9.7.6 · يُجمّد المخزَّن ويحسب لوناً رأسيّاً (تدرّج قاعدة→قمّة + إظلام الأوجه السفليّة = AO) — عمق وتظليل واقعيّ.
+function freeze(b: Buf): Mesh3 {
+  const { P, N } = b;
+  let zMin = Infinity;
+  let zMax = -Infinity;
+  for (let i = 2; i < P.length; i += 3) {
+    if (P[i]! < zMin) zMin = P[i]!;
+    if (P[i]! > zMax) zMax = P[i]!;
+  }
+  const dz = zMax - zMin;
+  const C = new Float32Array(P.length);
+  for (let i = 0; i < P.length; i += 3) {
+    const t = dz > 1 ? (P[i + 2]! - zMin) / dz : 1; // نسبة الارتفاع
+    const mz = 0.6 + 0.4 * t; // القاعدة أغمق · القمّة أفتح
+    const an = 0.72 + 0.28 * (N[i + 2]! * 0.5 + 0.5); // الأوجه السفليّة أغمق (AO)
+    const c = Math.max(0, Math.min(1, mz * an));
+    C[i] = c;
+    C[i + 1] = c;
+    C[i + 2] = c;
+  }
+  return { positions: new Float32Array(P), normals: new Float32Array(N), colors: C };
+}
 
 const FLOOR_H = 3.3; // ارتفاع الطابق (م)
 const PODIUM_H = 6.0; // بوديوم/لوبي

@@ -146,16 +146,23 @@ export const TYPE_MODELS: Record<ModelKind, { url: string; footprint: number; he
   hotel: { url: "/models/hotel.glb", footprint: 1.24, height: 3.15 },
 };
 
-function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean): SimpleMeshLayer {
+// م9.7.6 · خامات Phong حسب السطح (لمعان الزجاج · مطّ الهيكل) — تُطبَّق على المضاء فقط.
+const MAT_BODY = { ambient: 0.32, diffuse: 0.86, shininess: 18, specularColor: [70, 80, 95] as [number, number, number] };
+function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean, material?: object): SimpleMeshLayer {
+  const attrs: Record<string, { value: Float32Array; size: number }> = {
+    positions: { value: mesh.positions, size: 3 },
+    normals: { value: mesh.normals, size: 3 },
+  };
+  if (mesh.colors && mesh.colors.length) attrs.colors = { value: mesh.colors, size: 3 }; // تدرّج/AO رأسيّ يضاعف اللون
   return new SimpleMeshLayer({
     id,
     data: [{ position }],
-    mesh: { attributes: { positions: { value: mesh.positions, size: 3 }, normals: { value: mesh.normals, size: 3 } } } as never,
+    mesh: { attributes: attrs } as never,
     getPosition: (d: { position: [number, number, number] }) => d.position,
     getOrientation: [0, 0, 0],
     sizeScale: 1,
     getColor: color,
-    material: lit, // مضاء (تظليل واقعي) أو منبعث (توهّج هولوكرامي)
+    material: lit ? (material ?? MAT_BODY) : false, // مضاء بخامة Phong · أو منبعث (توهّج)
     pickable: false,
   });
 }
