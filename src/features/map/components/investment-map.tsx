@@ -57,7 +57,7 @@ import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKi
 import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
 import { buildModelLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
-import { generateTower, type TowerMeshes } from "../lib/parametric-tower";
+import { generateGroundRings, generateTower, type Mesh3, type TowerMeshes } from "../lib/parametric-tower";
 import { useAssumedModels } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -613,8 +613,8 @@ export default function InvestmentMap() {
   // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
   const { data: assumedModels = [] } = useAssumedModels();
   const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
-  // م9.7.1ج · ذاكرة شبكات الأبراج البارامترية لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
-  const towerCacheRef = useRef<Map<string, TowerMeshes>>(new Map());
+  // م9.7.1ج/هـ · ذاكرة شبكات الأبراج البارامترية + الحلقات الأرضية لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
+  const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3 }>>(new Map());
   useEffect(() => {
     registerModelLoaders();
   }, []);
@@ -937,18 +937,20 @@ export default function InvestmentMap() {
       for (const f of vis.features) {
         const rid = typeof f.properties?.ref_id === "string" ? (f.properties.ref_id as string) : null;
         if (f.properties?.kind !== "assumed" || !rid || refIds.has(rid) || !f.geometry) continue;
-        let meshes = towerCacheRef.current.get(rid);
-        if (!meshes) {
+        let cached = towerCacheRef.current.get(rid);
+        if (!cached) {
           const b = bbox(f as Feature) as [number, number, number, number];
           const clat = (b[1] + b[3]) / 2;
           const wM = (b[2] - b[0]) * 111320 * Math.cos((clat * Math.PI) / 180); // عرض البصمة بالمتر
           const dM = (b[3] - b[1]) * 110540; // عمق البصمة بالمتر
           if (wM < 4 || dM < 4) continue;
-          meshes = generateTower(Math.max(8, wM * 0.55), Math.max(8, dM * 0.55)); // ~55% هامش ملاءمة داخل القطعة
-          towerCacheRef.current.set(rid, meshes);
+          const tower = generateTower(Math.max(8, wM * 0.55), Math.max(8, dM * 0.55)); // ~55% هامش ملاءمة داخل القطعة
+          const rings = generateGroundRings(0.5 * Math.min(wM, dM) * 0.9, 4); // حلقات تنبعث من المركز وتملأ القطعة (داخل حدودها)
+          cached = { tower, rings };
+          towerCacheRef.current.set(rid, cached);
         }
         const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
-        towerItems.push({ id: rid, center, meshes });
+        towerItems.push({ id: rid, center, meshes: cached.tower, rings: cached.rings });
         towerRefIds.add(rid);
       }
     }

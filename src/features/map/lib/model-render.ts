@@ -11,7 +11,7 @@ import { GLTFLoader } from "@loaders.gl/gltf";
 import { DracoWorkerLoader } from "@loaders.gl/draco";
 import type { ParcelModel } from "@/features/parcels/models/model-lib";
 import { fillRgba } from "./parcel-colors";
-import type { TowerMeshes } from "./parametric-tower";
+import type { Mesh3, TowerMeshes } from "./parametric-tower";
 
 let registered = false;
 /** تسجيل محمّلات glTF/Draco مرّة واحدة (عميل فقط). */
@@ -115,14 +115,32 @@ export interface TowerItem {
   id: string;
   center: [number, number]; // مركز القطعة (lng,lat)
   meshes: TowerMeshes;
+  rings?: Mesh3; // م9.7.1هـ · حلقات أرضية متوهّجة تملأ القطعة (تحت البرج)
 }
-const TOWER_BODY: [number, number, number, number] = [12, 52, 96, 255]; // أزرق غامق (أغمق من الحلقات #0E5FB0)
+const TOWER_BODY: [number, number, number, number] = [12, 52, 96, 255]; // أزرق غامق (أغمق من الحلقات)
 const TOWER_WIN: [number, number, number, number] = [120, 225, 255, 255]; // نوافذ سماوية منبعثة
+const TOWER_RING: [number, number, number, number] = [40, 150, 240, 235]; // حلقات أرضية أزرق متوهّج (أفتح من الجسم → الجسم أغمق منها)
 
 export function buildTowerLayers(items: TowerItem[]): Layer[] {
   const layers: Layer[] = [];
   for (const it of items) {
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
+    // الحلقات أوّلاً (تحت البرج): مسطّحة منبعثة على الأرض، بارزة على القمر الصناعي.
+    if (it.rings && it.rings.positions.length) {
+      layers.push(
+        new SimpleMeshLayer({
+          id: `tower-rings-${it.id}`,
+          data: [{ position }],
+          mesh: { attributes: { positions: { value: it.rings.positions, size: 3 }, normals: { value: it.rings.normals, size: 3 } } } as never,
+          getPosition: (d: { position: [number, number, number] }) => d.position,
+          getOrientation: [0, 0, 0],
+          sizeScale: 1,
+          getColor: TOWER_RING,
+          material: false, // منبعث (توهّج أرضي)
+          pickable: false,
+        }),
+      );
+    }
     layers.push(
       new SimpleMeshLayer({
         id: `tower-body-${it.id}`,

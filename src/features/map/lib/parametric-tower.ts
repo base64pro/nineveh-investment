@@ -89,3 +89,29 @@ export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
     height: totalH,
   };
 }
+
+// م9.7.1هـ · حلقات أرضية متوهّجة منبعثة (deck) تنبعث من مركز البرج وتملأ القطعة — تُرسَم فوق الأرضية
+// الهولوكرامية وتحت البرج، فتبدو واضحة بارزة على القمر الصناعي. مسطّحة على مستوى الأرض (z صغير فوق الأرضية).
+export function generateGroundRings(maxRadius: number, count = 4): Mesh3 {
+  const P: number[] = [];
+  const N: number[] = [];
+  const segs = 72; // نعومة الدائرة
+  const z = 0.6; // فوق الأرضية قليلاً (يتفادى تنازع العمق مع الأرضية)
+  const gap = maxRadius / count;
+  const halfW = Math.max(0.45, gap * 0.16); // نصف سماكة شريط الحلقة (خطّ رفيع متوهّج)
+  for (let i = 1; i <= count; i++) {
+    const r = gap * i;
+    const ri = r - halfW;
+    const ro = r + halfW;
+    for (let s = 0; s < segs; s++) {
+      const a0 = (s / segs) * Math.PI * 2;
+      const a1 = ((s + 1) / segs) * Math.PI * 2;
+      const c0 = Math.cos(a0);
+      const s0 = Math.sin(a0);
+      const c1 = Math.cos(a1);
+      const s1 = Math.sin(a1);
+      pushQuad(P, N, [ri * c0, ri * s0, z], [ro * c0, ro * s0, z], [ro * c1, ro * s1, z], [ri * c1, ri * s1, z], [0, 0, 1]);
+    }
+  }
+  return { positions: new Float32Array(P), normals: new Float32Array(N) };
+}
