@@ -25,18 +25,32 @@ const DISTS: { v: ParametricDistribution; label: string }[] = [
 ];
 const selCls = "rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring";
 
+// متر اختياريّ: نصّ فارغ ⇐ اشتقاق تلقائيّ (null)؛ وإلّا رقم موجب.
+const numOrNull = (s: string): number | null => {
+  const n = Number(s);
+  return s.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+};
+
 export function ParametricSection({ kind, refId, readOnly }: { kind: ParcelKind; refId: string; readOnly: boolean }) {
   const { data: cfg, isLoading } = useParcelParametric(kind, refId);
   const qc = useQueryClient();
   const [mk, setMk] = useState<ModelKind | "auto">("auto");
   const [count, setCount] = useState(1);
   const [dist, setDist] = useState<ParametricDistribution>("grid");
+  const [rot, setRot] = useState(0); // توجيه 360°
+  const [wStr, setWStr] = useState(""); // أبعاد يدويّة (فارغ = تلقائيّ)
+  const [dStr, setDStr] = useState("");
+  const [hStr, setHStr] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setMk(cfg?.modelKind ?? "auto");
     setCount(cfg?.count ?? 1);
     setDist(cfg?.distribution ?? "grid");
+    setRot(cfg?.rotationDeg ?? 0);
+    setWStr(cfg?.widthM != null ? String(cfg.widthM) : "");
+    setDStr(cfg?.depthM != null ? String(cfg.depthM) : "");
+    setHStr(cfg?.heightM != null ? String(cfg.heightM) : "");
   }, [cfg]);
 
   function invalidate(): void {
@@ -48,7 +62,15 @@ export function ParametricSection({ kind, refId, readOnly }: { kind: ParcelKind;
     const res =
       mk === "auto"
         ? await clearParcelParametric(kind, refId)
-        : await upsertParcelParametric(kind, refId, { modelKind: mk, count: Math.max(1, Math.min(24, count)), distribution: dist });
+        : await upsertParcelParametric(kind, refId, {
+            modelKind: mk,
+            count: Math.max(1, Math.min(24, count)),
+            distribution: dist,
+            rotationDeg: ((Math.round(rot) % 360) + 360) % 360,
+            widthM: numOrNull(wStr),
+            depthM: numOrNull(dStr),
+            heightM: numOrNull(hStr),
+          });
     setBusy(false);
     if (res.ok) {
       toast.success("حُفِظ إعداد المجسّم — سينعكس على الخريطة");
@@ -70,6 +92,8 @@ export function ParametricSection({ kind, refId, readOnly }: { kind: ParcelKind;
         <p className="text-[11px] text-muted-foreground">
           النوع: {KINDS.find((k) => k.v === (cfg?.modelKind ?? "auto"))?.label}
           {cfg && cfg.count > 1 ? ` · ${cfg.count} مجسّمات (${DISTS.find((d) => d.v === cfg.distribution)?.label})` : ""}
+          {cfg && cfg.rotationDeg ? ` · توجيه ${cfg.rotationDeg}°` : ""}
+          {cfg && (cfg.widthM || cfg.depthM || cfg.heightM) ? ` · أبعاد ${cfg.widthM ?? "—"}×${cfg.depthM ?? "—"}×${cfg.heightM ?? "—"} م` : ""}
         </p>
       ) : (
         <div className="space-y-2.5">
@@ -122,6 +146,40 @@ export function ParametricSection({ kind, refId, readOnly }: { kind: ParcelKind;
               حفظ
             </button>
           </div>
+          {mk !== "auto" ? (
+            <div className="space-y-2 rounded-lg border border-border/50 bg-background/30 p-2.5">
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>التوجيه (دوران)</span>
+                  <span className="tabular-nums text-primary/80">{rot}°</span>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={359}
+                  step={1}
+                  value={rot}
+                  onChange={(e) => setRot(Number(e.target.value) || 0)}
+                  className="h-1.5 w-full cursor-pointer accent-primary"
+                />
+              </label>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">العرض (م)</span>
+                  <input type="number" inputMode="numeric" min={0} placeholder="تلقائي" value={wStr} onChange={(e) => setWStr(e.target.value)} className="w-20 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring" />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">العمق (م)</span>
+                  <input type="number" inputMode="numeric" min={0} placeholder="تلقائي" value={dStr} onChange={(e) => setDStr(e.target.value)} className="w-20 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring" />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">الارتفاع (م)</span>
+                  <input type="number" inputMode="numeric" min={0} placeholder="تلقائي" value={hStr} onChange={(e) => setHStr(e.target.value)} className="w-20 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring" />
+                </label>
+              </div>
+              <p className="text-[10px] text-muted-foreground">الأبعاد بالمتر — اتركها فارغة للاشتقاق التلقائيّ من مساحة القطعة.</p>
+            </div>
+          ) : null}
           <p className="text-[10px] text-muted-foreground">يُعرَض هذا النموذج الإجرائيّ على القطعة ما لم يُرفع مجسّم glb/STL (له الأولويّة). «تلقائي» = حسب اسم القطعة.</p>
         </div>
       )}

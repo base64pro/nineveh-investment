@@ -150,6 +150,10 @@ export interface ParcelParametric {
   modelKind: ModelKind;
   count: number;
   distribution: ParametricDistribution;
+  rotationDeg: number; // م9.7.8 · توجيه المجسّم 360°
+  widthM: number | null; // م9.7.8 · أبعاد يدويّة (فارغ = اشتقاق تلقائيّ)
+  depthM: number | null;
+  heightM: number | null;
 }
 
 /** حفظ/تحديث إعداد النموذج البارامتري لقطعة (upsert على kind+ref_id) — للمدير. */
@@ -157,7 +161,19 @@ export async function upsertParcelParametric(kind: ParcelKind, refId: string, cf
   const supabase = createClient();
   const uid = (await supabase.auth.getUser()).data.user?.id ?? null;
   const { error } = await supabase.from("parcel_parametric_models").upsert(
-    { kind, ref_id: refId, model_kind: cfg.modelKind, count: cfg.count, distribution: cfg.distribution, created_by: uid, updated_at: new Date().toISOString() },
+    {
+      kind,
+      ref_id: refId,
+      model_kind: cfg.modelKind,
+      count: cfg.count,
+      distribution: cfg.distribution,
+      rotation_deg: Math.round(cfg.rotationDeg) % 360,
+      width_m: cfg.widthM,
+      depth_m: cfg.depthM,
+      height_m: cfg.heightM,
+      created_by: uid,
+      updated_at: new Date().toISOString(),
+    },
     { onConflict: "kind,ref_id" },
   );
   return error ? { ok: false, error: error.message } : { ok: true };
@@ -170,7 +186,9 @@ export async function clearParcelParametric(kind: ParcelKind, refId: string): Pr
   return { ok: !error };
 }
 
-type PRow = { ref_id: string; model_kind: ModelKind; count: number; distribution: ParametricDistribution };
+type PRow = { ref_id: string; model_kind: ModelKind; count: number; distribution: ParametricDistribution; rotation_deg: number; width_m: number | null; depth_m: number | null; height_m: number | null };
+const SEL = "ref_id, model_kind, count, distribution, rotation_deg, width_m, depth_m, height_m";
+const toCfg = (r: Omit<PRow, "ref_id">): ParcelParametric => ({ modelKind: r.model_kind, count: r.count, distribution: r.distribution, rotationDeg: r.rotation_deg ?? 0, widthM: r.width_m, depthM: r.depth_m, heightM: r.height_m });
 
 /** إعداد قطعة واحدة — مفتاح ["parcel_parametric", kind, refId]. */
 export function useParcelParametric(kind: ParcelKind, refId: string) {
@@ -179,11 +197,10 @@ export function useParcelParametric(kind: ParcelKind, refId: string) {
     enabled: refId !== "",
     queryFn: async (): Promise<ParcelParametric | null> => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("parcel_parametric_models").select("model_kind, count, distribution").eq("kind", kind).eq("ref_id", refId).maybeSingle();
+      const { data, error } = await supabase.from("parcel_parametric_models").select(SEL).eq("kind", kind).eq("ref_id", refId).maybeSingle();
       if (error) throw new Error(error.message);
       if (!data) return null;
-      const r = data as Omit<PRow, "ref_id">;
-      return { modelKind: r.model_kind, count: r.count, distribution: r.distribution };
+      return toCfg(data as Omit<PRow, "ref_id">);
     },
   });
 }
@@ -194,10 +211,10 @@ export function useAssumedParametric() {
     queryKey: ["parcel_parametric", "assumed-all"],
     queryFn: async (): Promise<Map<string, ParcelParametric>> => {
       const supabase = createClient();
-      const { data, error } = await supabase.from("parcel_parametric_models").select("ref_id, model_kind, count, distribution").eq("kind", "assumed");
+      const { data, error } = await supabase.from("parcel_parametric_models").select(SEL).eq("kind", "assumed");
       if (error) throw new Error(error.message);
       const out = new Map<string, ParcelParametric>();
-      for (const r of (data ?? []) as PRow[]) out.set(r.ref_id, { modelKind: r.model_kind, count: r.count, distribution: r.distribution });
+      for (const r of (data ?? []) as PRow[]) out.set(r.ref_id, toCfg(r));
       return out;
     },
   });

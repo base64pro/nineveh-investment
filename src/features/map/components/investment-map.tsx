@@ -967,18 +967,24 @@ export default function InvestmentMap() {
         const kind = cfg?.modelKind ?? tempKindFor(typeof f.properties?.name_ar === "string" ? (f.properties.name_ar as string) : "");
         const count = Math.max(1, Math.min(24, cfg?.count ?? 1));
         const distribution = cfg?.distribution ?? "grid";
+        const rotationDeg = cfg?.rotationDeg ?? 0; // م9.7.8 · توجيه المجسّم
+        const wOv = cfg?.widthM && cfg.widthM > 0 ? cfg.widthM : null; // أبعاد يدويّة (إن وُجدت)
+        const dOv = cfg?.depthM && cfg.depthM > 0 ? cfg.depthM : null;
+        const hOv = cfg?.heightM && cfg.heightM > 0 ? cfg.heightM : null;
         const cols = distribution === "row" ? count : Math.ceil(Math.sqrt(count));
         const rows = Math.ceil(count / cols);
-        // شبكة واحدة بحجم الخليّة (تُعاد استخدامها في كلّ المواضع) — تُخبّأ بمفتاح (نوع|عدد|توزيع).
-        const cacheKey = `${rid}|${kind}|${count}|${distribution}`;
+        // شبكة واحدة بحجم الخليّة (تُعاد استخدامها في كلّ المواضع) — تُخبّأ بمفتاح يشمل الأبعاد (الدوران يُطبَّق بالعرض لا بالشبكة).
+        const cacheKey = `${rid}|${kind}|${count}|${distribution}|${wOv ?? ""}|${dOv ?? ""}|${hOv ?? ""}`;
         let cached = towerCacheRef.current.get(cacheKey);
         if (!cached) {
-          const fmul = kind === "mall" ? 0.5 : kind === "hotel" ? 0.6 : 0.5; // بصمة المبنى (المول يُحيط نفسه بمرافق)
+          const fmul = kind === "mall" ? 0.5 : kind === "hotel" ? 0.6 : 0.5; // بصمة المبنى التلقائيّة (المول يُحيط نفسه بمرافق)
           const cellWm = wM / cols;
           const cellDm = dM / rows;
-          const tower = generateModel(kind, Math.max(8, cellWm * fmul), Math.max(8, cellDm * fmul));
-          const bMin = Math.min(cellWm, cellDm) * fmul; // بصمة المبنى الصغرى
-          const rings = generateGroundRings(Math.max(cellWm, cellDm) * fmul * 0.5, 1); // حلقة أساس بنصف قطر بصمة المجسّم (تنبض من تحته للخارج)
+          const fw = wOv ?? Math.max(8, cellWm * fmul); // عرض يدويّ أو تلقائيّ
+          const fd = dOv ?? Math.max(8, cellDm * fmul); // عمق يدويّ أو تلقائيّ
+          const tower = generateModel(kind, fw, fd, hOv ?? undefined);
+          const bMin = Math.min(fw, fd); // بصمة المبنى الفعليّة
+          const rings = generateGroundRings(Math.max(fw, fd) * 0.5, 1); // حلقة أساس بنصف قطر بصمة المجسّم (تنبض من تحته للخارج)
           const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
           cached = { tower, rings, shadow, kind };
@@ -987,7 +993,7 @@ export default function InvestmentMap() {
         // المواضع: واحد عند المركز · عدّة على شبكة داخل البصمة (مع نثر اختياريّ).
         if (count === 1) {
           const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
-          towerItems.push({ id: rid, center, meshes: cached.tower, kind: cached.kind, rings: cached.rings, shadow: cached.shadow });
+          towerItems.push({ id: rid, center, meshes: cached.tower, kind: cached.kind, yaw: rotationDeg, rings: cached.rings, shadow: cached.shadow });
         } else {
           const bw = b[2] - b[0];
           const bh = b[3] - b[1];
@@ -1002,7 +1008,7 @@ export default function InvestmentMap() {
               lng += (jx * bw * 0.34) / cols;
               lat += (jy * bh * 0.34) / rows;
             }
-            towerItems.push({ id: `${rid}#${i}`, center: [lng, lat], meshes: cached.tower, kind: cached.kind, rings: cached.rings, shadow: cached.shadow });
+            towerItems.push({ id: `${rid}#${i}`, center: [lng, lat], meshes: cached.tower, kind: cached.kind, yaw: rotationDeg, rings: cached.rings, shadow: cached.shadow });
           }
         }
         towerRefIds.add(rid);
@@ -1077,9 +1083,10 @@ export default function InvestmentMap() {
           setSelectedId(null); // لا تُفتَح البطاقة عند الطيران (طلب معتمد)
           setMkSel(null);
           const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-          const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: 16.5 });
+          // المجسّم البارامتري بصمته ~نصف القطعة → نقترب مستوى زوم إضافيّاً ليملأ الإطار كاستعراض درون (حتى المجسّمات الصغيرة تُرى قريباً).
+          const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: MAX_ZOOM });
           const center = centroid(f).geometry.coordinates as [number, number]; // مركز القطعة = محور الالتفاف
-          const zoom = cam?.zoom ?? 15.5;
+          const zoom = Math.min(MAX_ZOOM, (cam?.zoom ?? 15.5) + 1.1);
           if (reduce) {
             m.easeTo({ center, zoom, pitch: 58, duration: 800 }); // احترام تقليل الحركة: اقتراب قصير بلا التفاف
           } else {

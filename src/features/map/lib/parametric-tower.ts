@@ -223,13 +223,13 @@ function buildFace(faceW: number, perpHalf: number, z0: number, z1: number, seed
 }
 
 /** يولّد برجاً مودرن واقعياً ذا نكسة علويّة من بصمة w×d (متر). المقياس واقعيّ يلائم محيط الخريطة (لا عملقة): نحافة ~3، محدود 24..62م. */
-export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
+export function generateTower(wMeters: number, dMeters: number, heightM?: number): TowerMeshes {
   const w = wMeters;
   const d = dMeters;
   const w2 = w / 2;
   const d2 = d / 2;
   const ref = Math.max(w, d);
-  const totalH = Math.max(64, Math.min(150, ref * 5.5)); // برج كبير بطوابق كثيرة (نحيف مرتفع) — لائق بمعلَم استثماريّ
+  const totalH = heightM && heightM > 8 ? heightM : Math.max(64, Math.min(150, ref * 5.5)); // ارتفاع يدويّ أو تلقائيّ
   const shaftTop = totalH - ROOF_H;
   const shaftZ0 = PODIUM_H;
   const setZ = shaftZ0 + (shaftTop - shaftZ0) * 0.7; // ارتفاع النكسة (الطابق العلوي أضيق)
@@ -326,14 +326,14 @@ function buildMallFace(faceW: number, perpHalf: number, levels: number, lh: numb
 
 // م9.7.3 · مول واقعيّ متمايز: كتلة منخفضة عريضة + ستورفرونت + أحزمة لافتات + **قبو زجاجيّ (أتريوم) متوهّج**
 // + مرافق حول المبنى ضمن القطعة: **باركات + حدائق + أشجار**. (w,d = بصمة المبنى؛ المرافق تمتدّ حولها.)
-export function generateMall(w: number, d: number): TowerMeshes {
+export function generateMall(w: number, d: number, heightM?: number): TowerMeshes {
   w = Math.min(w, 115); // بصمة مبنى المول (منخفض عريض)
   d = Math.min(d, 95);
   const w2 = w / 2;
   const d2 = d / 2;
-  const LH = 5.0;
   const LEVELS = 3;
-  const baseH = LEVELS * LH; // ~15م
+  const LH = heightM && heightM > 8 ? heightM / LEVELS : 5.0; // ارتفاع يدويّ أو تلقائيّ
+  const baseH = LEVELS * LH;
   const body = buf();
   const gA = buf();
   const gB = buf();
@@ -416,12 +416,12 @@ function palm(trunk: Buf, crown: Buf, cx: number, cy: number, h: number): void {
 
 // م9.7.8 · فندق 5 نجوم متمايز (منتجع): بوديوم فخم 3 مستويات + برج نزلاء **شريحيّ عريض** (يختلف عن البرج المربّع)
 // + بورت-كوشير + **مرافق منتجع**: مسبح + ديك + حدائق + نخيل + ساحة استقبال.
-export function generateHotel(w: number, d: number): TowerMeshes {
+export function generateHotel(w: number, d: number, heightM?: number): TowerMeshes {
   const w2 = w / 2;
   const d2 = d / 2;
   const ref = Math.max(w, d);
   const podiumH = 11.0; // بوديوم 3 مستويات فخم
-  const towerTop = Math.max(34, Math.min(66, ref * 2.7));
+  const towerTop = heightM && heightM > podiumH + 6 ? heightM : Math.max(34, Math.min(66, ref * 2.7)); // ارتفاع يدويّ أو تلقائيّ
   const tw = w * 0.92; // شريحة عريضة
   const td = d * 0.4; // رفيعة العمق (سلويت فندقيّ مميّز)
   const tw2 = tw / 2;
@@ -503,11 +503,11 @@ export function generateHotel(w: number, d: number): TowerMeshes {
 }
 
 export type ModelKind = "tower" | "mall" | "hotel";
-/** موزّع توليد النموذج حسب القطاع/النوع. */
-export function generateModel(kind: ModelKind, w: number, d: number): TowerMeshes {
-  if (kind === "mall") return generateMall(w, d);
-  if (kind === "hotel") return generateHotel(w, d);
-  return generateTower(w, d);
+/** موزّع توليد النموذج حسب القطاع/النوع (مع ارتفاع يدويّ اختياريّ). */
+export function generateModel(kind: ModelKind, w: number, d: number, heightM?: number): TowerMeshes {
+  if (kind === "mall") return generateMall(w, d, heightM);
+  if (kind === "hotel") return generateHotel(w, d, heightM);
+  return generateTower(w, d, heightM);
 }
 
 // م9.7.1هـ · حلقات أرضية متوهّجة منبعثة تنبعث من مركز البرج وتملأ القطعة — فوق الأرضية وتحت البرج (بارزة على القمر الصناعي).
