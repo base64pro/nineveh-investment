@@ -116,12 +116,16 @@ export interface TowerItem {
   center: [number, number]; // مركز القطعة (lng,lat)
   meshes: TowerMeshes;
   rings?: Mesh3; // م9.7.1هـ · حلقات أرضية متوهّجة تملأ القطعة (تحت البرج)
+  shadow?: Mesh3; // م9.7.1و+ · ظلّ تماسٍ أرضيّ مُخبوز (أسفل كلّ شيء)
 }
-const TOWER_BODY: [number, number, number, number] = [16, 42, 74, 255]; // هيكل أزرق غامق مضاء (أغمق من كلّ شيء)
-const GLASS_A: [number, number, number, number] = [72, 168, 232, 245]; // زجاج أزرق منبعث — نغمة فاتحة
-const GLASS_B: [number, number, number, number] = [40, 108, 176, 245]; // زجاج أزرق منبعث — نغمة غامقة (تفاوت ألواح)
-const TOWER_ACCENT: [number, number, number, number] = [95, 212, 255, 255]; // حلقة/خطوط مميِّزة منبعثة (هوية)
-const TOWER_RING: [number, number, number, number] = [40, 150, 240, 235]; // حلقات أرضية أزرق متوهّج
+const TOWER_BODY: [number, number, number, number] = [46, 58, 78, 255]; // هيكل فولاذي أزرق-رماديّ مضاء (تظليل 3D · أغمق من الزجاج)
+const GLASS_A: [number, number, number, number] = [110, 210, 245, 255]; // زجاج سماوي فاتح منبعث (نغمة 1)
+const GLASS_B: [number, number, number, number] = [35, 130, 190, 255]; // زجاج أزرق غامق منبعث (نغمة 2)
+const WIN_COOL: [number, number, number, number] = [188, 224, 248, 255]; // نوافذ مضيئة سماوية (حياة)
+const WIN_WARM: [number, number, number, number] = [255, 200, 120, 255]; // نوافذ مضيئة دافئة (تنوّع لوني)
+const TOWER_ACCENT: [number, number, number, number] = [100, 230, 255, 255]; // حلقة/خطوط مميِّزة منبعثة (هوية)
+const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
+const TOWER_SHADOW: [number, number, number, number] = [4, 10, 20, 95]; // ظلّ تماسٍ داكن شفّاف
 
 function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean): SimpleMeshLayer {
   return new SimpleMeshLayer({
@@ -142,11 +146,14 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
   for (const it of items) {
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
     const m = it.meshes;
-    // الحلقات أوّلاً (تحت البرج): مسطّحة منبعثة على الأرض، بارزة على القمر الصناعي.
+    // الترتيب من الأسفل للأعلى: ظلّ التماس → الحلقات → الهيكل (مضاء) → الزجاج/النوافذ/الحلقة المميِّزة (منبعثة).
+    if (it.shadow && it.shadow.positions.length) layers.push(meshLayer(`tower-shadow-${it.id}`, it.shadow, position, TOWER_SHADOW, false));
     if (it.rings && it.rings.positions.length) layers.push(meshLayer(`tower-rings-${it.id}`, it.rings, position, TOWER_RING, false));
-    layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, TOWER_BODY, true)); // الهيكل (مضاء)
+    layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, TOWER_BODY, true)); // الهيكل (مضاء — تظليل 3D)
     if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, GLASS_A, false));
     if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, GLASS_B, false));
+    if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, WIN_COOL, false));
+    if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, WIN_WARM, false));
     if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, TOWER_ACCENT, false));
   }
   return layers;

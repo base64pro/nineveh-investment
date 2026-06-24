@@ -57,7 +57,7 @@ import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKi
 import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
 import { buildModelLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
-import { generateGroundRings, generateTower, type Mesh3, type TowerMeshes } from "../lib/parametric-tower";
+import { generateContactShadow, generateGroundRings, generateTower, type Mesh3, type TowerMeshes } from "../lib/parametric-tower";
 import { useAssumedModels } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -162,10 +162,11 @@ function overlayLayers(): StyleLayer[] {
 
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
 // م9.3ب · إضاءة للنماذج المرفوعة (pbr) كي تظهر فوق الأرضية الداكنة بدل أن تُعتِم — إضاءة محيطة قوية + اتجاهيّتان.
+// إضاءة النماذج: محيط أخفض + شمس أقوى = تظليل اتجاهيّ أوضح (عمق 3D واقعي على الهيكل المضاء).
 const MODEL_LIGHTING = new LightingEffect({
-  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.6 }),
-  sun: new DirectionalLight({ color: [255, 255, 255], intensity: 1.3, direction: [-1, -2, -3] }),
-  fill: new DirectionalLight({ color: [205, 220, 255], intensity: 0.8, direction: [2, 1, -1] }),
+  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.25 }),
+  sun: new DirectionalLight({ color: [255, 252, 240], intensity: 1.7, direction: [-1, -2, -3] }),
+  fill: new DirectionalLight({ color: [200, 218, 255], intensity: 0.65, direction: [2, 1, -1] }),
 });
 
 function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelRefIds: Set<string> = new Set(), towerRefIds: Set<string> = new Set()) {
@@ -613,8 +614,8 @@ export default function InvestmentMap() {
   // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
   const { data: assumedModels = [] } = useAssumedModels();
   const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
-  // م9.7.1ج/هـ · ذاكرة شبكات الأبراج البارامترية + الحلقات الأرضية لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
-  const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3 }>>(new Map());
+  // م9.7.1ج/هـ/و · ذاكرة شبكات الأبراج البارامترية + الحلقات + ظلّ التماس لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
+  const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3; shadow: Mesh3 }>>(new Map());
   useEffect(() => {
     registerModelLoaders();
   }, []);
@@ -946,11 +947,13 @@ export default function InvestmentMap() {
           if (wM < 4 || dM < 4) continue;
           const tower = generateTower(Math.max(8, wM * 0.55), Math.max(8, dM * 0.55)); // ~55% هامش ملاءمة داخل القطعة
           const rings = generateGroundRings(0.5 * Math.min(wM, dM) * 0.9, 4); // حلقات تنبعث من المركز وتملأ القطعة (داخل حدودها)
-          cached = { tower, rings };
+          const sr = 0.5 * Math.min(wM, dM) * 0.72; // نصف قطر ظلّ التماس
+          const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55); // مُزاح عكس اتجاه الشمس (إيهام ظلّ مُلقى)
+          cached = { tower, rings, shadow };
           towerCacheRef.current.set(rid, cached);
         }
         const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
-        towerItems.push({ id: rid, center, meshes: cached.tower, rings: cached.rings });
+        towerItems.push({ id: rid, center, meshes: cached.tower, rings: cached.rings, shadow: cached.shadow });
         towerRefIds.add(rid);
       }
     }
