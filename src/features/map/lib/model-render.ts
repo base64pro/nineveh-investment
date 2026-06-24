@@ -11,6 +11,7 @@ import { GLTFLoader } from "@loaders.gl/gltf";
 import { DracoWorkerLoader } from "@loaders.gl/draco";
 import type { ParcelModel } from "@/features/parcels/models/model-lib";
 import { fillRgba } from "./parcel-colors";
+import type { TowerMeshes } from "./parametric-tower";
 
 let registered = false;
 /** تسجيل محمّلات glTF/Draco مرّة واحدة (عميل فقط). */
@@ -100,6 +101,52 @@ export function buildModelLayers(items: ModelRenderItem[]): Layer[] {
           getOrientation: [0, yaw, 90], // glTF محوره Y → roll 90 لتقويمه في فضاء الخريطة Z
           sizeScale,
           _lighting: "pbr",
+          pickable: false,
+        }),
+      );
+    }
+  }
+  return layers;
+}
+
+// م9.7.1ج · البرج البارامتري: طبقتان لكل برج — الجسم (أزرق غامق، مضاء بالـLightingEffect فيقرأ صلباً ثلاثياً)
+// والنوافذ (سماوية منبعثة `material:false` فتتوهّج كالنوافذ المضيئة). أغمق من الحلقات وفوقها.
+export interface TowerItem {
+  id: string;
+  center: [number, number]; // مركز القطعة (lng,lat)
+  meshes: TowerMeshes;
+}
+const TOWER_BODY: [number, number, number, number] = [12, 52, 96, 255]; // أزرق غامق (أغمق من الحلقات #0E5FB0)
+const TOWER_WIN: [number, number, number, number] = [120, 225, 255, 255]; // نوافذ سماوية منبعثة
+
+export function buildTowerLayers(items: TowerItem[]): Layer[] {
+  const layers: Layer[] = [];
+  for (const it of items) {
+    const position: [number, number, number] = [it.center[0], it.center[1], 0];
+    layers.push(
+      new SimpleMeshLayer({
+        id: `tower-body-${it.id}`,
+        data: [{ position }],
+        mesh: { attributes: { positions: { value: it.meshes.body.positions, size: 3 }, normals: { value: it.meshes.body.normals, size: 3 } } } as never,
+        getPosition: (d: { position: [number, number, number] }) => d.position,
+        getOrientation: [0, 0, 0],
+        sizeScale: 1,
+        getColor: TOWER_BODY,
+        material: true, // مضاء (تظليل ثلاثي واقعي عبر LightingEffect)
+        pickable: false,
+      }),
+    );
+    if (it.meshes.windows.positions.length) {
+      layers.push(
+        new SimpleMeshLayer({
+          id: `tower-win-${it.id}`,
+          data: [{ position }],
+          mesh: { attributes: { positions: { value: it.meshes.windows.positions, size: 3 }, normals: { value: it.meshes.windows.normals, size: 3 } } } as never,
+          getPosition: (d: { position: [number, number, number] }) => d.position,
+          getOrientation: [0, 0, 0],
+          sizeScale: 1,
+          getColor: TOWER_WIN,
+          material: false, // منبعث (نوافذ مضيئة هولوكرامية)
           pickable: false,
         }),
       );

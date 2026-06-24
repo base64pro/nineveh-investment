@@ -56,7 +56,8 @@ import { inferName } from "../lib/spatial-inference";
 import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
-import { buildModelLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh } from "../lib/model-render";
+import { buildModelLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
+import { generateTower, type TowerMeshes } from "../lib/parametric-tower";
 import { useAssumedModels } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -167,7 +168,7 @@ const MODEL_LIGHTING = new LightingEffect({
   fill: new DirectionalLight({ color: [205, 220, 255], intensity: 0.8, direction: [2, 1, -1] }),
 });
 
-function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelRefIds: Set<string> = new Set()) {
+function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelRefIds: Set<string> = new Set(), towerRefIds: Set<string> = new Set()) {
   const stateOf = (f: Feature): string | undefined => (typeof f.properties?.state === "string" ? f.properties.state : undefined);
   const refOf = (f: Feature): string | undefined => (typeof f.properties?.ref_id === "string" ? f.properties.ref_id : undefined);
   const sel = (f: Feature): boolean => selectedId !== null && refOf(f) === selectedId;
@@ -244,8 +245,8 @@ function parcelLayers(fc: FeatureCollection, selectedId: string | null, modelRef
   }
   // م9.3 · كل قطعة مفترضة = كيان ثلاثي ممدود **دائم** يدمج الرسمة بالكتلة بنفس المادة واللون الكثيف —
   // لا يختفي بالنقر خارجه؛ كتلة من حدود القطعة، يُستبدَل بنموذج glb المرفوع لاحقاً (م9.3ب).
-  // القطع التي لها نموذج مرفوع تُستثنى من الكتلة الإجرائية (نموذجها الحقيقي يحلّ محلّها — م9.3ب).
-  const assumedFeats = fc.features.filter((f) => f.properties?.kind === "assumed" && f.geometry && !modelRefIds.has(refOf(f) ?? ""));
+  // القطع التي لها نموذج مرفوع أو برج بارامتري تُستثنى من الكتلة الإجرائية (يحلّ محلّها — م9.3ب/م9.7.1ج).
+  const assumedFeats = fc.features.filter((f) => f.properties?.kind === "assumed" && f.geometry && !modelRefIds.has(refOf(f) ?? "") && !towerRefIds.has(refOf(f) ?? ""));
   if (assumedFeats.length) {
     const [fr, fg, fb] = fillRgba("assumed");
     const [lr, lg, lb] = lineRgba("assumed");
@@ -612,6 +613,8 @@ export default function InvestmentMap() {
   // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
   const { data: assumedModels = [] } = useAssumedModels();
   const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
+  // م9.7.1ج · ذاكرة شبكات الأبراج البارامترية لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
+  const towerCacheRef = useRef<Map<string, TowerMeshes>>(new Map());
   useEffect(() => {
     registerModelLoaders();
   }, []);
@@ -927,7 +930,31 @@ export default function InvestmentMap() {
           })
           .filter(Boolean) as ModelRenderItem[])
       : [];
-    overlayRef.current?.setProps({ layers: vis ? [...parcelLayers(vis, selectedId, refIds), ...buildModelLayers(items)] : [] });
+    // م9.7.1ج · أبراج بارامترية للقطع المفترضة التي لا نموذجَ مرفوع لها — تُولَّد من بصمة القطعة وتُخبّأ بالمعرّف.
+    const towerItems: TowerItem[] = [];
+    const towerRefIds = new Set<string>();
+    if (vis) {
+      for (const f of vis.features) {
+        const rid = typeof f.properties?.ref_id === "string" ? (f.properties.ref_id as string) : null;
+        if (f.properties?.kind !== "assumed" || !rid || refIds.has(rid) || !f.geometry) continue;
+        let meshes = towerCacheRef.current.get(rid);
+        if (!meshes) {
+          const b = bbox(f as Feature) as [number, number, number, number];
+          const clat = (b[1] + b[3]) / 2;
+          const wM = (b[2] - b[0]) * 111320 * Math.cos((clat * Math.PI) / 180); // عرض البصمة بالمتر
+          const dM = (b[3] - b[1]) * 110540; // عمق البصمة بالمتر
+          if (wM < 4 || dM < 4) continue;
+          meshes = generateTower(Math.max(8, wM * 0.55), Math.max(8, dM * 0.55)); // ~55% هامش ملاءمة داخل القطعة
+          towerCacheRef.current.set(rid, meshes);
+        }
+        const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
+        towerItems.push({ id: rid, center, meshes });
+        towerRefIds.add(rid);
+      }
+    }
+    overlayRef.current?.setProps({
+      layers: vis ? [...parcelLayers(vis, selectedId, refIds, towerRefIds), ...buildModelLayers(items), ...buildTowerLayers(towerItems)] : [],
+    });
   }, [fc, selectedId, assumedModels, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
