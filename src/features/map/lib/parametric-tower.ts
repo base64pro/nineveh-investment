@@ -408,17 +408,26 @@ export function generateMall(w: number, d: number): TowerMeshes {
   };
 }
 
-// م9.7.2 · فندق 5 نجوم: بوديوم فخم بزجاج لوبي وبورت-كوشير + برج نزلاء أنيق (إيقاع نوافذ/شرفات) + سكاي لاونج متوهّج وتتويج.
+// نخلة: جذع نحيل عالٍ + تاج مخروطيّ منخفض (طابع منتجع).
+function palm(trunk: Buf, crown: Buf, cx: number, cy: number, h: number): void {
+  cylinder(trunk, cx, cy, h * 0.035, 0, h * 0.78, 6);
+  cone(crown, cx, cy, h * 0.26, h * 0.62, h, 7);
+}
+
+// م9.7.8 · فندق 5 نجوم متمايز (منتجع): بوديوم فخم 3 مستويات + برج نزلاء **شريحيّ عريض** (يختلف عن البرج المربّع)
+// + بورت-كوشير + **مرافق منتجع**: مسبح + ديك + حدائق + نخيل + ساحة استقبال.
 export function generateHotel(w: number, d: number): TowerMeshes {
   const w2 = w / 2;
   const d2 = d / 2;
   const ref = Math.max(w, d);
-  const podiumH = 9.0; // بوديوم مستويان فخمان
-  const towerTop = Math.max(30, Math.min(58, ref * 3.0)); // مقياس واقعيّ
-  const tw = w * 0.62;
-  const td = d * 0.62;
+  const podiumH = 11.0; // بوديوم 3 مستويات فخم
+  const towerTop = Math.max(34, Math.min(66, ref * 2.7));
+  const tw = w * 0.92; // شريحة عريضة
+  const td = d * 0.4; // رفيعة العمق (سلويت فندقيّ مميّز)
   const tw2 = tw / 2;
   const td2 = td / 2;
+  const sx = w2 * 1.35; // نصف امتداد الموقع
+  const sy = d2 * 1.55;
   const body = buf();
   const gA = buf();
   const gB = buf();
@@ -426,17 +435,18 @@ export function generateHotel(w: number, d: number): TowerMeshes {
   const winW = buf();
   const accent = buf();
 
-  // بوديوم فخم
-  box(body, -w2 * 1.12, w2 * 1.12, -d2 * 1.12, d2 * 1.12, 0, 1.0);
-  box(body, -w2, w2, -d2, d2, 1.0, podiumH);
-  box(gA, -w2 - 0.04, w2 + 0.04, -d2 - 0.04, d2 + 0.04, 1.6, podiumH - 1.2, { top: false, bottom: false }); // زجاج اللوبي
-  box(accent, -w2 - 0.06, w2 + 0.06, -d2 - 0.06, d2 + 0.06, podiumH - 0.5, podiumH, { top: false, bottom: false }); // حزام علوي
+  // — بوديوم فخم —
+  box(body, -w2 * 1.12, w2 * 1.12, -d2 * 1.12, d2 * 1.12, 0, 1.2);
+  box(body, -w2, w2, -d2, d2, 1.2, podiumH);
+  box(gA, -w2 - 0.05, w2 + 0.05, -d2 - 0.05, d2 + 0.05, 1.8, podiumH - 1.4, { top: false, bottom: false }); // زجاج اللوبي
+  box(accent, -w2 - 0.08, w2 + 0.08, -d2 - 0.08, d2 + 0.08, podiumH - 0.6, podiumH, { top: false, bottom: false }); // حزام علويّ ذهبيّ
   // بورت-كوشير (مظلّة مدخل بأعمدة على -y)
-  box(accent, -w * 0.26, w * 0.26, -d2 - 5.0, -d2 + 0.2, 3.4, 3.9, { top: false, bottom: false });
-  box(body, -w * 0.24, -w * 0.21, -d2 - 4.7, -d2 - 4.4, 0, 3.4);
-  box(body, w * 0.21, w * 0.24, -d2 - 4.7, -d2 - 4.4, 0, 3.4);
-  // برج النزلاء (إيقاع نوافذ/شرفات أنيق) عبر buildFace
-  box(body, -tw2, tw2, -td2, td2, podiumH, towerTop); // نواة البرج
+  box(accent, -w * 0.28, w * 0.28, -d2 - 6.0, -d2 + 0.2, 3.8, 4.4, { top: false, bottom: false });
+  box(body, -w * 0.26, -w * 0.22, -d2 - 5.6, -d2 - 5.0, 0, 3.8);
+  box(body, w * 0.22, w * 0.26, -d2 - 5.6, -d2 - 5.0, 0, 3.8);
+
+  // — برج النزلاء الشريحيّ (إيقاع نوافذ/شُرفات) —
+  box(body, -tw2, tw2, -td2, td2, podiumH, towerTop);
   const place = (fb: FaceBufs, deg: number): void => {
     rotateAppend(fb.body, body, deg);
     rotateAppend(fb.gA, gA, deg);
@@ -452,11 +462,44 @@ export function generateHotel(w: number, d: number): TowerMeshes {
   place(f, 180);
   place(s, 90);
   place(s, 270);
-  // تتويج: سكاي لاونج زجاجيّ + حلقة متوهّجة + بارابيت
-  box(gA, -tw2 - 0.06, tw2 + 0.06, -td2 - 0.06, td2 + 0.06, towerTop - 3.0, towerTop - 0.5, { top: false, bottom: false });
-  box(accent, -tw2 - 0.2, tw2 + 0.2, -td2 - 0.2, td2 + 0.2, towerTop - 0.6, towerTop + 0.1, { top: false, bottom: false });
-  box(body, -tw2 - 0.1, tw2 + 0.1, -td2 - 0.1, td2 + 0.1, towerTop + 0.1, towerTop + 0.8);
-  return { body: freeze(body), glassA: freeze(gA), glassB: freeze(gB), winCool: freeze(winC), winWarm: freeze(winW), accent: freeze(accent), height: towerTop + 0.8 };
+  // — تتويج: سكاي لاونج زجاجيّ + حلقة ذهبيّة + بارابيت —
+  box(gA, -tw2 - 0.06, tw2 + 0.06, -td2 - 0.06, td2 + 0.06, towerTop - 3.2, towerTop - 0.6, { top: false, bottom: false });
+  box(accent, -tw2 - 0.22, tw2 + 0.22, -td2 - 0.22, td2 + 0.22, towerTop - 0.7, towerTop + 0.1, { top: false, bottom: false });
+  box(body, -tw2 - 0.1, tw2 + 0.1, -td2 - 0.1, td2 + 0.1, towerTop + 0.1, towerTop + 0.9);
+
+  // — مرافق المنتجع (extras): ساحة + مسبح + حدائق + نخيل —
+  const deck = buf();
+  flatRect(deck, -w * 0.34, w * 0.34, -sy, -d2 - 1.5, 0.05); // ديك المسبح/الساحة الأماميّة
+  const pool = buf();
+  flatRect(pool, -w * 0.24, w * 0.24, -sy + 1.5, -d2 - 3.5, 0.12); // ماء المسبح
+  const lawn = buf();
+  flatRect(lawn, -sx, -w2 - 2, -sy, sy); // حديقة يسار
+  flatRect(lawn, w2 + 2, sx, -sy, sy); // حديقة يمين
+  const trunk = buf();
+  const crown = buf();
+  for (let i = 0; i < 10; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const px = side * (w2 + 2 + (sx - w2 - 2) * (0.25 + 0.55 * hash2(i + 1, 9)));
+    const py = -sy + 4 + (2 * sy - 8) * hash2(i + 2, 4);
+    palm(trunk, crown, px, py, 11);
+  }
+
+  return {
+    body: freeze(body),
+    glassA: freeze(gA),
+    glassB: freeze(gB),
+    winCool: freeze(winC),
+    winWarm: freeze(winW),
+    accent: freeze(accent),
+    extras: [
+      { mesh: freeze(deck), color: [186, 182, 174, 255], lit: true }, // ديك/ساحة
+      { mesh: freeze(lawn), color: [66, 116, 60, 255], lit: true }, // حدائق
+      { mesh: freeze(trunk), color: [120, 92, 60, 255], lit: true }, // جذوع النخيل
+      { mesh: freeze(crown), color: [54, 120, 58, 255], lit: true }, // تيجان النخيل
+      { mesh: freeze(pool), color: [46, 140, 200, 235], lit: false }, // ماء المسبح (متوهّج خفيف)
+    ],
+    height: towerTop + 0.9,
+  };
 }
 
 export type ModelKind = "tower" | "mall" | "hotel";
