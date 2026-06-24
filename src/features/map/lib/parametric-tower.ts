@@ -224,13 +224,13 @@ function buildMallFace(faceW: number, perpHalf: number, levels: number, lh: numb
 
 // م9.7.2 · مول تجاريّ منخفض واقعيّ: كتلة صلبة عريضة + ستورفرونت مجزّأ + أحزمة لافتات + مدخل أتريوم بمظلّة + سكايلايت + ميكانيكا.
 export function generateMall(w: number, d: number): TowerMeshes {
-  w = Math.min(w, 64); // سقف حجم واقعيّ (منخفض عريض لا عملاق)
-  d = Math.min(d, 52);
+  w = Math.min(w, 150); // المول يملأ القطعة (بصمة عريضة) لكنه منخفض — لا عملاق ارتفاعاً
+  d = Math.min(d, 130);
   const w2 = w / 2;
   const d2 = d / 2;
-  const LH = 4.6;
-  const LEVELS = 3;
-  const baseH = LEVELS * LH; // ~13.8م
+  const LH = 5.0;
+  const LEVELS = 4;
+  const baseH = LEVELS * LH; // ~20م (منخفض عريض)
   const body = buf();
   const gA = buf();
   const gB = buf();

@@ -170,7 +170,9 @@ const MODEL_LIGHTING = new LightingEffect({
 });
 
 // م9.7.2 (مؤقّت) · نوع النموذج لكل قطعة مفترضة من اسمها — يُستبدل لاحقاً باختيار المدير من المنسدلة (م9.7.1ب/د).
+const FORCE_KIND: ModelKind | null = null; // (للتحقّق فقط: اضبطه "mall"/"hotel"/"tower" لفرض النوع على كلّ القطع)
 function tempKindFor(nameAr: string): ModelKind {
+  if (FORCE_KIND) return FORCE_KIND;
   const n = nameAr || "";
   if (/مول|موول|mall|تسوّق/i.test(n)) return "mall";
   if (/فندق|hotel|نجوم/i.test(n)) return "hotel";
