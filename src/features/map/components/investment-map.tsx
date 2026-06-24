@@ -973,7 +973,7 @@ export default function InvestmentMap() {
           const cellWm = wM / cols;
           const cellDm = dM / rows;
           const tower = generateModel(kind, Math.max(8, cellWm * fmul), Math.max(8, cellDm * fmul));
-          const bMin = Math.min(cellWm, cellDm) * fmul; // بصمة المبنى الصغرى — الحلقات/الظلّ تحت قاعدته مباشرة (طلب المستخدم)
+          const bMin = Math.min(cellWm, cellDm) * fmul; // بصمة المبنى الصغرى — الحلقات/الظلّ تحت قاعدته (طلب المستخدم)
           const rings = generateGroundRings(bMin * 0.46, 4);
           const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);

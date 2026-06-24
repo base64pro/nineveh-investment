@@ -114,7 +114,8 @@ export function buildModelLayers(items: ModelRenderItem[]): Layer[] {
 export interface TowerItem {
   id: string;
   center: [number, number]; // مركز القطعة (lng,lat)
-  meshes: TowerMeshes;
+  meshes?: TowerMeshes; // النموذج الإجرائيّ (احتياطيّ)
+  glb?: { url: string; sizeScale: number; yaw: number; elevationM?: number }; // م9.7.5 · نموذج واقعيّ glb (يُفضَّل)
   kind?: ModelKind; // م9.7.2 · نوع النموذج (لاختيار لوحة الألوان)
   rings?: Mesh3; // م9.7.1هـ · حلقات أرضية متوهّجة تملأ القطعة (تحت البرج)
   shadow?: Mesh3; // م9.7.1و+ · ظلّ تماسٍ أرضيّ مُخبوز (أسفل كلّ شيء)
@@ -137,6 +138,14 @@ const PALETTES: Record<ModelKind, Palette> = {
 const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
 const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
 
+// م9.7.5 · مكتبة النماذج الواقعية حسب النوع (glb احترافيّة CC0 في public/models) — تحلّ محلّ الإجرائيّ.
+// footprint = أكبر بُعد أفقيّ (glTF X/Z) · height = بُعد Y — لحساب مقياس الملاءمة في الخريطة.
+export const TYPE_MODELS: Record<ModelKind, { url: string; footprint: number; height: number }> = {
+  tower: { url: "/models/tower.glb", footprint: 1.39, height: 5.47 },
+  mall: { url: "/models/mall.glb", footprint: 2.08, height: 1.69 },
+  hotel: { url: "/models/hotel.glb", footprint: 1.24, height: 3.15 },
+};
+
 function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean): SimpleMeshLayer {
   return new SimpleMeshLayer({
     id,
@@ -155,21 +164,37 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
   const layers: Layer[] = [];
   for (const it of items) {
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
-    const m = it.meshes;
-    const pal = PALETTES[it.kind ?? "tower"];
-    // الترتيب من الأسفل للأعلى: ظلّ التماس → الحلقات → الهيكل (مضاء) → الزجاج/النوافذ/الحلقة المميِّزة (منبعثة).
+    // الترتيب من الأسفل للأعلى: ظلّ التماس → الحلقات → المجسّم.
     if (it.shadow && it.shadow.positions.length) layers.push(meshLayer(`tower-shadow-${it.id}`, it.shadow, position, TOWER_SHADOW, false));
     if (it.rings && it.rings.positions.length) layers.push(meshLayer(`tower-rings-${it.id}`, it.rings, position, TOWER_RING, false));
-    layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true)); // الهيكل (مضاء — تظليل 3D)
-    if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, false));
-    if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, false));
-    if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false));
-    if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false));
-    if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false));
-    // م9.7.3 · المرافق والملحقات (باركات/حدائق/أشجار/قبّة...) — كلٌّ بلونه وخامته
-    (m.extras ?? []).forEach((ex, i) => {
-      if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit));
-    });
+    if (it.glb) {
+      // م9.7.5 · نموذج واقعيّ glb (PBR) محلّ الإجرائيّ — glTF محوره Y → roll 90 لتقويمه في Z
+      layers.push(
+        new ScenegraphLayer({
+          id: `tower-glb-${it.id}`,
+          data: [{ position: [it.center[0], it.center[1], it.glb.elevationM ?? 0] as [number, number, number] }],
+          scenegraph: it.glb.url,
+          loaders: [GLTFLoader],
+          getPosition: (d: { position: [number, number, number] }) => d.position,
+          getOrientation: [0, it.glb.yaw, 90],
+          sizeScale: it.glb.sizeScale,
+          _lighting: "pbr",
+          pickable: false,
+        }),
+      );
+    } else if (it.meshes) {
+      const m = it.meshes;
+      const pal = PALETTES[it.kind ?? "tower"];
+      layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true));
+      if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, false));
+      if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, false));
+      if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false));
+      if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false));
+      if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false));
+      (m.extras ?? []).forEach((ex, i) => {
+        if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit));
+      });
+    }
   }
   return layers;
 }
