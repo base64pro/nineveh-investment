@@ -7,6 +7,12 @@ export interface Mesh3 {
   positions: Float32Array;
   normals: Float32Array;
 }
+// م9.7.3 · «ملحق» = شبكة مرفق/عنصر إضافي بلونه وخامته (باركات/حدائق/أشجار/قبّة...) — تُرسَم بطبقة مستقلّة.
+export interface Extra {
+  mesh: Mesh3;
+  color: [number, number, number, number];
+  lit: boolean; // مضاء (تظليل) أو منبعث (توهّج)
+}
 export interface TowerMeshes {
   body: Mesh3; // الهيكل (مضاء) — بوديوم/أعمدة/شُرفات/بارابيت/بنتهاوس
   glassA: Mesh3; // زجاج سماوي فاتح منبعث (نغمة 1)
@@ -14,6 +20,7 @@ export interface TowerMeshes {
   winCool: Mesh3; // نوافذ مضيئة سماوية متناثرة (حياة)
   winWarm: Mesh3; // نوافذ مضيئة دافئة قليلة (تنوّع لوني)
   accent: Mesh3; // حلقة/خطوط مميِّزة منبعثة (هوية)
+  extras?: Extra[]; // م9.7.3 · مرافق وملحقات (لكلّ نوع) — باركات/حدائق/أشجار/قبّة/ساحة...
   height: number;
 }
 
@@ -52,6 +59,79 @@ function box(b: Buf, x0: number, x1: number, y0: number, y1: number, z0: number,
 function hash2(i: number, j: number): number {
   const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
   return s - Math.floor(s);
+}
+
+// م9.7.3 · مكوّنات منحنية/مرافق — رباعيّ بنواظم لكلّ رأس (سطح ناعم).
+function pushQuadVN(b: Buf, v: number[][], n: number[][]): void {
+  for (const i of [0, 1, 2, 0, 2, 3]) {
+    b.P.push(v[i]![0]!, v[i]![1]!, v[i]![2]!);
+    b.N.push(n[i]![0]!, n[i]![1]!, n[i]![2]!);
+  }
+}
+/** أسطوانة رأسية ناعمة (نواظم شعاعيّة) — جذوع/أعمدة/سواري. */
+function cylinder(b: Buf, cx: number, cy: number, r: number, z0: number, z1: number, seg = 9): void {
+  for (let s = 0; s < seg; s++) {
+    const a0 = (s / seg) * Math.PI * 2;
+    const a1 = ((s + 1) / seg) * Math.PI * 2;
+    const c0 = Math.cos(a0);
+    const s0 = Math.sin(a0);
+    const c1 = Math.cos(a1);
+    const s1 = Math.sin(a1);
+    pushQuadVN(
+      b,
+      [[cx + r * c0, cy + r * s0, z0], [cx + r * c1, cy + r * s1, z0], [cx + r * c1, cy + r * s1, z1], [cx + r * c0, cy + r * s0, z1]],
+      [[c0, s0, 0], [c1, s1, 0], [c1, s1, 0], [c0, s0, 0]],
+    );
+  }
+}
+/** مخروط (تاج شجرة). */
+function cone(b: Buf, cx: number, cy: number, r: number, z0: number, z1: number, seg = 8): void {
+  for (let s = 0; s < seg; s++) {
+    const a0 = (s / seg) * Math.PI * 2;
+    const a1 = ((s + 1) / seg) * Math.PI * 2;
+    const c0 = Math.cos(a0);
+    const s0 = Math.sin(a0);
+    const c1 = Math.cos(a1);
+    const s1 = Math.sin(a1);
+    b.P.push(cx + r * c0, cy + r * s0, z0, cx + r * c1, cy + r * s1, z0, cx, cy, z1);
+    for (let k = 0; k < 3; k++) b.N.push((c0 + c1) * 0.4, (s0 + s1) * 0.4, 0.5);
+  }
+}
+/** شجرة (جذع + تاجان مخروطيّان) في خانتي الخامة الممرَّرتين. */
+function tree(trunk: Buf, crown: Buf, cx: number, cy: number, h: number): void {
+  cylinder(trunk, cx, cy, h * 0.06, 0, h * 0.42, 6);
+  cone(crown, cx, cy, h * 0.32, h * 0.34, h * 0.82, 8);
+  cone(crown, cx, cy, h * 0.24, h * 0.66, h, 8);
+}
+/** قبو زجاجيّ (أتريوم) — قوس ممدّد على X بنُعومة شعاعيّة. */
+function barrelVault(b: Buf, cx: number, cy: number, lenX: number, halfW: number, baseZ: number, riseH: number, segs = 16): void {
+  const x0 = cx - lenX / 2;
+  const x1 = cx + lenX / 2;
+  const pt = (t: number) => {
+    const th = Math.PI * t;
+    return { y: cy + halfW * Math.cos(th), z: baseZ + riseH * Math.sin(th), ny: Math.cos(th), nz: Math.sin(th) };
+  };
+  for (let i = 0; i < segs; i++) {
+    const A = pt(i / segs);
+    const B = pt((i + 1) / segs);
+    pushQuadVN(b, [[x0, A.y, A.z], [x1, A.y, A.z], [x1, B.y, B.z], [x0, B.y, B.z]], [[0, A.ny, A.nz], [0, A.ny, A.nz], [0, B.ny, B.nz], [0, B.ny, B.nz]]);
+  }
+}
+/** موقف سيّارات: بلاطات أفقيّة بصفوف وممرّات ضمن مستطيل. */
+function parkingLot(b: Buf, x0: number, x1: number, y0: number, y1: number): void {
+  const stallW = 2.7;
+  const stallL = 5.0;
+  const aisle = 6.0;
+  const z = 0.06;
+  for (let y = y0; y + stallL <= y1; y += stallL + aisle) {
+    for (let x = x0; x + stallW <= x1; x += stallW) {
+      pushQuad(b, [x + 0.12, y + 0.12, z], [x + stallW - 0.12, y + 0.12, z], [x + stallW - 0.12, y + stallL - 0.2, z], [x + 0.12, y + stallL - 0.2, z], [0, 0, 1]);
+    }
+  }
+}
+/** رقعة مستلقية (عشب/ساحة). */
+function flatRect(b: Buf, x0: number, x1: number, y0: number, y1: number, z = 0.04): void {
+  pushQuad(b, [x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z], [0, 0, 1]);
 }
 
 // يلحق محتوى محليّ (واجهة عند y=-perpHalf) بعد تدويره حول Z إلى أحد الأوجه الأربعة.
@@ -222,15 +302,16 @@ function buildMallFace(faceW: number, perpHalf: number, levels: number, lh: numb
   }
 }
 
-// م9.7.2 · مول تجاريّ منخفض واقعيّ: كتلة صلبة عريضة + ستورفرونت مجزّأ + أحزمة لافتات + مدخل أتريوم بمظلّة + سكايلايت + ميكانيكا.
+// م9.7.3 · مول واقعيّ متمايز: كتلة منخفضة عريضة + ستورفرونت + أحزمة لافتات + **قبو زجاجيّ (أتريوم) متوهّج**
+// + مرافق حول المبنى ضمن القطعة: **باركات + حدائق + أشجار**. (w,d = بصمة المبنى؛ المرافق تمتدّ حولها.)
 export function generateMall(w: number, d: number): TowerMeshes {
-  w = Math.min(w, 150); // المول يملأ القطعة (بصمة عريضة) لكنه منخفض — لا عملاق ارتفاعاً
-  d = Math.min(d, 130);
+  w = Math.min(w, 115); // بصمة مبنى المول (منخفض عريض)
+  d = Math.min(d, 95);
   const w2 = w / 2;
   const d2 = d / 2;
   const LH = 5.0;
-  const LEVELS = 4;
-  const baseH = LEVELS * LH; // ~20م (منخفض عريض)
+  const LEVELS = 3;
+  const baseH = LEVELS * LH; // ~15م
   const body = buf();
   const gA = buf();
   const gB = buf();
@@ -241,7 +322,6 @@ export function generateMall(w: number, d: number): TowerMeshes {
   box(body, -w2 * 1.03, w2 * 1.03, -d2 * 1.03, d2 * 1.03, 0, 0.9); // قاعدة
   box(body, -w2, w2, -d2, d2, 0.9, baseH); // الكتلة الصلبة الرئيسة
 
-  // الواجهات الأربع (دعامات + ستورفرونت + نوافذ مثقوبة)
   const place = (fb: FaceBufs, deg: number): void => {
     rotateAppend(fb.body, body, deg);
     rotateAppend(fb.gA, gA, deg);
@@ -258,24 +338,52 @@ export function generateMall(w: number, d: number): TowerMeshes {
   place(ls, 90);
   place(ls, 270);
 
-  // أحزمة لافتات متوهّجة محيطيّة عند خطوط المستويات
   for (let L = 1; L < LEVELS; L++) {
     const z = 0.9 + L * LH;
-    box(accent, -w2 - 0.08, w2 + 0.08, -d2 - 0.08, d2 + 0.08, z - 0.3, z + 0.02, { top: false, bottom: false });
+    box(accent, -w2 - 0.08, w2 + 0.08, -d2 - 0.08, d2 + 0.08, z - 0.3, z + 0.02, { top: false, bottom: false }); // أحزمة لافتات
   }
-  // مدخل أتريوم زجاجيّ بارز + إطار + مظلّة متوهّجة (على -y)
+  // مدخل + مظلّة متوهّجة (على -y)
   const ew = w * 0.16;
   box(gA, -ew, ew, -d2 - 3.4, -d2 + 0.2, 0.9, baseH * 0.86, { bottom: false });
-  box(body, -ew - 0.35, -ew, -d2 - 3.6, -d2, 0, baseH * 0.88);
-  box(body, ew, ew + 0.35, -d2 - 3.6, -d2, 0, baseH * 0.88);
   box(accent, -ew - 0.45, ew + 0.45, -d2 - 3.8, -d2, baseH * 0.5, baseH * 0.55, { top: false, bottom: false });
-  // سطح: بارابيت + سكايلايت زجاجيّ مركزيّ بإطار متوهّج + وحدات ميكانيكا
-  box(body, -w2 - 0.12, w2 + 0.12, -d2 - 0.12, d2 + 0.12, baseH, baseH + 1.0);
-  box(gA, -w * 0.14, w * 0.14, -d * 0.16, d * 0.16, baseH + 1.0, baseH + 3.2);
-  box(accent, -w * 0.15, w * 0.15, -d * 0.17, d * 0.17, baseH + 3.0, baseH + 3.3, { top: false, bottom: false });
-  box(body, w * 0.24, w * 0.4, d * 0.18, d * 0.36, baseH, baseH + 2.0);
-  box(body, -w * 0.38, -w * 0.24, -d * 0.34, -d * 0.18, baseH, baseH + 1.6);
-  return { body: freeze(body), glassA: freeze(gA), glassB: freeze(gB), winCool: freeze(winC), winWarm: freeze(winW), accent: freeze(accent), height: baseH + 3.3 };
+  box(body, -w2 - 0.12, w2 + 0.12, -d2 - 0.12, d2 + 0.12, baseH, baseH + 0.8); // بارابيت
+
+  // — المرافق (extras): قبو زجاجيّ + باركات + حدائق + أشجار حول المبنى —
+  const sx = w2 * 1.7; // نصف امتداد الموقع
+  const sy = d2 * 1.7;
+  const dome = buf();
+  barrelVault(dome, 0, 0, w * 0.5, d * 0.2, baseH + 0.4, 7.5, 18); // أتريوم مركزيّ
+  const parking = buf();
+  parkingLot(parking, -w2 * 0.96, w2 * 0.96, -sy, -d2 - 4); // باركات أمام
+  parkingLot(parking, -w2 * 0.96, w2 * 0.96, d2 + 4, sy); // باركات خلف
+  const lawn = buf();
+  flatRect(lawn, -sx, -w2 - 3, -sy, sy); // حديقة يسار
+  flatRect(lawn, w2 + 3, sx, -sy, sy); // حديقة يمين
+  const trunk = buf();
+  const crown = buf();
+  for (let i = 0; i < 12; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const tx = side * (w2 + 3 + (sx - w2 - 3) * (0.2 + 0.6 * hash2(i + 1, 3)));
+    const ty = -sy + 5 + (2 * sy - 10) * hash2(i + 2, 7);
+    tree(trunk, crown, tx, ty, 9);
+  }
+
+  return {
+    body: freeze(body),
+    glassA: freeze(gA),
+    glassB: freeze(gB),
+    winCool: freeze(winC),
+    winWarm: freeze(winW),
+    accent: freeze(accent),
+    extras: [
+      { mesh: freeze(parking), color: [62, 66, 76, 255], lit: true }, // أسفلت
+      { mesh: freeze(lawn), color: [66, 116, 60, 255], lit: true }, // عشب
+      { mesh: freeze(trunk), color: [98, 74, 52, 255], lit: true },
+      { mesh: freeze(crown), color: [52, 110, 56, 255], lit: true },
+      { mesh: freeze(dome), color: [150, 225, 255, 235], lit: false }, // أتريوم متوهّج
+    ],
+    height: baseH + 8,
+  };
 }
 
 // م9.7.2 · فندق 5 نجوم: بوديوم فخم بزجاج لوبي وبورت-كوشير + برج نزلاء أنيق (إيقاع نوافذ/شرفات) + سكاي لاونج متوهّج وتتويج.

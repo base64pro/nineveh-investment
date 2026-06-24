@@ -166,6 +166,10 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
     if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false));
     if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false));
     if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false));
+    // م9.7.3 · المرافق والملحقات (باركات/حدائق/أشجار/قبّة...) — كلٌّ بلونه وخامته
+    (m.extras ?? []).forEach((ex, i) => {
+      if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit));
+    });
   }
   return layers;
 }

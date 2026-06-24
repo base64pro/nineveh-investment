@@ -966,13 +966,13 @@ export default function InvestmentMap() {
         const cacheKey = `${rid}|${kind}|${count}|${distribution}`;
         let cached = towerCacheRef.current.get(cacheKey);
         if (!cached) {
-          const fmul = kind === "mall" ? 0.78 : kind === "hotel" ? 0.6 : 0.5;
+          const fmul = kind === "mall" ? 0.5 : kind === "hotel" ? 0.6 : 0.5; // بصمة المبنى (المول يُحيط نفسه بمرافق)
           const cellWm = wM / cols;
           const cellDm = dM / rows;
           const tower = generateModel(kind, Math.max(8, cellWm * fmul), Math.max(8, cellDm * fmul));
-          const ringR = 0.5 * Math.min(cellWm, cellDm) * (kind === "mall" ? 0.96 : 0.9);
-          const rings = generateGroundRings(ringR, 4);
-          const sr = 0.5 * Math.min(cellWm, cellDm) * (kind === "mall" ? 0.84 : 0.72);
+          const bMin = Math.min(cellWm, cellDm) * fmul; // بصمة المبنى الصغرى — الحلقات/الظلّ تحت قاعدته مباشرة (طلب المستخدم)
+          const rings = generateGroundRings(bMin * 0.46, 4);
+          const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
           cached = { tower, rings, shadow, kind };
           towerCacheRef.current.set(cacheKey, cached);
