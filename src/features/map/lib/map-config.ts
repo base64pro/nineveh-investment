@@ -15,7 +15,7 @@ const BASE_STYLE_IDS: Record<BaseStyle, string> = {
   satellite: "hybrid",
 };
 
-export const DEFAULT_BASE: BaseStyle = "dark";
+export const DEFAULT_BASE: BaseStyle = "satellite"; // م9.7 · القمر الصناعي هو الوضع الافتراضي (تبرز عليه الكيانات الزرقاء)
 
 export function styleUrl(base: BaseStyle): string {
   return `/api/maptiler/maps/${BASE_STYLE_IDS[base]}/style.json`;

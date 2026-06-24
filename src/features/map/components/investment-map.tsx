@@ -1457,7 +1457,9 @@ export default function InvestmentMap() {
     const PING_Z_OUT = 8.5; // م8.8.2 · عند هذا الزوم وأدنى (عرض المحافظة) → أصغر حجم (القطع متقاربة)
     const PING_Z_IN = 12.5; // م8.8.2 · عند هذا الزوم وأعلى (~5كم فأقرب) → الحجم الكامل (القطع متباعدة)
     const PING_S_MIN = 0.4; // م8.8.2 · أصغر معامل حجم عند أقصى إبعاد
-    const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#22C3F3" };
+    // م9.7 · حلقة المفترضة بأزرق غامق من نفس العائلة (تبرز بوضوح على القمر الصناعي)
+    const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#0E5FB0" };
+    const PING_S_MAX_EXTRA = 2.0; // م9.7 · أقصى توسيع إضافي للقطر عند التقرّب الشديد من القطعة
     let raf = 0;
     // مرور واحد على القطع: نبضات الموقع (كل مستويات الزوم) + تسميات الدبابيس (عند الاقتراب op>0) — تفادياً لمرورين.
     const compute = (): void => {
@@ -1501,8 +1503,12 @@ export default function InvestmentMap() {
       setPinPings(pings.slice(0, PING_CAP).map((r) => ({ x: r.x, y: r.y, key: r.key, color: r.color })));
       // م8.8.2 · حجم النبضة مرن مع الزوم: الحجم الكامل عند التقريب (تتباعد القطع فلا تتداخل الحلقات)،
       // ويصغر تدريجياً عند الإبعاد (زوم-آوت) حيث تتقارب القطع — لعرض أنيق بلا تداخل. (smoothstep بين عتبتَي الزوم.)
-      const zt = Math.max(0, Math.min(1, (mm.getZoom() - PING_Z_OUT) / (PING_Z_IN - PING_Z_OUT)));
-      const ps = +(PING_S_MIN + (1 - PING_S_MIN) * (zt * zt * (3 - 2 * zt))).toFixed(3);
+      const z = mm.getZoom();
+      const zt = Math.max(0, Math.min(1, (z - PING_Z_OUT) / (PING_Z_IN - PING_Z_OUT)));
+      let psv = PING_S_MIN + (1 - PING_S_MIN) * (zt * zt * (3 - 2 * zt)); // 0.4→1 على z8.5→12.5
+      // م9.7 · توسيع المدى/القطر عند التقرّب الشديد بآخر درجات الزوم: نموّ مستمرّ فوق z12.5 (حتى ~3×)
+      if (z > PING_Z_IN) psv += Math.min(PING_S_MAX_EXTRA, (z - PING_Z_IN) * 0.55);
+      const ps = +psv.toFixed(3);
       setPingScale((prev) => (prev === ps ? prev : ps));
       // م8.12.1 · ميل الحلقات لتنبسط على الأرض في 3D: rotateX = ميل الكاميرا الحالي (الحلقات دوائر فالاتجاه/البيرنغ لا يؤثّر)،
       // وperspective ≈ مسافة الكاميرا بالبكسل ((0.5/tan(fov/2))·الارتفاع) فيطابق منظور الخريطة — يتحدّث حيّاً مع easeTo الميل.

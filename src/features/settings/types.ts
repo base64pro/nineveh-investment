@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "dark",
   density: "comfortable",
   font_scale: "md",
-  default_base: "dark",
+  default_base: "satellite", // م9.7 · القمر الصناعي افتراضياً (تبرز عليه الكيانات الزرقاء)
   start_layers: { boundaries: true, parcels: true },
   web_search_enabled: false,
   ai_model: "claude-opus-4-8",
