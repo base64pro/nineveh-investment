@@ -127,7 +127,7 @@ export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
   const w2 = w / 2;
   const d2 = d / 2;
   const ref = Math.max(w, d);
-  const totalH = Math.max(24, Math.min(62, ref * 3.0)); // مقياس واقعيّ يلائم الأبنية المحيطة
+  const totalH = Math.max(64, Math.min(150, ref * 5.5)); // برج كبير بطوابق كثيرة (نحيف مرتفع) — لائق بمعلَم استثماريّ
   const shaftTop = totalH - ROOF_H;
   const shaftZ0 = PODIUM_H;
   const setZ = shaftZ0 + (shaftTop - shaftZ0) * 0.7; // ارتفاع النكسة (الطابق العلوي أضيق)
@@ -195,6 +195,146 @@ export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
     accent: freeze(accent),
     height: totalH,
   };
+}
+
+// واجهة مول: دعامات صلبة (body) + ستورفرونت زجاجيّ أرضيّ مجزّأ + نوافذ مثقوبة علويّة (لا زجاج كاسح) + بعض الواجهات المضيئة.
+function buildMallFace(faceW: number, perpHalf: number, levels: number, lh: number, baseH: number, b: FaceBufs): void {
+  const W2 = faceW / 2;
+  const fy = -perpHalf;
+  const cols = Math.max(3, Math.round(faceW / 7));
+  const cell = faceW / cols;
+  // دعامات عموديّة صلبة على خطوط الأعمدة (تكسر الزجاج فلا يبدو صندوقاً)
+  for (let c = 0; c <= cols; c++) {
+    const x = -W2 + c * cell;
+    box(b.body, x - 0.3, x + 0.3, fy - 0.14, fy + 0.02, 0.9, baseH, { top: false, bottom: false });
+  }
+  for (let c = 0; c < cols; c++) {
+    const cx = -W2 + (c + 0.5) * cell;
+    // ستورفرونت زجاجيّ أرضيّ بين الدعامات
+    pushQuad(b.gA, [cx - cell * 0.38, fy - 0.05, 1.1], [cx + cell * 0.38, fy - 0.05, 1.1], [cx + cell * 0.38, fy - 0.05, 0.9 + lh - 0.7], [cx - cell * 0.38, fy - 0.05, 0.9 + lh - 0.7], [0, -1, 0]);
+    if (hash2(c + 1, Math.round(perpHalf)) < 0.45) pushQuad(b.winW, [cx - cell * 0.3, fy - 0.07, 1.5], [cx + cell * 0.3, fy - 0.07, 1.5], [cx + cell * 0.3, fy - 0.07, 0.9 + lh - 1.1], [cx - cell * 0.3, fy - 0.07, 0.9 + lh - 1.1], [0, -1, 0]); // فاترينة مضيئة
+    // نوافذ مثقوبة علويّة (لكل مستوى) — زجاج محدود لا كاسح
+    for (let L = 1; L < levels; L++) {
+      const z0 = 0.9 + L * lh + 0.7;
+      const z1 = 0.9 + (L + 1) * lh - 1.0;
+      pushQuad(b.gB, [cx - cell * 0.3, fy - 0.04, z0], [cx + cell * 0.3, fy - 0.04, z0], [cx + cell * 0.3, fy - 0.04, z1], [cx - cell * 0.3, fy - 0.04, z1], [0, -1, 0]);
+    }
+  }
+}
+
+// م9.7.2 · مول تجاريّ منخفض واقعيّ: كتلة صلبة عريضة + ستورفرونت مجزّأ + أحزمة لافتات + مدخل أتريوم بمظلّة + سكايلايت + ميكانيكا.
+export function generateMall(w: number, d: number): TowerMeshes {
+  w = Math.min(w, 64); // سقف حجم واقعيّ (منخفض عريض لا عملاق)
+  d = Math.min(d, 52);
+  const w2 = w / 2;
+  const d2 = d / 2;
+  const LH = 4.6;
+  const LEVELS = 3;
+  const baseH = LEVELS * LH; // ~13.8م
+  const body = buf();
+  const gA = buf();
+  const gB = buf();
+  const winC = buf();
+  const winW = buf();
+  const accent = buf();
+
+  box(body, -w2 * 1.03, w2 * 1.03, -d2 * 1.03, d2 * 1.03, 0, 0.9); // قاعدة
+  box(body, -w2, w2, -d2, d2, 0.9, baseH); // الكتلة الصلبة الرئيسة
+
+  // الواجهات الأربع (دعامات + ستورفرونت + نوافذ مثقوبة)
+  const place = (fb: FaceBufs, deg: number): void => {
+    rotateAppend(fb.body, body, deg);
+    rotateAppend(fb.gA, gA, deg);
+    rotateAppend(fb.gB, gB, deg);
+    rotateAppend(fb.winC, winC, deg);
+    rotateAppend(fb.winW, winW, deg);
+  };
+  const lf: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildMallFace(w, d2, LEVELS, LH, baseH, lf);
+  const ls: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildMallFace(d, w2, LEVELS, LH, baseH, ls);
+  place(lf, 0);
+  place(lf, 180);
+  place(ls, 90);
+  place(ls, 270);
+
+  // أحزمة لافتات متوهّجة محيطيّة عند خطوط المستويات
+  for (let L = 1; L < LEVELS; L++) {
+    const z = 0.9 + L * LH;
+    box(accent, -w2 - 0.08, w2 + 0.08, -d2 - 0.08, d2 + 0.08, z - 0.3, z + 0.02, { top: false, bottom: false });
+  }
+  // مدخل أتريوم زجاجيّ بارز + إطار + مظلّة متوهّجة (على -y)
+  const ew = w * 0.16;
+  box(gA, -ew, ew, -d2 - 3.4, -d2 + 0.2, 0.9, baseH * 0.86, { bottom: false });
+  box(body, -ew - 0.35, -ew, -d2 - 3.6, -d2, 0, baseH * 0.88);
+  box(body, ew, ew + 0.35, -d2 - 3.6, -d2, 0, baseH * 0.88);
+  box(accent, -ew - 0.45, ew + 0.45, -d2 - 3.8, -d2, baseH * 0.5, baseH * 0.55, { top: false, bottom: false });
+  // سطح: بارابيت + سكايلايت زجاجيّ مركزيّ بإطار متوهّج + وحدات ميكانيكا
+  box(body, -w2 - 0.12, w2 + 0.12, -d2 - 0.12, d2 + 0.12, baseH, baseH + 1.0);
+  box(gA, -w * 0.14, w * 0.14, -d * 0.16, d * 0.16, baseH + 1.0, baseH + 3.2);
+  box(accent, -w * 0.15, w * 0.15, -d * 0.17, d * 0.17, baseH + 3.0, baseH + 3.3, { top: false, bottom: false });
+  box(body, w * 0.24, w * 0.4, d * 0.18, d * 0.36, baseH, baseH + 2.0);
+  box(body, -w * 0.38, -w * 0.24, -d * 0.34, -d * 0.18, baseH, baseH + 1.6);
+  return { body: freeze(body), glassA: freeze(gA), glassB: freeze(gB), winCool: freeze(winC), winWarm: freeze(winW), accent: freeze(accent), height: baseH + 3.3 };
+}
+
+// م9.7.2 · فندق 5 نجوم: بوديوم فخم بزجاج لوبي وبورت-كوشير + برج نزلاء أنيق (إيقاع نوافذ/شرفات) + سكاي لاونج متوهّج وتتويج.
+export function generateHotel(w: number, d: number): TowerMeshes {
+  const w2 = w / 2;
+  const d2 = d / 2;
+  const ref = Math.max(w, d);
+  const podiumH = 9.0; // بوديوم مستويان فخمان
+  const towerTop = Math.max(30, Math.min(58, ref * 3.0)); // مقياس واقعيّ
+  const tw = w * 0.62;
+  const td = d * 0.62;
+  const tw2 = tw / 2;
+  const td2 = td / 2;
+  const body = buf();
+  const gA = buf();
+  const gB = buf();
+  const winC = buf();
+  const winW = buf();
+  const accent = buf();
+
+  // بوديوم فخم
+  box(body, -w2 * 1.12, w2 * 1.12, -d2 * 1.12, d2 * 1.12, 0, 1.0);
+  box(body, -w2, w2, -d2, d2, 1.0, podiumH);
+  box(gA, -w2 - 0.04, w2 + 0.04, -d2 - 0.04, d2 + 0.04, 1.6, podiumH - 1.2, { top: false, bottom: false }); // زجاج اللوبي
+  box(accent, -w2 - 0.06, w2 + 0.06, -d2 - 0.06, d2 + 0.06, podiumH - 0.5, podiumH, { top: false, bottom: false }); // حزام علوي
+  // بورت-كوشير (مظلّة مدخل بأعمدة على -y)
+  box(accent, -w * 0.26, w * 0.26, -d2 - 5.0, -d2 + 0.2, 3.4, 3.9, { top: false, bottom: false });
+  box(body, -w * 0.24, -w * 0.21, -d2 - 4.7, -d2 - 4.4, 0, 3.4);
+  box(body, w * 0.21, w * 0.24, -d2 - 4.7, -d2 - 4.4, 0, 3.4);
+  // برج النزلاء (إيقاع نوافذ/شرفات أنيق) عبر buildFace
+  box(body, -tw2, tw2, -td2, td2, podiumH, towerTop); // نواة البرج
+  const place = (fb: FaceBufs, deg: number): void => {
+    rotateAppend(fb.body, body, deg);
+    rotateAppend(fb.gA, gA, deg);
+    rotateAppend(fb.gB, gB, deg);
+    rotateAppend(fb.winC, winC, deg);
+    rotateAppend(fb.winW, winW, deg);
+  };
+  const f: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildFace(tw, td2, podiumH, towerTop, 5, f);
+  const s: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildFace(td, tw2, podiumH, towerTop, 55, s);
+  place(f, 0);
+  place(f, 180);
+  place(s, 90);
+  place(s, 270);
+  // تتويج: سكاي لاونج زجاجيّ + حلقة متوهّجة + بارابيت
+  box(gA, -tw2 - 0.06, tw2 + 0.06, -td2 - 0.06, td2 + 0.06, towerTop - 3.0, towerTop - 0.5, { top: false, bottom: false });
+  box(accent, -tw2 - 0.2, tw2 + 0.2, -td2 - 0.2, td2 + 0.2, towerTop - 0.6, towerTop + 0.1, { top: false, bottom: false });
+  box(body, -tw2 - 0.1, tw2 + 0.1, -td2 - 0.1, td2 + 0.1, towerTop + 0.1, towerTop + 0.8);
+  return { body: freeze(body), glassA: freeze(gA), glassB: freeze(gB), winCool: freeze(winC), winWarm: freeze(winW), accent: freeze(accent), height: towerTop + 0.8 };
+}
+
+export type ModelKind = "tower" | "mall" | "hotel";
+/** موزّع توليد النموذج حسب القطاع/النوع. */
+export function generateModel(kind: ModelKind, w: number, d: number): TowerMeshes {
+  if (kind === "mall") return generateMall(w, d);
+  if (kind === "hotel") return generateHotel(w, d);
+  return generateTower(w, d);
 }
 
 // م9.7.1هـ · حلقات أرضية متوهّجة منبعثة تنبعث من مركز البرج وتملأ القطعة — فوق الأرضية وتحت البرج (بارزة على القمر الصناعي).

@@ -11,7 +11,7 @@ import { GLTFLoader } from "@loaders.gl/gltf";
 import { DracoWorkerLoader } from "@loaders.gl/draco";
 import type { ParcelModel } from "@/features/parcels/models/model-lib";
 import { fillRgba } from "./parcel-colors";
-import type { Mesh3, TowerMeshes } from "./parametric-tower";
+import type { Mesh3, ModelKind, TowerMeshes } from "./parametric-tower";
 
 let registered = false;
 /** تسجيل محمّلات glTF/Draco مرّة واحدة (عميل فقط). */
@@ -115,15 +115,25 @@ export interface TowerItem {
   id: string;
   center: [number, number]; // مركز القطعة (lng,lat)
   meshes: TowerMeshes;
+  kind?: ModelKind; // م9.7.2 · نوع النموذج (لاختيار لوحة الألوان)
   rings?: Mesh3; // م9.7.1هـ · حلقات أرضية متوهّجة تملأ القطعة (تحت البرج)
   shadow?: Mesh3; // م9.7.1و+ · ظلّ تماسٍ أرضيّ مُخبوز (أسفل كلّ شيء)
 }
-const TOWER_BODY: [number, number, number, number] = [46, 58, 78, 255]; // هيكل فولاذي أزرق-رماديّ مضاء (تظليل 3D · أغمق من الزجاج)
-const GLASS_A: [number, number, number, number] = [110, 210, 245, 255]; // زجاج سماوي فاتح منبعث (نغمة 1)
-const GLASS_B: [number, number, number, number] = [35, 130, 190, 255]; // زجاج أزرق غامق منبعث (نغمة 2)
-const WIN_COOL: [number, number, number, number] = [188, 224, 248, 255]; // نوافذ مضيئة سماوية (حياة)
-const WIN_WARM: [number, number, number, number] = [255, 200, 120, 255]; // نوافذ مضيئة دافئة (تنوّع لوني)
-const TOWER_ACCENT: [number, number, number, number] = [100, 230, 255, 255]; // حلقة/خطوط مميِّزة منبعثة (هوية)
+type RGBA = [number, number, number, number];
+interface Palette {
+  body: RGBA;
+  glassA: RGBA;
+  glassB: RGBA;
+  winCool: RGBA;
+  winWarm: RGBA;
+  accent: RGBA;
+}
+// لوحات حسب النوع — هويّة بصريّة متمايزة (ليست أزرق موحّداً): برج بارد · مول محايد بلافتات · فندق دافئ فاخر.
+const PALETTES: Record<ModelKind, Palette> = {
+  tower: { body: [46, 58, 78, 255], glassA: [110, 210, 245, 255], glassB: [35, 130, 190, 255], winCool: [188, 224, 248, 255], winWarm: [255, 200, 120, 255], accent: [100, 230, 255, 255] },
+  mall: { body: [92, 96, 108, 255], glassA: [150, 225, 250, 255], glassB: [95, 165, 210, 255], winCool: [200, 228, 250, 255], winWarm: [255, 196, 120, 255], accent: [120, 236, 255, 255] },
+  hotel: { body: [120, 110, 92, 255], glassA: [150, 200, 232, 255], glassB: [95, 150, 196, 255], winCool: [255, 228, 180, 255], winWarm: [255, 190, 110, 255], accent: [245, 206, 130, 255] },
+};
 const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
 const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
 
@@ -146,15 +156,16 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
   for (const it of items) {
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
     const m = it.meshes;
+    const pal = PALETTES[it.kind ?? "tower"];
     // الترتيب من الأسفل للأعلى: ظلّ التماس → الحلقات → الهيكل (مضاء) → الزجاج/النوافذ/الحلقة المميِّزة (منبعثة).
     if (it.shadow && it.shadow.positions.length) layers.push(meshLayer(`tower-shadow-${it.id}`, it.shadow, position, TOWER_SHADOW, false));
     if (it.rings && it.rings.positions.length) layers.push(meshLayer(`tower-rings-${it.id}`, it.rings, position, TOWER_RING, false));
-    layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, TOWER_BODY, true)); // الهيكل (مضاء — تظليل 3D)
-    if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, GLASS_A, false));
-    if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, GLASS_B, false));
-    if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, WIN_COOL, false));
-    if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, WIN_WARM, false));
-    if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, TOWER_ACCENT, false));
+    layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true)); // الهيكل (مضاء — تظليل 3D)
+    if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, false));
+    if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, false));
+    if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false));
+    if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false));
+    if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false));
   }
   return layers;
 }
