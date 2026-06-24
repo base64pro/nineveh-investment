@@ -125,7 +125,7 @@ const WIN_COOL: [number, number, number, number] = [188, 224, 248, 255]; // نو
 const WIN_WARM: [number, number, number, number] = [255, 200, 120, 255]; // نوافذ مضيئة دافئة (تنوّع لوني)
 const TOWER_ACCENT: [number, number, number, number] = [100, 230, 255, 255]; // حلقة/خطوط مميِّزة منبعثة (هوية)
 const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
-const TOWER_SHADOW: [number, number, number, number] = [4, 10, 20, 95]; // ظلّ تماسٍ داكن شفّاف
+const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
 
 function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean): SimpleMeshLayer {
   return new SimpleMeshLayer({

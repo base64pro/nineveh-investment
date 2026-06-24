@@ -86,8 +86,8 @@ function buildFace(faceW: number, perpHalf: number, z0: number, z1: number, seed
   const floors = Math.max(4, Math.floor((z1 - z0) / FLOOR_H));
   const cols = Math.max(2, Math.round(faceW / 3.6));
   const cell = faceW / cols;
-  const bx = W2 * 0.9; // عرض الشرفة (هامش زاوية يمنع التداخل)
-  const balDepth = 0.95;
+  const bx = W2 * 0.92; // عرض الشرفة (هامش زاوية يمنع التداخل)
+  const balDepth = 1.35; // عمق الشرفة (بارزة وواضحة)
 
   for (let f = 0; f < floors; f++) {
     const fz0 = z0 + f * FLOOR_H;
@@ -95,10 +95,10 @@ function buildFace(faceW: number, perpHalf: number, z0: number, z1: number, seed
     const g = f % 2 === 0 ? b.gA : b.gB;
     // لوح الزجاج (وجه مستوٍ نحو -Y)
     pushQuad(g, [-W2, fy - go, fz0], [W2, fy - go, fz0], [W2, fy - go, fz1], [-W2, fy - go, fz1], [0, -1, 0]);
-    // شرفة: بلاطة بارزة عند مستوى الطابق + حاجز زجاجي (نغمة متبادلة)
-    box(b.body, -bx, bx, fy - balDepth, fy, fz0 - 0.14, fz0);
+    // شرفة بارزة: بلاطة سميكة عند مستوى الطابق + جانبان + حاجز زجاجي (نغمة متبادلة)
+    box(b.body, -bx, bx, fy - balDepth, fy, fz0 - 0.18, fz0);
     const rg = f % 2 === 0 ? b.gB : b.gA;
-    box(rg, -bx, bx, fy - balDepth - 0.05, fy - balDepth, fz0, fz0 + 1.0, { top: false, bottom: false });
+    box(rg, -bx, bx, fy - balDepth - 0.05, fy - balDepth, fz0, fz0 + 1.1, { top: false, bottom: false });
     // نوافذ مضيئة متناثرة (في النطاق الرؤيوي فوق الحاجز): بعض الخلايا فقط، أغلبها سماوي وقليل دافئ.
     for (let c = 0; c < cols; c++) {
       if (hash2(f + 1, c + 1 + seed) >= 0.22) continue;
@@ -120,16 +120,21 @@ function buildFace(faceW: number, perpHalf: number, z0: number, z1: number, seed
   }
 }
 
-/** يولّد برجاً مودرن واقعياً من بصمة w×d (متر). الارتفاع/الطوابق تلقائية (نحافة ~6.5، محدودة 30..150م). */
+/** يولّد برجاً مودرن واقعياً ذا نكسة علويّة من بصمة w×d (متر). المقياس واقعيّ يلائم محيط الخريطة (لا عملقة): نحافة ~3، محدود 24..62م. */
 export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
   const w = wMeters;
   const d = dMeters;
   const w2 = w / 2;
   const d2 = d / 2;
   const ref = Math.max(w, d);
-  const totalH = Math.max(30, Math.min(150, ref * 6.5));
+  const totalH = Math.max(24, Math.min(62, ref * 3.0)); // مقياس واقعيّ يلائم الأبنية المحيطة
   const shaftTop = totalH - ROOF_H;
   const shaftZ0 = PODIUM_H;
+  const setZ = shaftZ0 + (shaftTop - shaftZ0) * 0.7; // ارتفاع النكسة (الطابق العلوي أضيق)
+  const uw = w * 0.8;
+  const ud = d * 0.8;
+  const uw2 = uw / 2;
+  const ud2 = ud / 2;
 
   const body = buf();
   const gA = buf();
@@ -143,14 +148,12 @@ export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
   box(body, -w2 * 1.06, w2 * 1.06, -d2 * 1.06, d2 * 1.06, PLINTH_H, PODIUM_H); // بوديوم/لوبي
   box(gA, -w2 * 1.07, w2 * 1.07, -d2 * 1.07, d2 * 1.07, PLINTH_H + 0.9, PODIUM_H - 1.0, { top: false, bottom: false }); // زجاج اللوبي
 
-  // — نواة جذع صلبة (تمنع الشفافية بين الأوجه) —
-  box(body, -w2, w2, -d2, d2, shaftZ0, shaftTop);
+  // — نواتا الجذع الصلبتان (سفليّة عريضة + علويّة أضيق = نكسة مودرن) —
+  box(body, -w2, w2, -d2, d2, shaftZ0, setZ);
+  box(body, -uw2, uw2, -ud2, ud2, setZ, shaftTop);
+  // حاجز شرفة السطح المنكوس (زجاجيّ حول حافة الطابق السفليّ المكشوفة)
+  box(gA, -w2, w2, -d2, d2, setZ, setZ + 1.0, { top: false, bottom: false });
 
-  // — الواجهات الأربع —
-  const front: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
-  buildFace(w, d2, shaftZ0, shaftTop, 0, front); // ±y (عرض = w)
-  const side: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
-  buildFace(d, w2, shaftZ0, shaftTop, 50, side); // ±x (عرض = d)
   const place = (fb: FaceBufs, deg: number): void => {
     rotateAppend(fb.body, body, deg);
     rotateAppend(fb.gA, gA, deg);
@@ -158,16 +161,30 @@ export function generateTower(wMeters: number, dMeters: number): TowerMeshes {
     rotateAppend(fb.winC, winC, deg);
     rotateAppend(fb.winW, winW, deg);
   };
-  place(front, 0);
-  place(front, 180);
-  place(side, 90);
-  place(side, 270);
+  // — الطابق السفليّ (عريض) —
+  const lf: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildFace(w, d2, shaftZ0, setZ, 0, lf);
+  const ls: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildFace(d, w2, shaftZ0, setZ, 50, ls);
+  place(lf, 0);
+  place(lf, 180);
+  place(ls, 90);
+  place(ls, 270);
+  // — الطابق العلويّ (أضيق) —
+  const uf: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildFace(uw, ud2, setZ + 1.0, shaftTop, 17, uf);
+  const us: FaceBufs = { body: buf(), gA: buf(), gB: buf(), winC: buf(), winW: buf() };
+  buildFace(ud, uw2, setZ + 1.0, shaftTop, 67, us);
+  place(uf, 0);
+  place(uf, 180);
+  place(us, 90);
+  place(us, 270);
 
-  // — التتويج —
-  box(accent, -w2 - 0.24, w2 + 0.24, -d2 - 0.24, d2 + 0.24, shaftTop - 1.6, shaftTop - 0.8, { top: false, bottom: false }); // حلقة مميِّزة
-  box(body, -w2 - 0.12, w2 + 0.12, -d2 - 0.12, d2 + 0.12, shaftTop, shaftTop + 0.8); // بارابيت
-  box(body, -w2 * 0.56, w2 * 0.56, -d2 * 0.56, d2 * 0.56, shaftTop + 0.8, totalH); // بنتهاوس ميكانيكي
-  box(accent, -w2 * 0.58, w2 * 0.58, -d2 * 0.58, d2 * 0.58, totalH - 0.35, totalH, { top: false, bottom: false }); // خطّ تتويج متوهّج
+  // — التتويج (على الطابق العلويّ الأضيق) —
+  box(accent, -uw2 - 0.24, uw2 + 0.24, -ud2 - 0.24, ud2 + 0.24, shaftTop - 1.6, shaftTop - 0.8, { top: false, bottom: false }); // حلقة مميِّزة
+  box(body, -uw2 - 0.12, uw2 + 0.12, -ud2 - 0.12, ud2 + 0.12, shaftTop, shaftTop + 0.7); // بارابيت
+  box(body, -uw2 * 0.56, uw2 * 0.56, -ud2 * 0.56, ud2 * 0.56, shaftTop + 0.7, totalH); // بنتهاوس ميكانيكي
+  box(accent, -uw2 * 0.58, uw2 * 0.58, -ud2 * 0.58, ud2 * 0.58, totalH - 0.35, totalH, { top: false, bottom: false }); // خطّ تتويج متوهّج
 
   return {
     body: freeze(body),
