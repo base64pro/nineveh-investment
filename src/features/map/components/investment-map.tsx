@@ -58,7 +58,7 @@ import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
 import { buildModelLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
 import { generateContactShadow, generateGroundRings, generateModel, type Mesh3, type ModelKind, type TowerMeshes } from "../lib/parametric-tower";
-import { useAssumedModels } from "@/features/parcels/models/model-lib";
+import { useAssumedModels, useAssumedParametric } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
 import { getSheetHeight } from "@/features/shell/mobile-sheet-store";
@@ -623,6 +623,7 @@ export default function InvestmentMap() {
   modelFocusRef.current = modelFocusId;
   // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
   const { data: assumedModels = [] } = useAssumedModels();
+  const { data: parametricCfg } = useAssumedParametric(); // م9.7.1ب · إعداد النموذج البارامتري لكل قطعة (من المنسدلة)
   const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
   // م9.7.1ج/هـ/و · م9.7.2 · ذاكرة شبكات النماذج البارامترية + الحلقات + ظلّ التماس لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
   const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3; shadow: Mesh3; kind: ModelKind }>>(new Map());
@@ -948,31 +949,62 @@ export default function InvestmentMap() {
       for (const f of vis.features) {
         const rid = typeof f.properties?.ref_id === "string" ? (f.properties.ref_id as string) : null;
         if (f.properties?.kind !== "assumed" || !rid || refIds.has(rid) || !f.geometry) continue;
-        let cached = towerCacheRef.current.get(rid);
+        const b = bbox(f as Feature) as [number, number, number, number];
+        const clat = (b[1] + b[3]) / 2;
+        const mPerLng = 111320 * Math.cos((clat * Math.PI) / 180);
+        const wM = (b[2] - b[0]) * mPerLng; // عرض البصمة بالمتر
+        const dM = (b[3] - b[1]) * 110540; // عمق البصمة بالمتر
+        if (wM < 4 || dM < 4) continue;
+        // م9.7.1ب · الإعداد من المنسدلة (نوع + عدد + توزيع)، وإلا تلقائيّ من الاسم.
+        const cfg = parametricCfg?.get(rid);
+        const kind = cfg?.modelKind ?? tempKindFor(typeof f.properties?.name_ar === "string" ? (f.properties.name_ar as string) : "");
+        const count = Math.max(1, Math.min(24, cfg?.count ?? 1));
+        const distribution = cfg?.distribution ?? "grid";
+        const cols = distribution === "row" ? count : Math.ceil(Math.sqrt(count));
+        const rows = Math.ceil(count / cols);
+        // شبكة واحدة بحجم الخليّة (تُعاد استخدامها في كلّ المواضع) — تُخبّأ بمفتاح (نوع|عدد|توزيع).
+        const cacheKey = `${rid}|${kind}|${count}|${distribution}`;
+        let cached = towerCacheRef.current.get(cacheKey);
         if (!cached) {
-          const b = bbox(f as Feature) as [number, number, number, number];
-          const clat = (b[1] + b[3]) / 2;
-          const wM = (b[2] - b[0]) * 111320 * Math.cos((clat * Math.PI) / 180); // عرض البصمة بالمتر
-          const dM = (b[3] - b[1]) * 110540; // عمق البصمة بالمتر
-          if (wM < 4 || dM < 4) continue;
-          const kind = tempKindFor(typeof f.properties?.name_ar === "string" ? (f.properties.name_ar as string) : "");
-          const fmul = kind === "mall" ? 0.78 : kind === "hotel" ? 0.6 : 0.5; // المول يملأ القطعة أكثر · البرج نحيف
-          const tower = generateModel(kind, Math.max(8, wM * fmul), Math.max(8, dM * fmul));
-          const rings = generateGroundRings(0.5 * Math.min(wM, dM) * (kind === "mall" ? 0.96 : 0.9), 4); // حلقات تنبعث من المركز وتملأ القطعة
-          const sr = 0.5 * Math.min(wM, dM) * (kind === "mall" ? 0.84 : 0.72); // نصف قطر ظلّ التماس
-          const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55); // مُزاح عكس اتجاه الشمس (إيهام ظلّ مُلقى)
+          const fmul = kind === "mall" ? 0.78 : kind === "hotel" ? 0.6 : 0.5;
+          const cellWm = wM / cols;
+          const cellDm = dM / rows;
+          const tower = generateModel(kind, Math.max(8, cellWm * fmul), Math.max(8, cellDm * fmul));
+          const ringR = 0.5 * Math.min(cellWm, cellDm) * (kind === "mall" ? 0.96 : 0.9);
+          const rings = generateGroundRings(ringR, 4);
+          const sr = 0.5 * Math.min(cellWm, cellDm) * (kind === "mall" ? 0.84 : 0.72);
+          const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
           cached = { tower, rings, shadow, kind };
-          towerCacheRef.current.set(rid, cached);
+          towerCacheRef.current.set(cacheKey, cached);
         }
-        const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
-        towerItems.push({ id: rid, center, meshes: cached.tower, kind: cached.kind, rings: cached.rings, shadow: cached.shadow });
+        // المواضع: واحد عند المركز · عدّة على شبكة داخل البصمة (مع نثر اختياريّ).
+        if (count === 1) {
+          const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
+          towerItems.push({ id: rid, center, meshes: cached.tower, kind: cached.kind, rings: cached.rings, shadow: cached.shadow });
+        } else {
+          const bw = b[2] - b[0];
+          const bh = b[3] - b[1];
+          for (let i = 0; i < count; i++) {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            let lng = b[0] + ((col + 0.5) * bw) / cols;
+            let lat = b[1] + ((row + 0.5) * bh) / rows;
+            if (distribution === "scatter") {
+              const jx = (Math.abs(Math.sin((i + 1) * 12.9898) * 43758.5453) % 1) - 0.5;
+              const jy = (Math.abs(Math.sin((i + 1) * 78.233) * 43758.5453) % 1) - 0.5;
+              lng += (jx * bw * 0.34) / cols;
+              lat += (jy * bh * 0.34) / rows;
+            }
+            towerItems.push({ id: `${rid}#${i}`, center: [lng, lat], meshes: cached.tower, kind: cached.kind, rings: cached.rings, shadow: cached.shadow });
+          }
+        }
         towerRefIds.add(rid);
       }
     }
     overlayRef.current?.setProps({
       layers: vis ? [...parcelLayers(vis, selectedId, refIds, towerRefIds), ...buildModelLayers(items), ...buildTowerLayers(towerItems)] : [],
     });
-  }, [fc, selectedId, assumedModels, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
+  }, [fc, selectedId, assumedModels, parametricCfg, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
 
   // مقاييس م2.3: إعادة العدّ والحقن عند تغيّر القطع
   useEffect(() => {

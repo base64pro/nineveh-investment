@@ -20,6 +20,7 @@ import { TransferLogView, type TransferEntry } from "@/features/parcels/transfer
 import { VisitsLog } from "@/features/licenses/visits/visits-log";
 import { PhotosSection } from "@/features/parcels/photos/photos-section";
 import { ModelsSection } from "@/features/parcels/models/models-section";
+import { ParametricSection } from "@/features/parcels/models/parametric-section";
 import { useFieldOptions } from "@/lib/data/use-field-options";
 import { useTable } from "@/lib/data/use-table";
 import { formatArea, orNA } from "@/lib/display";
@@ -342,10 +343,11 @@ export function ParcelWindow({
               <div className="sm:col-span-2">
                 <PhotosSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
               </div>
-              {/* م9.2 · المجسّم ثلاثي الأبعاد (الخارطة الاستثمارية) — للقطع المفترضة فقط */}
+              {/* م9.2/م9.7 · المجسّم ثلاثي الأبعاد + النموذج البارامتري (الخارطة الاستثمارية) — للقطع المفترضة فقط */}
               {kind === "assumed" ? (
-                <div className="sm:col-span-2">
+                <div className="space-y-3 sm:col-span-2">
                   <ModelsSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
+                  <ParametricSection kind={kind} refId={String(entityId(kind, entity) ?? "")} readOnly={ro} />
                 </div>
               ) : null}
               {kind === "license" && (state === "in-progress" || state === "completed") ? (

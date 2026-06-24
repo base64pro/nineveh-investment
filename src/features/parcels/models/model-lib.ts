@@ -5,6 +5,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { ParcelKind } from "@/features/map/lib/map-nav-store";
+import type { ModelKind } from "@/features/map/lib/parametric-tower";
 
 export const BUCKET = "parcel-models";
 export const MAX_PARCEL_MODELS = 4; // عدّة بدائل تصميمية للقطعة (يُعرَض الأحدث افتراضياً)
@@ -139,6 +140,65 @@ export function useAssumedModels() {
       return latest
         .map((r) => ({ id: r.id, refId: r.ref_id, path: r.storage_path, format: r.format, title: r.title, isConceptual: r.is_conceptual, transform: r.transform ?? {}, url: urls[r.storage_path] ?? "" }))
         .filter((m) => m.url);
+    },
+  });
+}
+
+// م9.7.1ب · إعداد النموذج البارامتري للقطعة (يُختار من المنسدلة) — يُعرَض حين لا مجسّم مرفوع.
+export type ParametricDistribution = "grid" | "row" | "scatter";
+export interface ParcelParametric {
+  modelKind: ModelKind;
+  count: number;
+  distribution: ParametricDistribution;
+}
+
+/** حفظ/تحديث إعداد النموذج البارامتري لقطعة (upsert على kind+ref_id) — للمدير. */
+export async function upsertParcelParametric(kind: ParcelKind, refId: string, cfg: ParcelParametric): Promise<{ ok: boolean; error?: string }> {
+  const supabase = createClient();
+  const uid = (await supabase.auth.getUser()).data.user?.id ?? null;
+  const { error } = await supabase.from("parcel_parametric_models").upsert(
+    { kind, ref_id: refId, model_kind: cfg.modelKind, count: cfg.count, distribution: cfg.distribution, created_by: uid, updated_at: new Date().toISOString() },
+    { onConflict: "kind,ref_id" },
+  );
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/** حذف إعداد النموذج البارامتري (عودة للسلوك الافتراضي). */
+export async function clearParcelParametric(kind: ParcelKind, refId: string): Promise<{ ok: boolean }> {
+  const supabase = createClient();
+  const { error } = await supabase.from("parcel_parametric_models").delete().eq("kind", kind).eq("ref_id", refId);
+  return { ok: !error };
+}
+
+type PRow = { ref_id: string; model_kind: ModelKind; count: number; distribution: ParametricDistribution };
+
+/** إعداد قطعة واحدة — مفتاح ["parcel_parametric", kind, refId]. */
+export function useParcelParametric(kind: ParcelKind, refId: string) {
+  return useQuery({
+    queryKey: ["parcel_parametric", kind, refId],
+    enabled: refId !== "",
+    queryFn: async (): Promise<ParcelParametric | null> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.from("parcel_parametric_models").select("model_kind, count, distribution").eq("kind", kind).eq("ref_id", refId).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      const r = data as Omit<PRow, "ref_id">;
+      return { modelKind: r.model_kind, count: r.count, distribution: r.distribution };
+    },
+  });
+}
+
+/** كل إعدادات القطع المفترضة (للخريطة) — Map<refId, إعداد> · مفتاح ["parcel_parametric","assumed-all"]. */
+export function useAssumedParametric() {
+  return useQuery({
+    queryKey: ["parcel_parametric", "assumed-all"],
+    queryFn: async (): Promise<Map<string, ParcelParametric>> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.from("parcel_parametric_models").select("ref_id, model_kind, count, distribution").eq("kind", "assumed");
+      if (error) throw new Error(error.message);
+      const out = new Map<string, ParcelParametric>();
+      for (const r of (data ?? []) as PRow[]) out.set(r.ref_id, { modelKind: r.model_kind, count: r.count, distribution: r.distribution });
+      return out;
     },
   });
 }
