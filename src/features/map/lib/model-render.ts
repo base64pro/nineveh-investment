@@ -130,11 +130,13 @@ interface Palette {
   accent: RGBA;
 }
 // لوحات حسب النوع — هويّة بصريّة متمايزة (ليست أزرق موحّداً): برج بارد · مول محايد بلافتات · فندق دافئ فاخر.
+// الزجاج الآن «مضاء لمّاع» (يُظلَّل ثلاثياً) لا منبعثاً — ألوانه أغمق إذ تُضيئها الإضاءة؛ التوهّج يأتي من النوافذ/الحلقة المنبعثة.
 const PALETTES: Record<ModelKind, Palette> = {
-  tower: { body: [46, 58, 78, 255], glassA: [110, 210, 245, 255], glassB: [35, 130, 190, 255], winCool: [188, 224, 248, 255], winWarm: [255, 200, 120, 255], accent: [100, 230, 255, 255] },
-  mall: { body: [92, 96, 108, 255], glassA: [150, 225, 250, 255], glassB: [95, 165, 210, 255], winCool: [200, 228, 250, 255], winWarm: [255, 196, 120, 255], accent: [120, 236, 255, 255] },
-  hotel: { body: [120, 110, 92, 255], glassA: [150, 200, 232, 255], glassB: [95, 150, 196, 255], winCool: [255, 228, 180, 255], winWarm: [255, 190, 110, 255], accent: [245, 206, 130, 255] },
+  tower: { body: [60, 72, 92, 255], glassA: [46, 96, 132, 255], glassB: [30, 64, 96, 255], winCool: [188, 224, 248, 255], winWarm: [255, 200, 120, 255], accent: [100, 230, 255, 255] },
+  mall: { body: [104, 108, 120, 255], glassA: [70, 120, 150, 255], glassB: [48, 86, 116, 255], winCool: [205, 230, 250, 255], winWarm: [255, 196, 120, 255], accent: [120, 236, 255, 255] },
+  hotel: { body: [128, 116, 96, 255], glassA: [78, 110, 140, 255], glassB: [52, 80, 110, 255], winCool: [255, 228, 180, 255], winWarm: [255, 190, 110, 255], accent: [245, 206, 130, 255] },
 };
+const MAT_GLASS = { ambient: 0.45, diffuse: 0.5, shininess: 110, specularColor: [150, 210, 255] as [number, number, number] }; // زجاج لمّاع
 const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
 const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
 
@@ -193,8 +195,8 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
       const m = it.meshes;
       const pal = PALETTES[it.kind ?? "tower"];
       layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true));
-      if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, false));
-      if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, false));
+      if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS));
+      if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, true, MAT_GLASS));
       if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false));
       if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false));
       if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false));
