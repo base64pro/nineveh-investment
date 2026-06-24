@@ -219,10 +219,11 @@ export function buildRingLayers(items: TowerItem[], phase: number): Layer[] {
   for (const it of items) {
     if (!it.rings || !it.rings.positions.length) continue;
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
-    for (let wv = 0; wv < 2; wv++) {
-      const p = (phase + wv * 0.5) % 1; // موجتان متعاقبتان لتدفّق مستمرّ
-      const ss = 0.55 + 1.7 * p; // تتمدّد من تحت المجسّم (0.55×) إلى ما وراء حدوده (2.25×)
-      const a = Math.max(0, Math.round(245 * (1 - p) * (1 - p))); // تتلاشى مع التمدّد
+    const WAVES = 3;
+    for (let wv = 0; wv < WAVES; wv++) {
+      const p = (phase + wv / WAVES) % 1; // موجات متعاقبة لتدفّق مستمرّ
+      const ss = 1.0 + 1.7 * p; // من حدّ بصمة المجسّم (1×) نحو الخارج (2.7×) — لا تدخل تحت جسمه أبداً
+      const a = Math.round(235 * Math.pow(Math.sin(Math.PI * p), 0.85)); // مخفيّة عند الحافة (تحت المجسّم) → تظهر بعد خروجها → تتلاشى بعيداً
       layers.push(
         new SimpleMeshLayer({
           id: `ring-${it.id}-${wv}`,

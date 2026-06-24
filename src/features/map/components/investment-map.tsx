@@ -87,6 +87,17 @@ function framePadding(base: number, ignoreSheet = false): PadOpt {
   return { top: base + KPI, bottom: base + Math.max(SEARCH, sheet), left: base, right: base };
 }
 
+// م9.7.9 · زوم يؤطّر المجسّم **كاملاً** (لاستعراض درون دوّار): الامتداد الظاهر = الأكبر بين البصمة الأفقية
+// وإسقاط الارتفاع على الشاشة (يكبر بالميل) — فالمجسّمات العالية/الكبيرة تُبعِد الكاميرا، والصغيرة تقرّبها.
+function zoomForModel(footprintM: number, heightM: number, lat: number, viewMinPx: number, pitchDeg: number): number {
+  const pr = (pitchDeg * Math.PI) / 180;
+  const vSpan = heightM * Math.sin(pr); // امتداد الارتفاع على الشاشة (متر-مكافئ عند الميل)
+  const spanM = Math.max(footprintM * 1.15, vSpan, 14); // أكبر امتداد ظاهر + حدّ أدنى
+  const FILL = 0.5; // يملأ المجسّم ~50% من أصغر بُعد للشاشة (هامش مريح حوله كاملاً ليظهر تماماً)
+  const mpp = spanM / (FILL * Math.max(360, viewMinPx)); // متر/بكسل المطلوب
+  return Math.log2((156543.03 * Math.cos((lat * Math.PI) / 180)) / mpp);
+}
+
 type StyleSource = { url?: string; tiles?: string[]; [k: string]: unknown };
 type StyleLayer = {
   id: string;
@@ -628,10 +639,12 @@ export default function InvestmentMap() {
   const { data: parametricCfg } = useAssumedParametric(); // م9.7.1ب · إعداد النموذج البارامتري لكل قطعة (من المنسدلة)
   const [stlMeshes, setStlMeshes] = useState<Map<string, StlMesh>>(new Map());
   // م9.7.1ج/هـ/و · م9.7.2 · ذاكرة شبكات النماذج البارامترية + الحلقات + ظلّ التماس لكل قطعة مفترضة (تُولَّد مرّة، تُخبّأ بالمعرّف)
-  const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3; shadow: Mesh3; kind: ModelKind }>>(new Map());
+  const towerCacheRef = useRef<Map<string, { tower: TowerMeshes; rings: Mesh3; shadow: Mesh3; kind: ModelKind; footprintM: number; heightM: number }>>(new Map());
   // م9.7.7 · طبقات ثابتة + عناصر الأبراج (للنبض المتحرّك) + طور النبض — يحدّثها effect الطبقات، ويحرّكها RAF
   const staticLayersRef = useRef<Layer[]>([]);
   const towerItemsRef = useRef<TowerItem[]>([]);
+  // م9.7.9 · أبعاد المجسّم لكلّ قطعة (بصمة + ارتفاع بالمتر) — لتأطير الكاميرا للمجسّم كاملاً عند الطيران (زوم درون يتناسب مع الحجم)
+  const modelDimsRef = useRef<Map<string, { footprintM: number; heightM: number }>>(new Map());
   const ringPhaseRef = useRef(0);
   useEffect(() => {
     registerModelLoaders();
@@ -987,9 +1000,10 @@ export default function InvestmentMap() {
           const rings = generateGroundRings(Math.max(fw, fd) * 0.5, 1); // حلقة أساس بنصف قطر بصمة المجسّم (تنبض من تحته للخارج)
           const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
-          cached = { tower, rings, shadow, kind };
+          cached = { tower, rings, shadow, kind, footprintM: Math.max(fw, fd), heightM: tower.height };
           towerCacheRef.current.set(cacheKey, cached);
         }
+        modelDimsRef.current.set(rid, { footprintM: cached.footprintM, heightM: cached.heightM }); // للكاميرا (يشمل إصابة التخبئة)
         // المواضع: واحد عند المركز · عدّة على شبكة داخل البصمة (مع نثر اختياريّ).
         if (count === 1) {
           const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
@@ -1021,7 +1035,7 @@ export default function InvestmentMap() {
     overlayRef.current?.setProps({ layers: [...staticLayers, ...buildRingLayers(towerItems, ringPhaseRef.current)] });
   }, [fc, selectedId, assumedModels, parametricCfg, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
 
-  // م9.7.7 · تحريك نبض الحلقات (RAF، ~30 إطار/ث، فقط عند التقرّب z>12.5 لصون الأداء) — يعيد بناء طبقات الحلقات فقط فوق الثابتة.
+  // م9.7.7 · تحريك نبض الحلقات (RAF مخنوق ~11 إطار/ث، فقط عند التقرّب z≥13 لصون الأداء) — يعيد بناء طبقات الحلقات فقط فوق الثابتة.
   useEffect(() => {
     if (!mapReady) return;
     let raf = 0;
@@ -1076,26 +1090,39 @@ export default function InvestmentMap() {
         sfxFly(); // أثر طيران تقني ناعم (م7.9)
         const b = bbox(f) as [number, number, number, number];
         if (f.properties?.kind === "assumed") {
-          // م9.3 · الطيران لقطعة مفترضة يعرض كيانها الهولوكرامي فوراً (يحلّ محلّ الرسمة المسطّحة) **بلا فتح بطاقة**،
-          //        مع حركة سينمائية: اقتراب قريب ثلاثي الأبعاد ثم التفاف «درون» نصف دائرة بسلاسة ثم توقّف.
+          // م9.3/م9.7.9 · الطيران لقطعة مفترضة يعرض كيانها الهولوكرامي فوراً (بلا فتح بطاقة)، مع حركة سينمائية:
+          //   اقتراب يؤطّر **المجسّم كاملاً** (زوم يتناسب مع حجمه وارتفاعه) ثم **التفاف درون دائرة كاملة 360°** بسلاسة.
           const r = typeof f.properties?.ref_id === "string" ? (f.properties.ref_id as string) : null;
           setModelFocusId(r);
           setSelectedId(null); // لا تُفتَح البطاقة عند الطيران (طلب معتمد)
           setMkSel(null);
           const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-          // المجسّم البارامتري بصمته ~نصف القطعة → نقترب مستوى زوم إضافيّاً ليملأ الإطار كاستعراض درون (حتى المجسّمات الصغيرة تُرى قريباً).
-          const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: MAX_ZOOM });
+          const DRONE_PITCH = 60;
           const center = centroid(f).geometry.coordinates as [number, number]; // مركز القطعة = محور الالتفاف
-          const zoom = Math.min(MAX_ZOOM, (cam?.zoom ?? 15.5) + 1.1);
+          // الزوم من أبعاد المجسّم الفعليّة (يؤطّره كاملاً) — وإلّا تأطير حدود القطعة احتياطاً.
+          const dims = r ? modelDimsRef.current.get(r) : undefined;
+          let zoom: number;
+          if (dims) {
+            const cv = m.getCanvas();
+            const viewMin = Math.min(cv.clientWidth || 0, cv.clientHeight || 0) || 700;
+            zoom = Math.max(13.5, Math.min(MAX_ZOOM, zoomForModel(dims.footprintM, dims.heightM, center[1], viewMin, DRONE_PITCH)));
+          } else {
+            const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: MAX_ZOOM });
+            zoom = Math.min(MAX_ZOOM, cam?.zoom ?? 15.5);
+          }
           if (reduce) {
-            m.easeTo({ center, zoom, pitch: 58, duration: 800 }); // احترام تقليل الحركة: اقتراب قصير بلا التفاف
+            m.easeTo({ center, zoom, pitch: DRONE_PITCH, duration: 800 }); // احترام تقليل الحركة: اقتراب قصير بلا التفاف
           } else {
             const startBearing = m.getBearing();
-            m.flyTo({ center, zoom, pitch: 60, bearing: startBearing, duration: 2200, curve: 1.5, essential: true }); // (1) اقتراب سينمائي
-            m.once("moveend", () => {
-              if (modelFocusRef.current !== r) return; // أُلغِيَ التركيز (غادر المستخدم) → لا التفاف
-              m.easeTo({ bearing: startBearing + 180, pitch: 60, duration: 5000, easing: (t) => -(Math.cos(Math.PI * t) - 1) / 2, essential: true }); // (2) التفاف درون نصف دائرة بسلاسة
-            });
+            m.flyTo({ center, zoom, pitch: DRONE_PITCH, bearing: startBearing, duration: 2200, curve: 1.5, essential: true }); // (1) اقتراب سينمائي يؤطّر المجسّم كاملاً
+            // (2) درون: دورة كاملة 360° حول المجسّم — على شوطين 180° (إذ يُطبِّع MapLibre دوران 360° إلى صفر)، خطّيّان فيتّصلان بسلاسة.
+            const droneLeg = (fromBearing: number, remaining: number): void => {
+              if (modelFocusRef.current !== r || remaining <= 0.5) return; // أُلغِيَ التركيز أو اكتملت الدورة
+              const step = Math.min(180, remaining);
+              m.easeTo({ center, zoom, bearing: fromBearing + step, pitch: DRONE_PITCH, duration: 4500, easing: (t) => t, essential: true });
+              m.once("moveend", () => droneLeg(fromBearing + step, remaining - step));
+            };
+            m.once("moveend", () => droneLeg(startBearing, 360));
           }
         } else {
           m.fitBounds(b, { padding: framePadding(80, true), maxZoom: 16, duration: 1000 }); // م8.10: تجاهل ارتفاع الورقة (تُغلق مع الطيران) فلا يفشل التأطير
