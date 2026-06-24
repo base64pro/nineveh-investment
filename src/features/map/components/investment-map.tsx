@@ -12,7 +12,7 @@ import destination from "@turf/destination";
 import distance from "@turf/distance";
 import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
-import { ChevronDown, FilterX, Layers, MapPinned, Maximize2, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, FilterX, Layers, MapPinned, Maximize2, Rotate3d, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -621,6 +621,8 @@ export default function InvestmentMap() {
   const [modelFocusId, setModelFocusId] = useState<string | null>(null);
   const modelFocusRef = useRef<string | null>(modelFocusId);
   modelFocusRef.current = modelFocusId;
+  // م9.7.4 · وضع الاستعراض الحرّ (تدوير المجسّم بكل الاتجاهات + زوم — شبه سكتشفاب)
+  const [orbitOn, setOrbitOn] = useState(false);
   // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
   const { data: assumedModels = [] } = useAssumedModels();
   const { data: parametricCfg } = useAssumedParametric(); // م9.7.1ب · إعداد النموذج البارامتري لكل قطعة (من المنسدلة)
@@ -726,6 +728,7 @@ export default function InvestmentMap() {
         zoom: INITIAL_ZOOM,
         maxZoom: MAX_ZOOM,
         pitch: 48, // م8.12 · العرض الافتراضي ثلاثي الأبعاد (3D) — قابل للتبديل لـ2D (fitBounds/flyTo تحفظ الميل)
+        maxPitch: 85, // م9.7.4 · ميل أعمق لاستعراض المجسّمات من زوايا منخفضة (تدوير حرّ شبه-سكتشفاب)
         attributionControl: false, // م8.8: لا زرّ «!» منبثق
       });
       mapRef.current = map;
@@ -1070,6 +1073,69 @@ export default function InvestmentMap() {
       }
     });
   }, []);
+
+  // م9.7.4 · مغادرة التركيز (كامل نينوى) تُنهي الاستعراض الحرّ
+  useEffect(() => {
+    if (!modelFocusId) setOrbitOn(false);
+  }, [modelFocusId]);
+
+  // م9.7.4 · الاستعراض الحرّ: اسحب لتدوير الكاميرا حول المجسّم (اتجاه + ميل) · العجلة للزوم — حول المركز (المجسّم) كما في sketchfab.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !mapReady || !orbitOn) return;
+    m.stop(); // إيقاف أي التفاف تلقائيّ — التحكّم يدويّ الآن
+    m.dragPan.disable();
+    m.dragRotate.disable();
+    m.scrollZoom.disable();
+    const canvas = m.getCanvas();
+    canvas.style.cursor = "grab";
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    const down = (e: PointerEvent): void => {
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      canvas.style.cursor = "grabbing";
+      canvas.setPointerCapture?.(e.pointerId);
+    };
+    const moveH = (e: PointerEvent): void => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      m.setBearing(m.getBearing() - dx * 0.5); // تدوير أفقيّ كامل (360°)
+      m.setPitch(Math.max(0, Math.min(85, m.getPitch() + dy * 0.4))); // ميل رأسيّ سلس
+    };
+    const up = (e: PointerEvent): void => {
+      dragging = false;
+      canvas.style.cursor = "grab";
+      canvas.releasePointerCapture?.(e.pointerId);
+    };
+    const wheel = (e: WheelEvent): void => {
+      e.preventDefault();
+      const z = Math.max(m.getMinZoom(), Math.min(m.getMaxZoom(), m.getZoom() - e.deltaY * 0.003));
+      m.easeTo({ zoom: z, duration: 90 }); // المركز ثابت → زوم حول المجسّم
+    };
+    canvas.addEventListener("pointerdown", down);
+    canvas.addEventListener("pointermove", moveH);
+    window.addEventListener("pointerup", up);
+    canvas.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("pointerdown", down);
+      canvas.removeEventListener("pointermove", moveH);
+      window.removeEventListener("pointerup", up);
+      canvas.removeEventListener("wheel", wheel);
+      canvas.style.cursor = "";
+      const mm = mapRef.current;
+      if (mm) {
+        mm.dragPan.enable();
+        mm.dragRotate.enable();
+        mm.scrollZoom.enable();
+      }
+    };
+  }, [orbitOn, mapReady]);
 
   // الانتقال لإحداثيات موقع جغرافي (بحث فائق · §هـ.2.ج): طيران + تنبيه بالاسم
   useEffect(() => {
@@ -1858,6 +1924,39 @@ export default function InvestmentMap() {
             {map3D ? "3D" : "2D"}
           </button>
         </div>
+
+        {/* م9.7.4 · استعراض حرّ للمجسّم (تدوير بكل الاتجاهات + زوم) — يظهر عند تركيز قطعة مفترضة */}
+        {modelFocusId ? (
+          <div className={cn("flex rounded-2xl p-1", GLASS)}>
+            <button
+              type="button"
+              onClick={() => {
+                const m = mapRef.current;
+                if (!m) return;
+                const next = !orbitOn;
+                setOrbitOn(next);
+                if (next) {
+                  const f = fcRef.current.features.find((ft) => ft.properties?.ref_id === modelFocusId);
+                  if (f?.geometry) {
+                    const c = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
+                    m.easeTo({ center: c, pitch: Math.max(m.getPitch(), 55), duration: 500, essential: true });
+                  }
+                }
+              }}
+              title={orbitOn ? "إنهاء الاستعراض الحرّ" : "استعراض حرّ: تدوير المجسّم بكل الاتجاهات + زوم"}
+              aria-label="استعراض حرّ للمجسّم"
+              aria-pressed={orbitOn}
+              className={cn(
+                "grid size-10 place-items-center rounded-xl transition active:scale-95",
+                orbitOn
+                  ? "bg-primary/20 text-primary shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)] ring-1 ring-inset ring-primary/40"
+                  : "text-foreground/80 hover:bg-white/8 hover:text-foreground",
+              )}
+            >
+              <Rotate3d className="size-5" />
+            </button>
+          </div>
+        ) : null}
 
         {/* لوحة تحديد الظهور: حدود · قطع · الحالات الخمس — انسدال بسلاسة استوديو الرسم (م7.6) */}
         <AnimatePresence initial={false}>
