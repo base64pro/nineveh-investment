@@ -175,9 +175,9 @@ function overlayLayers(): StyleLayer[] {
 // م9.3ب · إضاءة للنماذج المرفوعة (pbr) كي تظهر فوق الأرضية الداكنة بدل أن تُعتِم — إضاءة محيطة قوية + اتجاهيّتان.
 // إضاءة النماذج: محيط أخفض + شمس أقوى = تظليل اتجاهيّ أوضح (عمق 3D واقعي على الهيكل المضاء).
 const MODEL_LIGHTING = new LightingEffect({
-  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.25 }),
-  sun: new DirectionalLight({ color: [255, 252, 240], intensity: 1.7, direction: [-1, -2, -3] }),
-  fill: new DirectionalLight({ color: [200, 218, 255], intensity: 0.65, direction: [2, 1, -1] }),
+  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.6 }),
+  sun: new DirectionalLight({ color: [255, 252, 240], intensity: 2.1, direction: [-1, -2, -3] }),
+  fill: new DirectionalLight({ color: [200, 218, 255], intensity: 0.9, direction: [2, 1, -1] }),
 });
 
 // م9.7.2 (مؤقّت) · نوع النموذج لكل قطعة مفترضة من اسمها — يُستبدل لاحقاً باختيار المدير من المنسدلة (م9.7.1ب/د).
@@ -997,7 +997,7 @@ export default function InvestmentMap() {
           const fd = dOv ?? Math.max(8, cellDm * fmul); // عمق يدويّ أو تلقائيّ
           const tower = generateModel(kind, fw, fd, hOv ?? undefined);
           const bMin = Math.min(fw, fd); // بصمة المبنى الفعليّة
-          const rings = generateGroundRings(Math.max(fw, fd) * 0.5, 1); // حلقة أساس بنصف قطر بصمة المجسّم (تنبض من تحته للخارج)
+          const rings = generateGroundRings(0.5 * Math.hypot(fw, fd) * 1.2, 1); // نصف قطر يُحيط بصمة المجسّم كاملةً (قطرها + هامش) فلا تتقاطع الحلقة مع زواياه — تنبض من تحت حدّه للخارج
           const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
           cached = { tower, rings, shadow, kind, footprintM: Math.max(fw, fd), heightM: tower.height };
@@ -1107,8 +1107,8 @@ export default function InvestmentMap() {
             const viewMin = Math.min(cv.clientWidth || 0, cv.clientHeight || 0) || 700;
             zoom = Math.max(13.5, Math.min(MAX_ZOOM, zoomForModel(dims.footprintM, dims.heightM, center[1], viewMin, DRONE_PITCH)));
           } else {
-            const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: MAX_ZOOM });
-            zoom = Math.min(MAX_ZOOM, cam?.zoom ?? 15.5);
+            const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: 16.5 });
+            zoom = Math.min(16.5, cam?.zoom ?? 15.5); // أبعاد غير محمّلة بعد → زوم متوسّط آمن (لا تقريب مفرط يقصّ المجسّم)
           }
           if (reduce) {
             m.easeTo({ center, zoom, pitch: DRONE_PITCH, duration: 800 }); // احترام تقليل الحركة: اقتراب قصير بلا التفاف

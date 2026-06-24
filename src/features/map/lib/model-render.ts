@@ -133,9 +133,9 @@ interface Palette {
 // لوحات حسب النوع — هويّة بصريّة متمايزة (ليست أزرق موحّداً): برج بارد · مول محايد بلافتات · فندق دافئ فاخر.
 // الزجاج الآن «مضاء لمّاع» (يُظلَّل ثلاثياً) لا منبعثاً — ألوانه أغمق إذ تُضيئها الإضاءة؛ التوهّج يأتي من النوافذ/الحلقة المنبعثة.
 const PALETTES: Record<ModelKind, Palette> = {
-  tower: { body: [60, 72, 92, 255], glassA: [46, 96, 132, 255], glassB: [30, 64, 96, 255], winCool: [188, 224, 248, 255], winWarm: [255, 200, 120, 255], accent: [100, 230, 255, 255] },
-  mall: { body: [104, 108, 120, 255], glassA: [70, 120, 150, 255], glassB: [48, 86, 116, 255], winCool: [205, 230, 250, 255], winWarm: [255, 196, 120, 255], accent: [120, 236, 255, 255] },
-  hotel: { body: [128, 116, 96, 255], glassA: [78, 110, 140, 255], glassB: [52, 80, 110, 255], winCool: [255, 228, 180, 255], winWarm: [255, 190, 110, 255], accent: [245, 206, 130, 255] },
+  tower: { body: [96, 120, 156, 255], glassA: [72, 138, 188, 255], glassB: [48, 100, 146, 255], winCool: [202, 232, 252, 255], winWarm: [255, 208, 132, 255], accent: [122, 242, 255, 255] },
+  mall: { body: [142, 148, 164, 255], glassA: [100, 154, 188, 255], glassB: [68, 116, 152, 255], winCool: [214, 238, 252, 255], winWarm: [255, 204, 132, 255], accent: [142, 244, 255, 255] },
+  hotel: { body: [166, 154, 126, 255], glassA: [108, 144, 180, 255], glassB: [74, 108, 144, 255], winCool: [255, 234, 190, 255], winWarm: [255, 200, 122, 255], accent: [252, 216, 142, 255] },
 };
 const MAT_GLASS = { ambient: 0.55, diffuse: 0.46, shininess: 160, specularColor: [190, 232, 255] as [number, number, number] }; // زجاج لمّاع عالي البريق
 const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
@@ -198,7 +198,7 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
       layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true, undefined, y));
       if (m.glassA.positions.length) {
         layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS, y)); // زجاج لمّاع مُظلَّل
-        layers.push(meshLayer(`tower-glowA-${it.id}`, m.glassA, position, [pal.glassA[0] + 40, pal.glassA[1] + 50, pal.glassA[2] + 40, 64], false, undefined, y)); // توهّج زجاجيّ خفيف
+        layers.push(meshLayer(`tower-glowA-${it.id}`, m.glassA, position, [Math.min(255, pal.glassA[0] + 75), Math.min(255, pal.glassA[1] + 90), Math.min(255, pal.glassA[2] + 85), 125], false, undefined, y)); // توهّج زجاجيّ أقوى (مبنى مضيء)
       }
       if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, true, MAT_GLASS, y));
       if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false, undefined, y));
