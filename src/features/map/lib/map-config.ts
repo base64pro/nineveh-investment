@@ -21,6 +21,50 @@ export function styleUrl(base: BaseStyle): string {
   return `/api/maptiler/maps/${BASE_STYLE_IDS[base]}/style.json`;
 }
 
+// م9.8 · مزوّد صور القمر الصناعي — سطر التبديل الوحيد. "maptiler" = نمط hybrid الحالي؛
+// "esri" = طبقة raster مُمرَّرة (دقّة جيدة لكنها مجمَّدة 2021 فوق الموصل — مؤكَّد من خادم Esri — فبديل/احتياط)؛
+// "google" = خدمة Google Map Tiles API الرسمية (Maxar ~0.5م · تحديث 1-3 سنوات · الأوضح/الأحدث المتاح)،
+// شروطها الرسمية تجيز العرض في محرّك طرف ثالث مثل MapLibre (≠ خرائط Google الاستهلاكية/البلاط المسروق).
+// الافتراضي = "maptiler" (آمن للإنتاج الحيّ: القمر قاعدة افتراضية، وgoogle يلزمه مفتاح خادمي + فوترة).
+// تُقارَن البدائل محلّياً عبر شريط المقارنة، ويُغيَّر هذا السطر للفائز بعد توفّر مفتاحه. Mapbox مُستبعَد:
+// شروطه (§2.8.1/§3.56) تمنع التمرير عبر وسيط وتشترط محرّك Mapbox GL JS (وMapLibre ليس منه).
+export type SatelliteProvider = "maptiler" | "esri" | "google" | "azure" | "airbus";
+export const SATELLITE_PROVIDER: SatelliteProvider = "maptiler";
+
+// مصادر الصور البديلة (raster عبر الوسيط) — القوالب مُمرَّرة، المفتاح يُحقَن خادمياً في /api/imagery.
+export const IMAGERY_SOURCES: Record<
+  Exclude<SatelliteProvider, "maptiler">,
+  { tiles: string[]; tileSize: number; maxzoom: number; attribution: string }
+> = {
+  esri: {
+    tiles: ["/api/imagery/esri/tile/{z}/{y}/{x}"], // ترتيب Esri: z/y/x (الصفّ قبل العمود)
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: "Esri · Maxar · Earthstar Geographics",
+  },
+  google: {
+    // وسيط مخصّص (session token خادمي) — القالب القياسي z/x/y. ⚠ للإنتاج يلزم إظهار شعار Google + إسناد Maxar.
+    tiles: ["/api/imagery/google/{z}/{x}/{y}"],
+    tileSize: 256,
+    maxzoom: 20,
+    attribution: "Google · Maxar Technologies",
+  },
+  azure: {
+    // Azure Maps (microsoft.imagery · مصدر Airbus) — z/x/y عبر معاملات الاستعلام في الوسيط.
+    tiles: ["/api/imagery/azure/{z}/{x}/{y}"],
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: "© Microsoft · Airbus",
+  },
+  airbus: {
+    // Airbus OneAtlas (تجريبي · WMTS) — يلزم AIRBUS_API_KEY + AIRBUS_WMTS_TEMPLATE من حساب التجربة.
+    tiles: ["/api/imagery/airbus/{z}/{x}/{y}"],
+    tileSize: 256,
+    maxzoom: 18,
+    attribution: "© Airbus DS",
+  },
+};
+
 export const BASES: ReadonlyArray<{ id: BaseStyle; label: string }> = [
   { id: "dark", label: "داكن" },
   { id: "light", label: "فاتح" },

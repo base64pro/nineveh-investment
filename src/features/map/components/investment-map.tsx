@@ -19,13 +19,16 @@ import {
   BOUNDARY_COLORS,
   DEFAULT_BASE,
   DIM_COLOR,
+  IMAGERY_SOURCES,
   INITIAL_ZOOM,
   MAP_CENTER,
   MAX_BOUNDS_PADDING_DEG,
   MAX_ZOOM,
   NAVY,
+  SATELLITE_PROVIDER,
   styleUrl,
   type BaseStyle,
+  type SatelliteProvider,
 } from "../lib/map-config";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { AmbientLight, DirectionalLight, LightingEffect } from "@deck.gl/core";
@@ -57,7 +60,7 @@ import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKi
 import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
 import { buildModelLayers, buildRingLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
-import { generateContactShadow, generateGroundRings, generateModel, type Mesh3, type ModelKind, type TowerMeshes } from "../lib/parametric-tower";
+import { generateContactShadow, generateGardenStrip, generateGroundRings, generateModel, type Mesh3, type ModelKind, type TowerMeshes } from "../lib/parametric-tower";
 import { useAssumedModels, useAssumedParametric } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -87,15 +90,17 @@ function framePadding(base: number, ignoreSheet = false): PadOpt {
   return { top: base + KPI, bottom: base + Math.max(SEARCH, sheet), left: base, right: base };
 }
 
-// م9.7.9 · زوم يؤطّر المجسّم **كاملاً** (لاستعراض درون دوّار): الامتداد الظاهر = الأكبر بين البصمة الأفقية
-// وإسقاط الارتفاع على الشاشة (يكبر بالميل) — فالمجسّمات العالية/الكبيرة تُبعِد الكاميرا، والصغيرة تقرّبها.
-function zoomForModel(footprintM: number, heightM: number, lat: number, viewMinPx: number, pitchDeg: number): number {
+// م9.7.11 · زوم درون يُبقي الكاميرا **بعيدة** فيظهر المبنى كاملاً ومحيطه (لا اقتراب مفرط):
+// ارتفاع جوّي ≥ 1.9كم، ويتناسب طردياً مع حجم المبنى (الأكبر يرتفع أكثر فيبقى ضمن ~25% من الشاشة مع هامش محيط).
+// يعكس صيغة مؤشّر الارتفاع نفسها: alt = 1.5 · ارتفاع_الكانفس · (156543·cos lat / 2^zoom) → فالارتفاع المعروض يطابق المستهدف.
+function zoomForModel(footprintM: number, heightM: number, lat: number, canvasH: number, pitchDeg: number, kind?: ModelKind): number {
   const pr = (pitchDeg * Math.PI) / 180;
-  const vSpan = heightM * Math.sin(pr); // امتداد الارتفاع على الشاشة (متر-مكافئ عند الميل)
-  const spanM = Math.max(footprintM * 1.15, vSpan, 14); // أكبر امتداد ظاهر + حدّ أدنى
-  const FILL = 0.5; // يملأ المجسّم ~50% من أصغر بُعد للشاشة (هامش مريح حوله كاملاً ليظهر تماماً)
-  const mpp = spanM / (FILL * Math.max(360, viewMinPx)); // متر/بكسل المطلوب
-  return Math.log2((156543.03 * Math.cos((lat * Math.PI) / 180)) / mpp);
+  const vSpan = heightM * Math.sin(pr); // إسقاط الارتفاع على الشاشة (يكبر بالميل)
+  const spanM = Math.max(footprintM * 1.1, vSpan, 14); // أكبر امتداد ظاهر للمبنى
+  const MIN_ALT = 1200; // حدّ أدنى للارتفاع الجوّي (متر) — لا تقترب الكاميرا أكثر
+  // م9.8 · المول حصراً يُؤطَّر من ارتفاع أقرب (900م) — بقيّة الأنواع بلا تغيير
+  const targetAlt = kind === "mall" ? 900 : Math.max(MIN_ALT, spanM * 6); // تناسب طرديّ: المباني الكبيرة ترفع الكاميرا أكثر
+  return Math.log2((1.5 * canvasH * 156543.03392 * Math.cos((lat * Math.PI) / 180)) / targetAlt);
 }
 
 type StyleSource = { url?: string; tiles?: string[]; [k: string]: unknown };
@@ -174,11 +179,13 @@ function overlayLayers(): StyleLayer[] {
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
 // م9.3ب · إضاءة للنماذج المرفوعة (pbr) كي تظهر فوق الأرضية الداكنة بدل أن تُعتِم — إضاءة محيطة قوية + اتجاهيّتان.
 // إضاءة النماذج: محيط أخفض + شمس أقوى = تظليل اتجاهيّ أوضح (عمق 3D واقعي على الهيكل المضاء).
+// م9.8 (الأساس البصريّ) · شمس تُلقي ظلالاً حقيقيّة (_shadow) + محيط أخفض ليقرأ الظلّ + إضاءة ملء باردة.
 const MODEL_LIGHTING = new LightingEffect({
-  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 1.6 }),
-  sun: new DirectionalLight({ color: [255, 252, 240], intensity: 2.1, direction: [-1, -2, -3] }),
-  fill: new DirectionalLight({ color: [200, 218, 255], intensity: 0.9, direction: [2, 1, -1] }),
+  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 0.95 }),
+  sun: new DirectionalLight({ color: [255, 250, 238], intensity: 1.85, direction: [-1, -2, -3], _shadow: true }),
+  fill: new DirectionalLight({ color: [196, 214, 255], intensity: 0.5, direction: [2, 1, -1] }),
 });
+MODEL_LIGHTING.shadowColor = [0, 0, 0, 0.32]; // ظلّ ناعم شفّاف — إضاءة أهدأ كي تقرأ الألوان (لا تغسلها)
 
 // م9.7.2 (مؤقّت) · نوع النموذج لكل قطعة مفترضة من اسمها — يُستبدل لاحقاً باختيار المدير من المنسدلة (م9.7.1ب/د).
 const FORCE_KIND: ModelKind | null = null; // (للتحقّق فقط: اضبطه "mall"/"hotel"/"tower" لفرض النوع على كلّ القطع)
@@ -361,7 +368,9 @@ function applyVisibility(m: GLMap | null, show: boolean): void {
  * يبني كائن النمط كاملاً: قاعدة MapTiler (عبر الوسيط، بلا تخزين، عناوين مطلقة)
  * + تعريب + ضبط كحلي + طبقاتنا (الحدود والقناع) — فتظهر من أوّل إطار وعند كل تبديل.
  */
-async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecification> {
+async function buildStyle(base: BaseStyle, data: MapData, provider: SatelliteProvider): Promise<StyleSpecification> {
+  // م9.8 · القمر الصناعي بمزوّد بديل (Esri/Mapbox) = طبقة raster مُمرَّرة بدل نمط MapTiler hybrid.
+  if (base === "satellite" && provider !== "maptiler") return buildSatelliteStyle(provider, data);
   const res = await fetch(styleUrl(base), { cache: "no-store" });
   if (!res.ok) throw new Error(`تعذّر جلب نمط القاعدة (${res.status})`); // switchBase يلتقطه ويعرض تنبيهاً (§ز)
   const style = (await res.json()) as StyleJson;
@@ -433,6 +442,38 @@ async function buildStyle(base: BaseStyle, data: MapData): Promise<StyleSpecific
   style.sources = sources;
   style.layers = [...(style.layers ?? []), ...overlayLayers()];
 
+  return style as unknown as StyleSpecification;
+}
+
+/**
+ * م9.8 · نمط القمر الصناعي بمزوّد بديل: طبقة raster واحدة في الأسفل (Esri/Mapbox عبر الوسيط)
+ * + خطوط/تسميات/سبرايت MapTiler (لخطوط تسميات الحدود) + طبقاتنا السيادية فوقها (الحدود والقناع).
+ * الصورة في الأسفل، التسميات والحدود تُلحَق آخراً ⇒ تبقى فوق الصورة (§هـ.4). المفتاح خادمي (القاعدة 6).
+ */
+function buildSatelliteStyle(provider: Exclude<SatelliteProvider, "maptiler">, data: MapData): StyleSpecification {
+  const origin = window.location.origin;
+  const cfg = IMAGERY_SOURCES[provider];
+  const sources: Record<string, StyleSource> = {
+    imagery: {
+      type: "raster",
+      tiles: cfg.tiles.map((t) => origin + t),
+      tileSize: cfg.tileSize,
+      maxzoom: cfg.maxzoom,
+      attribution: cfg.attribution, // يظهر في AttributionControl تلقائياً (نسب المزوّد)
+    } as unknown as StyleSource,
+    // طبقاتنا السيادية (نفس مصادر buildStyle) — تُحقَن فوق الصورة
+    "dim-mask": { type: "geojson", data: data.maskFC } as unknown as StyleSource,
+    "bnd-governorate": { type: "geojson", data: data.gov } as unknown as StyleSource,
+    "bnd-districts": { type: "geojson", data: data.districts } as unknown as StyleSource,
+    "bnd-subdistricts": { type: "geojson", data: data.subdistricts } as unknown as StyleSource,
+  };
+  const style: StyleJson = {
+    version: 8,
+    glyphs: origin + "/api/maptiler/fonts/{fontstack}/{range}.pbf", // خطوط تسميات الحدود (Noto Sans)
+    sprite: origin + "/api/maptiler/maps/streets-v2-dark/sprite",
+    sources,
+    layers: [{ id: "imagery", type: "raster", source: "imagery" }, ...overlayLayers()],
+  };
   return style as unknown as StyleSpecification;
 }
 
@@ -582,6 +623,9 @@ export default function InvestmentMap() {
   const dataRef = useRef<MapData | null>(null);
   const baseRef = useRef<BaseStyle>(DEFAULT_BASE);
   const [base, setBase] = useState<BaseStyle>(DEFAULT_BASE);
+  // م9.8 · مزوّد القمر الصناعي الفعّال (يقرأه buildStyle) — قابل للتبديل محلّياً عبر شريط المقارنة.
+  const satProviderRef = useRef<SatelliteProvider>(SATELLITE_PROVIDER);
+  const [satProvider, setSatProvider] = useState<SatelliteProvider>(SATELLITE_PROVIDER);
   const [map3D, setMap3D] = useState(true); // م8.12 · عرض الخريطة 3D/2D (الافتراضي 3D)
   const overlayRef = useRef<MapboxOverlay | null>(null);
   // نافذة إشارة القطعة (م7.8): بطاقة هولوكرامية بخط ربط تتبع الإشارة حيّاً — بدل Popup (كانت تختفي خلف طبقة الإشارات)
@@ -644,7 +688,8 @@ export default function InvestmentMap() {
   const staticLayersRef = useRef<Layer[]>([]);
   const towerItemsRef = useRef<TowerItem[]>([]);
   // م9.7.9 · أبعاد المجسّم لكلّ قطعة (بصمة + ارتفاع بالمتر) — لتأطير الكاميرا للمجسّم كاملاً عند الطيران (زوم درون يتناسب مع الحجم)
-  const modelDimsRef = useRef<Map<string, { footprintM: number; heightM: number }>>(new Map());
+  const modelDimsRef = useRef<Map<string, { footprintM: number; heightM: number; kind: ModelKind }>>(new Map());
+  const droneRafRef = useRef(0); // م9.7.11 · مُعرّف حلقة التفاف الدرون (RAF) — لإلغائها عند طيران جديد/تغيّر التركيز/التفكيك
   const ringPhaseRef = useRef(0);
   useEffect(() => {
     registerModelLoaders();
@@ -735,7 +780,7 @@ export default function InvestmentMap() {
       const data: MapData = { gov, districts, subdistricts, maskFC, bounds };
       dataRef.current = data;
 
-      const style = await buildStyle(DEFAULT_BASE, data);
+      const style = await buildStyle(DEFAULT_BASE, data, satProviderRef.current);
       if (cancelled || !containerRef.current) return;
 
       map = new maplibregl.Map({
@@ -1003,7 +1048,7 @@ export default function InvestmentMap() {
           cached = { tower, rings, shadow, kind, footprintM: Math.max(fw, fd), heightM: tower.height };
           towerCacheRef.current.set(cacheKey, cached);
         }
-        modelDimsRef.current.set(rid, { footprintM: cached.footprintM, heightM: cached.heightM }); // للكاميرا (يشمل إصابة التخبئة)
+        modelDimsRef.current.set(rid, { footprintM: cached.footprintM, heightM: cached.heightM, kind: cached.kind }); // للكاميرا (يشمل إصابة التخبئة) + النوع لضبط ارتفاع الدرون
         // المواضع: واحد عند المركز · عدّة على شبكة داخل البصمة (مع نثر اختياريّ).
         if (count === 1) {
           const center = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
@@ -1011,6 +1056,9 @@ export default function InvestmentMap() {
         } else {
           const bw = b[2] - b[0];
           const bh = b[3] - b[1];
+          const cLng = (b[0] + b[2]) / 2;
+          const cLat = (b[1] + b[3]) / 2;
+          // المجسّمات بلا حلقات فرديّة — الموقع متعدّد المجسّمات كيانٌ واحد له حلقة نابضة مركزيّة (أدناه)
           for (let i = 0; i < count; i++) {
             const col = i % cols;
             const row = Math.floor(i / cols);
@@ -1022,7 +1070,14 @@ export default function InvestmentMap() {
               lng += (jx * bw * 0.34) / cols;
               lat += (jy * bh * 0.34) / rows;
             }
-            towerItems.push({ id: `${rid}#${i}`, center: [lng, lat], meshes: cached.tower, kind: cached.kind, yaw: rotationDeg, rings: cached.rings, shadow: cached.shadow });
+            towerItems.push({ id: `${rid}#${i}`, center: [lng, lat], meshes: cached.tower, kind: cached.kind, yaw: rotationDeg, shadow: cached.shadow });
+          }
+          // حلقة نابضة مركزيّة واحدة تُحيط المجسّمات كلّها (نفس سلوك المفرد، لكن للموقع ككيان واحد)
+          towerItems.push({ id: `${rid}#rings`, center: [cLng, cLat], kind: cached.kind, rings: generateGroundRings(0.5 * Math.hypot(wM, dM) * 1.05, 1) });
+          // حديقة ممرّ ممتدّة بين صفوف الأبراج (٤ أبراج فأكثر · للأبراج فقط · لا حديقة للمفرد)
+          if (kind === "tower" && count >= 4 && rows >= 2) {
+            const gardenMesh = generateGardenStrip(wM * 0.96, (dM / rows) * 0.44); // يملأ الممرّ بين الصفّين بالطول الكامل دون تداخل مع الأبراج
+            for (let r = 1; r < rows; r++) towerItems.push({ id: `${rid}#g${r}`, center: [cLng, b[1] + (r * bh) / rows], meshes: gardenMesh, kind: cached.kind });
           }
         }
         towerRefIds.add(rid);
@@ -1088,6 +1143,10 @@ export default function InvestmentMap() {
       );
       if (m && f?.geometry) {
         sfxFly(); // أثر طيران تقني ناعم (م7.9)
+        if (droneRafRef.current) {
+          cancelAnimationFrame(droneRafRef.current); // أوقِف أي التفاف درون سابق قبل طيران جديد
+          droneRafRef.current = 0;
+        }
         const b = bbox(f) as [number, number, number, number];
         if (f.properties?.kind === "assumed") {
           // م9.3/م9.7.9 · الطيران لقطعة مفترضة يعرض كيانها الهولوكرامي فوراً (بلا فتح بطاقة)، مع حركة سينمائية:
@@ -1099,30 +1158,58 @@ export default function InvestmentMap() {
           const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
           const DRONE_PITCH = 60;
           const center = centroid(f).geometry.coordinates as [number, number]; // مركز القطعة = محور الالتفاف
-          // الزوم من أبعاد المجسّم الفعليّة (يؤطّره كاملاً) — وإلّا تأطير حدود القطعة احتياطاً.
+          // الزوم يُبقي الكاميرا بعيدة (ارتفاع جوّي ≥ 1.2كم) فيظهر المبنى كاملاً ومحيطه، بتناسب طرديّ مع حجمه.
+          // الأبعاد من المجسّم إن توفّرت، وإلّا من بصمة القطعة (b) — حتميّ لا يعتمد على تحميل الشبكة.
           const dims = r ? modelDimsRef.current.get(r) : undefined;
-          let zoom: number;
+          const canvasH = m.getCanvas().clientHeight || 800; // نفس ارتفاع الكانفس المستخدَم في مؤشّر الارتفاع
+          let fpM: number;
+          let hM: number;
           if (dims) {
-            const cv = m.getCanvas();
-            const viewMin = Math.min(cv.clientWidth || 0, cv.clientHeight || 0) || 700;
-            zoom = Math.max(13.5, Math.min(MAX_ZOOM, zoomForModel(dims.footprintM, dims.heightM, center[1], viewMin, DRONE_PITCH)));
+            fpM = dims.footprintM;
+            hM = dims.heightM;
           } else {
-            const cam = m.cameraForBounds(b, { padding: framePadding(60, true), maxZoom: 16.5 });
-            zoom = Math.min(16.5, cam?.zoom ?? 15.5); // أبعاد غير محمّلة بعد → زوم متوسّط آمن (لا تقريب مفرط يقصّ المجسّم)
+            const wM = (b[2] - b[0]) * 111320 * Math.cos((center[1] * Math.PI) / 180); // عرض البصمة بالمتر
+            const dM = (b[3] - b[1]) * 110540; // عمقها بالمتر
+            fpM = Math.max(wM, dM, 12);
+            hM = fpM * 0.6; // تقدير ارتفاع معقول حتى تُحمَّل الشبكة
           }
+          const kindHere = dims?.kind ?? tempKindFor(typeof f.properties?.name_ar === "string" ? (f.properties.name_ar as string) : ""); // نوع المجسّم (المول يُؤطَّر أقرب)
+          const zoom = Math.max(12, Math.min(MAX_ZOOM, zoomForModel(fpM, hM, center[1], canvasH, DRONE_PITCH, kindHere)));
           if (reduce) {
             m.easeTo({ center, zoom, pitch: DRONE_PITCH, duration: 800 }); // احترام تقليل الحركة: اقتراب قصير بلا التفاف
           } else {
             const startBearing = m.getBearing();
-            m.flyTo({ center, zoom, pitch: DRONE_PITCH, bearing: startBearing, duration: 2200, curve: 1.5, essential: true }); // (1) اقتراب سينمائي يؤطّر المجسّم كاملاً
-            // (2) درون: دورة كاملة 360° حول المجسّم — على شوطين 180° (إذ يُطبِّع MapLibre دوران 360° إلى صفر)، خطّيّان فيتّصلان بسلاسة.
-            const droneLeg = (fromBearing: number, remaining: number): void => {
-              if (modelFocusRef.current !== r || remaining <= 0.5) return; // أُلغِيَ التركيز أو اكتملت الدورة
-              const step = Math.min(180, remaining);
-              m.easeTo({ center, zoom, bearing: fromBearing + step, pitch: DRONE_PITCH, duration: 4500, easing: (t) => t, essential: true });
-              m.once("moveend", () => droneLeg(fromBearing + step, remaining - step));
-            };
-            m.once("moveend", () => droneLeg(startBearing, 360));
+            const HORIZON_PITCH = 82; // زاوية أفقيّة (أقلّ من ٩٠° قليلاً) — رؤية المبنى من الأفق أثناء الالتفاف
+            // (1) اقتراب سينمائيّ يؤطّر المبنى من **التصوير الجوّيّ** (٦٠°) عند الارتفاع المستهدَف — يتدفّق مباشرةً إلى الالتفاف (بلا توقّف).
+            m.flyTo({ center, zoom, pitch: DRONE_PITCH, bearing: startBearing, duration: 2400, curve: 1.5, essential: true });
+            // (2) درون: نصف دورة ١٨٠° باتجاه واحد (easeOutSine — انطلاق فوريّ سلس بلا توقّف). الميل بدلالة الدرجات المقطوعة:
+            //     أول ٤٥° **تصوير جوّيّ (٦٠°)** ← نزول إلى **الأفق (٨٢°)** ← بقاء أفقيّ ← قُرب ١٨٠° **يصعد ويعود للتصوير الجوّيّ** ويستقرّ.
+            m.once("moveend", () => {
+              if (modelFocusRef.current !== r) return; // أُلغِيَ التركيز أثناء الاقتراب
+              const base = m.getBearing();
+              const SWEEP_DEG = 180; // نصف دورة
+              const SWEEP_MS = 7500; // إيقاع مهيب
+              const ss = (u: number): number => u * u * (3 - 2 * u); // smoothstep
+              let t0 = 0;
+              const spin = (now: number): void => {
+                const mm = mapRef.current;
+                if (!mm || modelFocusRef.current !== r) {
+                  droneRafRef.current = 0; // توقّف عند تغيّر التركيز/التفكيك
+                  return;
+                }
+                if (!t0) t0 = now;
+                const p = Math.min(1, (now - t0) / SWEEP_MS);
+                const d = SWEEP_DEG * Math.sin((p * Math.PI) / 2); // الدرجات المقطوعة (easeOutSine): انطلاق فوريّ ثمّ تباطؤ مهيب
+                let pitch: number;
+                if (d < 45) pitch = DRONE_PITCH; // أول ٤٥°: تصوير جوّيّ (٦٠°)
+                else if (d < 90) pitch = DRONE_PITCH + (HORIZON_PITCH - DRONE_PITCH) * ss((d - 45) / 45); // نزول إلى الأفق
+                else if (d < 135) pitch = HORIZON_PITCH; // بقاء عند الأفق (٨٢°)
+                else pitch = HORIZON_PITCH + (DRONE_PITCH - HORIZON_PITCH) * ss((d - 135) / 45); // صعود يعود للتصوير الجوّيّ
+                mm.jumpTo({ bearing: base + d, pitch }); // المركز/الزوم ثابتان → التفاف حول المبنى عند الإطار نفسه
+                droneRafRef.current = p < 1 ? requestAnimationFrame(spin) : 0; // ينتهي مستقرّاً في التصوير الجوّيّ (٦٠°)
+              };
+              droneRafRef.current = requestAnimationFrame(spin);
+            });
           }
         } else {
           m.fitBounds(b, { padding: framePadding(80, true), maxZoom: 16, duration: 1000 }); // م8.10: تجاهل ارتفاع الورقة (تُغلق مع الطيران) فلا يفشل التأطير
@@ -1136,8 +1223,22 @@ export default function InvestmentMap() {
 
   // م9.7.4 · مغادرة التركيز (كامل نينوى) تُنهي الاستعراض الحرّ
   useEffect(() => {
-    if (!modelFocusId) setOrbitOn(false);
+    if (!modelFocusId) {
+      setOrbitOn(false);
+      if (droneRafRef.current) {
+        cancelAnimationFrame(droneRafRef.current); // أوقِف التفاف الدرون عند مغادرة التركيز
+        droneRafRef.current = 0;
+      }
+    }
   }, [modelFocusId]);
+
+  // م9.7.11 · تنظيف حلقة التفاف الدرون عند تفكيك المكوّن (منعاً لتسرّب RAF)
+  useEffect(
+    () => () => {
+      if (droneRafRef.current) cancelAnimationFrame(droneRafRef.current);
+    },
+    [],
+  );
 
   // م9.7.4 · الاستعراض الحرّ: اسحب لتدوير الكاميرا حول المجسّم (اتجاه + ميل) · العجلة للزوم — حول المركز (المجسّم) كما في sketchfab.
   useEffect(() => {
@@ -1240,6 +1341,7 @@ export default function InvestmentMap() {
       last = now;
       const mm = mapRef.current;
       if (!mm || !mm.getLayer("bnd-governorate-glow")) return;
+      if (mm.isMoving()) return; // لا تُحدّث طلاء الحدود أثناء حركة الكاميرا — يمنع إعادة الدخول لحلقة رسم MapLibre أثناء easeTo/flyTo (خطأ "already running"/_onEaseFrame)
       const t = (now - t0) / 1000;
       const op = 0.16 + 0.34 * (0.5 + 0.5 * Math.sin(t * 1.05)); // 0.16..0.5 · نبض ~6ث هادئ
       try {
@@ -1273,17 +1375,18 @@ export default function InvestmentMap() {
     });
   }, []);
 
-  async function switchBase(next: BaseStyle): Promise<void> {
+  async function switchBase(next: BaseStyle, force = false): Promise<void> {
     const map = mapRef.current;
     const data = dataRef.current;
-    if (!map || !data || next === baseRef.current) return;
+    // force = إعادة بناء على نفس القاعدة (م9.8 · تبديل مزوّد القمر الصناعي محلّياً)
+    if (!map || !data || (next === baseRef.current && !force)) return;
     const prev = baseRef.current;
     baseRef.current = next;
     setBase(next);
     setMapBase(next); // م8.10 · أبلغ مؤشّرات KPI بتغيّر القاعدة (قرص كحلي فوق الخريطة الفاتحة)
     let style: StyleSpecification;
     try {
-      style = await buildStyle(next, data);
+      style = await buildStyle(next, data, satProviderRef.current);
     } catch {
       baseRef.current = prev; // §ز: فشل الجلب لا يُعلّق الزر على قاعدة لم تُحمَّل
       setBase(prev);
@@ -1318,6 +1421,13 @@ export default function InvestmentMap() {
         // تُشفى ذاتياً عند أول دخول للرسم (enterDrawMode يعيد التشغيل)
       }
     });
+  }
+
+  // م9.8 · تبديل مزوّد القمر الصناعي (مقارنة محلّية): يضبط المزوّد ويعيد بناء القاعدة على القمر الصناعي.
+  function pickSatProvider(p: SatelliteProvider): void {
+    satProviderRef.current = p;
+    setSatProvider(p);
+    void switchBase("satellite", baseRef.current === "satellite"); // force عند البقاء على القمر
   }
 
   function resetView(): void {
@@ -1680,6 +1790,11 @@ export default function InvestmentMap() {
       const Ht = el.clientHeight;
       const cx = W / 2;
       const cy = Ht / 2;
+      // م9.8 · الارتفاع الجوّي (متر، مطابق لمؤشّر الارتفاع): عند ≤2كم تختفي نبضة مركز المجسّم (المفترضة)
+      // وتبقى فقط حلقات deck النابضة من حدّ البصمة الخارجيّ؛ فوق 2كم يبقى السلوك كما هو.
+      const lat0 = mm.getCenter().lat;
+      const mpp0 = (156543.03392 * Math.cos((lat0 * Math.PI) / 180)) / Math.pow(2, mm.getZoom());
+      const hideCenterPing = (0.5 / Math.tan(0.6435011087932844 / 2)) * Ht * mpp0 <= 2000;
       const hidden = hiddenStatesRef.current;
       const wantLabels = op > 0.01; // التسميات عند الاقتراب فقط؛ النبضات على كل مستويات الزوم
       const pings: { x: number; y: number; key: string; color: string; d: number }[] = [];
@@ -1695,7 +1810,8 @@ export default function InvestmentMap() {
         const pt = mm.project(c);
         if (pt.x < -30 || pt.x > W + 30 || pt.y < -30 || pt.y > Ht + 30) continue;
         const d = Math.hypot(pt.x - cx, pt.y - cy);
-        pings.push({ x: pt.x, y: pt.y, key: String(p.ref_id ?? `${Math.round(pt.x)},${Math.round(pt.y)}`), color: PING_HEX[st] ?? "#9fc0e8", d });
+        // م9.8 · ≤2كم جوّي: تُحجَب نبضة مركز المجسّم (المفترضة)؛ تبقى حلقات deck من حدّ البصمة. (التسمية تبقى.)
+        if (!(hideCenterPing && p.kind === "assumed")) pings.push({ x: pt.x, y: pt.y, key: String(p.ref_id ?? `${Math.round(pt.x)},${Math.round(pt.y)}`), color: PING_HEX[st] ?? "#9fc0e8", d });
         if (wantLabels) {
           const name = typeof p.label === "string" && p.label ? p.label : typeof p.parcel_no === "string" ? p.parcel_no : "";
           if (name) cand.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name), d });
@@ -1872,6 +1988,33 @@ export default function InvestmentMap() {
             </button>
           ))}
         </div>
+
+        {/* م9.8 · مقارنة مزوّد القمر الصناعي — محلّي فقط (يُخفى في الإنتاج)، يظهر حين القمر فعّال */}
+        {process.env.NODE_ENV !== "production" && base === "satellite" && (
+          <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
+            {([
+              { id: "maptiler", label: "MapTiler" },
+              { id: "esri", label: "Esri" },
+              { id: "google", label: "Google" },
+              { id: "azure", label: "Azure" },
+              { id: "airbus", label: "Airbus" },
+            ] as const).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => pickSatProvider(p.id)}
+                className={cn(
+                  "rounded-xl px-2 py-1.5 text-[10px] font-semibold transition active:scale-95",
+                  satProvider === p.id
+                    ? "bg-primary text-primary-foreground shadow-[0_0_14px_-4px_rgba(148,175,209,0.9)]"
+                    : "text-foreground/75 hover:bg-white/8 hover:text-foreground",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           <button

@@ -11,6 +11,7 @@ import { GLTFLoader } from "@loaders.gl/gltf";
 import { DracoWorkerLoader } from "@loaders.gl/draco";
 import type { ParcelModel } from "@/features/parcels/models/model-lib";
 import { fillRgba } from "./parcel-colors";
+import { getTexture } from "./building/textures";
 import type { Mesh3, ModelKind, TowerMeshes } from "./parametric-tower";
 
 let registered = false;
@@ -133,12 +134,22 @@ interface Palette {
 // لوحات حسب النوع — هويّة بصريّة متمايزة (ليست أزرق موحّداً): برج بارد · مول محايد بلافتات · فندق دافئ فاخر.
 // الزجاج الآن «مضاء لمّاع» (يُظلَّل ثلاثياً) لا منبعثاً — ألوانه أغمق إذ تُضيئها الإضاءة؛ التوهّج يأتي من النوافذ/الحلقة المنبعثة.
 const PALETTES: Record<ModelKind, Palette> = {
-  tower: { body: [96, 120, 156, 255], glassA: [72, 138, 188, 255], glassB: [48, 100, 146, 255], winCool: [202, 232, 252, 255], winWarm: [255, 208, 132, 255], accent: [122, 242, 255, 255] },
-  mall: { body: [142, 148, 164, 255], glassA: [100, 154, 188, 255], glassB: [68, 116, 152, 255], winCool: [214, 238, 252, 255], winWarm: [255, 204, 132, 255], accent: [142, 244, 255, 255] },
-  hotel: { body: [166, 154, 126, 255], glassA: [108, 144, 180, 255], glassB: [74, 108, 144, 255], winCool: [255, 234, 190, 255], winWarm: [255, 200, 122, 255], accent: [252, 216, 142, 255] },
+  // م9.8 · الثيمة على البرج: هيكل أزرق مطفأ (بلا لمعان) + زجاج **أزرق أعمق لامع** (لمعان زجاج فقط)
+  tower: { body: [150, 182, 216, 255], glassA: [60, 148, 222, 255], glassB: [26, 116, 210, 255], winCool: [200, 234, 255, 255], winWarm: [255, 214, 160, 255], accent: [110, 220, 255, 255] },
+  // م9.8 · body = حجر/كونكريت **أبيض** · glassA = زجاج رؤية أزرق شفّاف · glassB = ألواح نوافذ **زرقاء براقة** · accent = أحزمة كحليّة-سماويّة
+  mall: { body: [242, 242, 244, 255], glassA: [120, 196, 242, 150], glassB: [56, 146, 224, 255], winCool: [206, 236, 255, 255], winWarm: [255, 206, 138, 255], accent: [120, 224, 255, 255] },
+  // م9.8 · الثيمة على الفندق (منتجع فاخر): هيكل كريميّ دافئ فاتح + زجاج أزرق منقّى + تتويج **ذهبيّ** (هويّة المنتجع)
+  hotel: { body: [226, 214, 192, 255], glassA: [120, 168, 206, 255], glassB: [86, 140, 186, 255], winCool: [255, 234, 190, 255], winWarm: [255, 200, 122, 255], accent: [252, 216, 142, 255] },
 };
 const MAT_GLASS = { ambient: 0.55, diffuse: 0.46, shininess: 160, specularColor: [190, 232, 255] as [number, number, number] }; // زجاج لمّاع عالي البريق
-const TOWER_RING: [number, number, number, number] = [60, 180, 240, 240]; // حلقات أرضية أزرق متوهّج
+// م9.8 (الثيمة) · زجاج لكل نوع — البرج **أهدأ لمعاناً** (طلب المستخدم: تقليل لمعان البرج)؛ المول/الفندق بالبريق العالي.
+const MAT_GLASS_BY_KIND: Record<ModelKind, typeof MAT_GLASS> = {
+  tower: { ambient: 0.56, diffuse: 0.46, shininess: 140, specularColor: [180, 225, 255] }, // زجاج أزرق مبهر
+  mall: MAT_GLASS,
+  hotel: MAT_GLASS,
+};
+const TOWER_CRYSTAL: [number, number, number, number] = [96, 172, 255, 240]; // مادّة المكعّب الكريستاليّ المنبعث (= زجاج طوابق البرج)
+const TOWER_RING: [number, number, number, number] = [100, 165, 205, 255]; // حلقات أرضية أزرق هولوكراميّ أهدأ (حدّة لون أقلّ — م9.7.11)
 const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
 
 // م9.7.5 · مكتبة النماذج الواقعية حسب النوع (glb احترافيّة CC0 في public/models) — تحلّ محلّ الإجرائيّ.
@@ -151,12 +162,20 @@ export const TYPE_MODELS: Record<ModelKind, { url: string; footprint: number; he
 
 // م9.7.6 · خامات Phong حسب السطح (لمعان الزجاج · مطّ الهيكل) — تُطبَّق على المضاء فقط.
 const MAT_BODY = { ambient: 0.32, diffuse: 0.86, shininess: 18, specularColor: [70, 80, 95] as [number, number, number] };
-function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean, material?: object, yaw = 0): SimpleMeshLayer {
+// م9.8 · خامة هيكل لكل نوع — هويّة سطح متمايزة: برج بارد لمّاع · مول أحيد · فندق أدفأ أنعم.
+const MAT_BODY_BY_KIND: Record<ModelKind, typeof MAT_BODY> = {
+  tower: { ambient: 0.52, diffuse: 0.82, shininess: 4, specularColor: [96, 110, 130] }, // هيكل أزرق مطفأ (بلا لمعان)
+  mall: { ambient: 0.4, diffuse: 0.82, shininess: 14, specularColor: [120, 124, 132] },
+  hotel: { ambient: 0.46, diffuse: 0.78, shininess: 12, specularColor: [190, 178, 156] }, // كريميّ دافئ فاتح
+};
+function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean, material?: object, yaw = 0, texture?: string): SimpleMeshLayer {
   const attrs: Record<string, { value: Float32Array; size: number }> = {
     positions: { value: mesh.positions, size: 3 },
     normals: { value: mesh.normals, size: 3 },
   };
   if (mesh.colors && mesh.colors.length) attrs.colors = { value: mesh.colors, size: 3 }; // تدرّج/AO رأسيّ يضاعف اللون
+  const useTex = texture && mesh.texCoords && mesh.texCoords.length;
+  if (useTex) attrs.texCoords = { value: mesh.texCoords as Float32Array, size: 2 }; // م9.8 · إحداثيّات الخامة
   return new SimpleMeshLayer({
     id,
     data: [{ position }],
@@ -165,6 +184,7 @@ function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], 
     getOrientation: [0, yaw, 0], // م9.7.8 · توجيه المجسّم حول المحور الرأسيّ
     sizeScale: 1,
     getColor: color,
+    ...(useTex ? { texture } : {}), // خامة إجرائيّة تُضاعَف باللون والإضاءة
     material: lit ? (material ?? MAT_BODY) : false, // مضاء بخامة Phong · أو منبعث (توهّج)
     pickable: false,
   });
@@ -193,19 +213,23 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
       );
     } else if (it.meshes) {
       const m = it.meshes;
-      const pal = PALETTES[it.kind ?? "tower"];
+      const k = it.kind ?? "tower";
+      const pal = PALETTES[k];
       const y = it.yaw ?? 0; // توجيه المجسّم
-      layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true, undefined, y));
+      if (m.body.positions.length) layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true, MAT_BODY_BY_KIND[k], y, getTexture("facade"))); // واجهة مكسوّة (الجسم قد يكون فارغاً لكيان حديقة الممرّ)
       if (m.glassA.positions.length) {
-        layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS, y)); // زجاج لمّاع مُظلَّل
-        layers.push(meshLayer(`tower-glowA-${it.id}`, m.glassA, position, [Math.min(255, pal.glassA[0] + 75), Math.min(255, pal.glassA[1] + 90), Math.min(255, pal.glassA[2] + 85), 125], false, undefined, y)); // توهّج زجاجيّ أقوى (مبنى مضيء)
+        if (k === "tower") layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, TOWER_CRYSTAL, false, undefined, y)); // زجاج الطوابق = مادّة المكعّب الكريستاليّ المنبعث
+        else { layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS_BY_KIND[k], y, getTexture("glass"))); layers.push(meshLayer(`tower-glowA-${it.id}`, m.glassA, position, [Math.min(255, pal.glassA[0] + 75), Math.min(255, pal.glassA[1] + 90), Math.min(255, pal.glassA[2] + 85), 125], false, undefined, y)); }
       }
-      if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, true, MAT_GLASS, y));
+      if (m.glassB.positions.length) {
+        if (k === "tower") layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, TOWER_CRYSTAL, false, undefined, y));
+        else { layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, true, MAT_GLASS_BY_KIND[k], y, getTexture("glass"))); layers.push(meshLayer(`tower-glowB-${it.id}`, m.glassB, position, [Math.min(255, pal.glassB[0] + 55), Math.min(255, pal.glassB[1] + 75), Math.min(255, pal.glassB[2] + 30), 110], false, undefined, y)); }
+      }
       if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false, undefined, y));
       if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false, undefined, y));
       if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false, undefined, y));
       (m.extras ?? []).forEach((ex, i) => {
-        if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit, undefined, y));
+        if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit, undefined, y, ex.tex ? getTexture(ex.tex) : undefined));
       });
     }
   }
@@ -222,8 +246,8 @@ export function buildRingLayers(items: TowerItem[], phase: number): Layer[] {
     const WAVES = 3;
     for (let wv = 0; wv < WAVES; wv++) {
       const p = (phase + wv / WAVES) % 1; // موجات متعاقبة لتدفّق مستمرّ
-      const ss = 1.0 + 1.7 * p; // من حدّ بصمة المجسّم (1×) نحو الخارج (2.7×) — لا تدخل تحت جسمه أبداً
-      const a = Math.round(235 * Math.pow(Math.sin(Math.PI * p), 0.85)); // مخفيّة عند الحافة (تحت المجسّم) → تظهر بعد خروجها → تتلاشى بعيداً
+      const ss = 1.0 + 1.7 * p; // من حدّ بصمة المجسّم (1×) نحو الخارج (2.7×) — لا تدخل تحت جسمه أبداً (نفس تساريع التمدّد)
+      const a = Math.round(180 * Math.pow(Math.sin(Math.PI * p), 1.35)); // أهدأ وأشفّ + غلاف أنعم: ظهور/تلاشٍ سلس مريح (ذروة ١٨٠/٢٥٥ بدل ٢٣٥)
       layers.push(
         new SimpleMeshLayer({
           id: `ring-${it.id}-${wv}`,

@@ -39,3 +39,7 @@ next-env.d.ts
 
 # temp
 .commit-msg-tmp
+
+# سجلّات خادم التطوير المحلّي
+/dev.log
+/dev-server.log
