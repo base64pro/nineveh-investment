@@ -12,7 +12,7 @@ import destination from "@turf/destination";
 import distance from "@turf/distance";
 import type { GeoJSONSource, Map as GLMap, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
-import { ChevronDown, FilterX, Layers, MapPinned, Maximize2, Rotate3d, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, FilterX, Layers, MapPinned, Maximize2, Rotate3d, Volume2, VolumeX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASES,
@@ -56,8 +56,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { inferName } from "../lib/spatial-inference";
-import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm } from "../lib/map-nav-store";
+import { onFlyTo, onFlyToCoords, onResetView, onStartDraw, onStartTour, onStopTour, onZoom, type ParcelKind, requestFlyTo, requestOpenParcelDetail, requestOpenParcelForm, requestStopTour, setTourActive, setTourLocations, useTourActive } from "../lib/map-nav-store";
 import type { DrawTarget } from "../lib/map-nav-store";
+import { altForModel, buildTimeline, gateCameraBearing, zoomForAltitude, type StartCam, type TourLoc, type TourTimeline } from "../lib/tour-engine";
 import { setMapBase } from "../lib/map-base-store";
 import { buildModelLayers, buildRingLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
 import { generateContactShadow, generateGardenStrip, generateGroundRings, generateModel, type Mesh3, type ModelKind, type TowerMeshes } from "../lib/parametric-tower";
@@ -735,6 +736,8 @@ export default function InvestmentMap() {
   modelFocusRef.current = modelFocusId;
   // م9.7.4 · وضع الاستعراض الحرّ (تدوير المجسّم بكل الاتجاهات + زوم — شبه سكتشفاب)
   const [orbitOn, setOrbitOn] = useState(false);
+  // م9.10 · الجولة السينمائيّة الأوتوماتيكيّة (تُخفي الواجهة وتقود الكاميرا بمسار RAF)
+  const tourActive = useTourActive();
   // م9.3ب · نماذج 3D المرفوعة لكل القطع المفترضة + شبكات STL المحلَّلة (تحلّ محلّ الكتلة الإجرائية على الخريطة)
   const { data: assumedModels = [] } = useAssumedModels();
   const { data: parametricCfg } = useAssumedParametric(); // م9.7.1ب · إعداد النموذج البارامتري لكل قطعة (من المنسدلة)
@@ -748,6 +751,15 @@ export default function InvestmentMap() {
   const modelDimsRef = useRef<Map<string, { footprintM: number; heightM: number; kind: ModelKind }>>(new Map());
   const droneRafRef = useRef(0); // م9.7.11 · مُعرّف حلقة التفاف الدرون (RAF) — لإلغائها عند طيران جديد/تغيّر التركيز/التفكيك
   const ringPhaseRef = useRef(0);
+  // م9.10 · مراجع محرّك الجولة — RAF المسار + مؤقّت وضع تقليل الحركة + الخطّ الزمنيّ + قائمة المواقع الكاملة (للقائد)
+  const tourActiveRef = useRef(false);
+  const tourRafRef = useRef(0);
+  const tourTimerRef = useRef(0);
+  const tourTimelineRef = useRef<TourTimeline | null>(null);
+  const tourStartTsRef = useRef(0);
+  const tourLoopRef = useRef(false);
+  const tourModeRef = useRef(1);
+  const tourLocsRef = useRef<Map<string, TourLoc & { nameAr: string }>>(new Map());
   useEffect(() => {
     registerModelLoaders();
   }, []);
@@ -1167,6 +1179,43 @@ export default function InvestmentMap() {
     const staticLayers = vis ? [...parcelLayers(vis, selectedId, refIds, towerRefIds), ...buildModelLayers(items), ...buildTowerLayers(towerItems)] : [];
     staticLayersRef.current = staticLayers;
     towerItemsRef.current = towerItems;
+    // م9.10 · انشر مواقع الجولة (كلّ قطعة مفترضة معروضة كمجسّم) — للنافذة (اختيار المواقع) وللقائد (بناء المسار).
+    const tourMap = new Map<string, TourLoc & { nameAr: string }>();
+    if (vis) {
+      for (const f of vis.features) {
+        const rid = typeof f.properties?.ref_id === "string" ? (f.properties.ref_id as string) : null;
+        if (f.properties?.kind !== "assumed" || !rid || !f.geometry || tourMap.has(rid)) continue;
+        const c = centroid(f as Feature<Polygon | MultiPolygon>).geometry.coordinates as [number, number];
+        const nameAr =
+          typeof f.properties?.name_ar === "string" && f.properties.name_ar
+            ? (f.properties.name_ar as string)
+            : typeof f.properties?.label === "string" && f.properties.label
+              ? (f.properties.label as string)
+              : rid;
+        const dims = modelDimsRef.current.get(rid);
+        let footprintM: number;
+        let heightM: number;
+        let kind: ModelKind;
+        if (dims) {
+          footprintM = dims.footprintM;
+          heightM = dims.heightM;
+          kind = dims.kind;
+        } else {
+          const bb = bbox(f as Feature) as [number, number, number, number];
+          const wM = (bb[2] - bb[0]) * 111320 * Math.cos((c[1] * Math.PI) / 180);
+          const dM = (bb[3] - bb[1]) * 110540;
+          footprintM = Math.max(wM, dM, 12);
+          heightM = footprintM * 0.6;
+          kind = tempKindFor(nameAr);
+        }
+        const cfg = parametricCfg?.get(rid);
+        const upl = assumedModels.find((m) => m.refId === rid);
+        const rotationDeg = cfg?.rotationDeg ?? (typeof upl?.transform?.rotationDeg === "number" ? upl.transform.rotationDeg : 0);
+        tourMap.set(rid, { refId: rid, nameAr, center: c, footprintM, heightM, kind, rotationDeg });
+      }
+    }
+    tourLocsRef.current = tourMap;
+    setTourLocations([...tourMap.values()].map((l) => ({ refId: l.refId, nameAr: l.nameAr, kind: l.kind })));
     overlayRef.current?.setProps({ layers: [...staticLayers, ...buildRingLayers(towerItems, ringPhaseRef.current)] });
   }, [fc, selectedId, assumedModels, parametricCfg, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
 
@@ -1248,6 +1297,7 @@ export default function InvestmentMap() {
   // الانتقال لقطعة (§هـ.2): طيران فقط — الشارة تنبثق حصراً عند النقر المباشر على القطعة (م7.6)
   useEffect(() => {
     return onFlyTo((refId) => {
+      if (tourActiveRef.current) return; // أثناء الجولة: القائد يملك الكاميرا — لا طيران مفرد متنازع
       const m = mapRef.current;
       const f = fcRef.current.features.find(
         (ft) =>
@@ -1336,6 +1386,7 @@ export default function InvestmentMap() {
 
   // م9.7.4 · مغادرة التركيز (كامل نينوى) تُنهي الاستعراض الحرّ
   useEffect(() => {
+    if (tourActiveRef.current) return; // أثناء الجولة: تبديل التركيز بين المواقع لا يُلغي مدار درون (القائد يقود)
     if (!modelFocusId) {
       setOrbitOn(false);
       if (droneRafRef.current) {
@@ -1441,6 +1492,143 @@ export default function InvestmentMap() {
     });
   }, []);
 
+  // م9.10 · بدء الجولة السينمائيّة — يقود الكاميرا بمسار RAF عبر المواقع المختارة (jumpTo/إطار)، والواجهة مخفيّة.
+  useEffect(() => {
+    return onStartTour((cfg) => {
+      const m = mapRef.current;
+      if (!m) return;
+      const locs = cfg.refIds.map((id) => tourLocsRef.current.get(id)).filter(Boolean) as (TourLoc & { nameAr: string })[];
+      if (!locs.length) {
+        toast.info("لا مواقع مختارة للجولة");
+        return;
+      }
+      m.stop(); // أوقِف أي طيران MapLibre جارٍ (يمنع تنازع «already running»)
+      if (droneRafRef.current) {
+        cancelAnimationFrame(droneRafRef.current);
+        droneRafRef.current = 0;
+      }
+      setOrbitOn(false);
+      setSelectedId(null);
+      setMkSel(null);
+      tourActiveRef.current = true;
+      tourLoopRef.current = cfg.loop;
+      tourModeRef.current = cfg.mode;
+      setTourActive(true); // يُخفي الواجهة في الخريطة والشيل
+      m.dragPan.disable();
+      m.dragRotate.disable();
+      m.scrollZoom.disable();
+      m.doubleClickZoom.disable();
+      m.touchZoomRotate.disable();
+      m.keyboard.disable();
+      sfxFly();
+      const canvasH = m.getCanvas().clientHeight || 800;
+      const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (reduce) {
+        // تقليل الحركة: انتقال سلس لكلّ موقع (بلا مدار) ووقفة قصيرة، ثمّ التالي.
+        let i = 0;
+        const step = (): void => {
+          if (!tourActiveRef.current) return;
+          if (i >= locs.length) {
+            if (tourLoopRef.current) i = 0;
+            else {
+              requestStopTour();
+              return;
+            }
+          }
+          const loc = locs[i++]!;
+          setModelFocusId(loc.refId);
+          const altM = altForModel(loc, 60);
+          const zoom = Math.max(12, Math.min(MAX_ZOOM, zoomForAltitude(altM, loc.center[1], canvasH)));
+          m.easeTo({ center: loc.center, zoom, pitch: 60, bearing: gateCameraBearing(loc.kind, loc.rotationDeg), duration: 1400, essential: true });
+          tourTimerRef.current = window.setTimeout(step, 3400);
+        };
+        step();
+        return;
+      }
+      // المسار الكامل: محرّك الخطّ الزمنيّ يقود jumpTo لكلّ إطار.
+      const altFromZoom = (zoom: number, lat: number): number => (1.5 * canvasH * 156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+      const rebuild = (): void => {
+        const c = m.getCenter();
+        const start: StartCam = { center: [c.lng, c.lat], bearing: m.getBearing(), pitch: m.getPitch(), altM: altFromZoom(m.getZoom(), c.lat) };
+        tourTimelineRef.current = buildTimeline(locs, tourModeRef.current, start);
+        tourStartTsRef.current = 0;
+      };
+      rebuild();
+      let lastRef: string | null = modelFocusRef.current;
+      const frame = (now: number): void => {
+        if (!tourActiveRef.current) return;
+        const tl = tourTimelineRef.current;
+        if (!tl) return;
+        if (!tourStartTsRef.current) tourStartTsRef.current = now;
+        const t = now - tourStartTsRef.current;
+        const f = tl.sample(t);
+        if (f.refId !== lastRef) {
+          lastRef = f.refId;
+          setModelFocusId(f.refId);
+        }
+        const zoom = Math.max(12, Math.min(MAX_ZOOM, zoomForAltitude(f.altM, f.center[1], canvasH)));
+        m.jumpTo({ center: f.center, zoom, pitch: f.pitch, bearing: f.bearing });
+        if (t >= tl.durationMs) {
+          if (tourLoopRef.current) {
+            rebuild();
+            tourRafRef.current = requestAnimationFrame(frame);
+            return;
+          }
+          requestStopTour();
+          return;
+        }
+        tourRafRef.current = requestAnimationFrame(frame);
+      };
+      tourRafRef.current = requestAnimationFrame(frame);
+    });
+  }, []);
+
+  // م9.10 · إنهاء الجولة — يوقف المحرّك، يعيد الإيماءات والواجهة، ويعود لكامل نينوى ويخرج من ملء الشاشة.
+  useEffect(() => {
+    return onStopTour(() => {
+      const m = mapRef.current;
+      tourActiveRef.current = false;
+      if (tourRafRef.current) {
+        cancelAnimationFrame(tourRafRef.current);
+        tourRafRef.current = 0;
+      }
+      if (tourTimerRef.current) {
+        clearTimeout(tourTimerRef.current);
+        tourTimerRef.current = 0;
+      }
+      tourTimelineRef.current = null;
+      setModelFocusId(null);
+      setTourActive(false);
+      if (m) {
+        m.dragPan.enable();
+        m.dragRotate.enable();
+        m.scrollZoom.enable();
+        m.doubleClickZoom.enable();
+        m.touchZoomRotate.enable();
+        m.keyboard.enable();
+        resetView(); // عودة سلسة لكامل نينوى
+      }
+      if (typeof document !== "undefined" && document.fullscreenElement) void document.exitFullscreen?.();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resetView مستقرّ (refs)
+  }, []);
+
+  // م9.10 · خروج ملء الشاشة (Esc) أثناء الجولة ⇒ إنهاؤها، ومفتاح Esc مباشرةً أيضاً.
+  useEffect(() => {
+    const onFsChange = (): void => {
+      if (tourActiveRef.current && typeof document !== "undefined" && !document.fullscreenElement) requestStopTour();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape" && tourActiveRef.current) requestStopTour();
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
   // م8.11 · توهّج نابض هادئ لشريط حدود نينوى — يعلو ويخفت بسلاسة (sine) عبر تحريك line-opacity للطبقة المتوهّجة.
   useEffect(() => {
     if (!mapReady) return;
@@ -1454,6 +1642,7 @@ export default function InvestmentMap() {
       last = now;
       const mm = mapRef.current;
       if (!mm || !mm.getLayer("bnd-governorate-glow")) return;
+      if (tourActiveRef.current) return; // أثناء الجولة (jumpTo لكلّ إطار): لا تُحدّث طلاء الحدود — تجنّب تنازع حلقة الرسم
       if (mm.isMoving()) return; // لا تُحدّث طلاء الحدود أثناء حركة الكاميرا — يمنع إعادة الدخول لحلقة رسم MapLibre أثناء easeTo/flyTo (خطأ "already running"/_onEaseFrame)
       const t = (now - t0) / 1000;
       const op = 0.16 + 0.34 * (0.5 + 0.5 * Math.sin(t * 1.05)); // 0.16..0.5 · نبض ~6ث هادئ
@@ -1893,6 +2082,7 @@ export default function InvestmentMap() {
       raf = 0; // حارس دفاعيّ: أيّ استدعاء مباشر/مجدوَل يصفّر الجدولة فلا ازدواج حساب (onMove يجدول من جديد عند الحاجة)
       const mm = mapRef.current;
       if (!mm) return;
+      if (tourActiveRef.current) return; // أثناء الجولة: الواجهة مخفيّة — لا حساب نبضات/تسميات لكلّ إطار
       const op = Math.max(0, Math.min(1, (mm.getZoom() - (SHOW - FADE)) / FADE));
       setLabelOpacity(op);
       if (!showParcelsRef.current) {
@@ -2028,6 +2218,7 @@ export default function InvestmentMap() {
       raf = 0;
       const mm = mapRef.current;
       if (!mm) return;
+      if (tourActiveRef.current) return; // أثناء الجولة: مؤشّر الارتفاع مخفيّ — لا تحديث حالة لكلّ إطار
       const lat = mm.getCenter().lat;
       const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, mm.getZoom()); // متر/بكسل عند المركز
       const h = mm.getCanvas().clientHeight || mm.getContainer().clientHeight || 1;
@@ -2152,8 +2343,21 @@ export default function InvestmentMap() {
         </div>
       )}
 
+      {/* م9.10 · إنهاء الجولة السينمائيّة — يظهر أثناء الجولة فقط (أعلى البداية)، فوق كلّ شيء */}
+      {tourActive ? (
+        <button
+          type="button"
+          onClick={() => requestStopTour()}
+          title="إنهاء الجولة (Esc)"
+          aria-label="إنهاء الجولة"
+          className="absolute start-4 top-4 z-[100] inline-flex items-center gap-2 rounded-full border border-[rgba(159,192,232,0.5)] bg-[hsl(221_44%_9%/0.82)] px-4 py-2 text-sm font-bold text-foreground shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8),0_0_22px_-6px_rgba(148,175,209,0.7)] backdrop-blur-md transition hover:bg-[hsl(221_44%_14%/0.92)] active:scale-95"
+        >
+          <X className="size-4" /> إنهاء الجولة
+        </button>
+      ) : null}
+
       {/* م8.8 · مؤشّر «مسافة الارتفاع الجوي عن الخريطة» — رقم ثلاثي الأبعاد عائم أسفل-يمين يتحدّث لحظياً */}
-      <div className="pointer-events-none absolute bottom-[calc(var(--sab)+5.5rem)] left-3 z-[13] flex flex-col items-start gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] md:left-auto md:right-3 md:items-end lg:right-[6.5rem]">
+      <div className={cn("pointer-events-none absolute bottom-[calc(var(--sab)+5.5rem)] left-3 z-[13] flex flex-col items-start gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] md:left-auto md:right-3 md:items-end lg:right-[6.5rem]", tourActive && "hidden")}>
         <span className="text-[9px] font-semibold leading-none text-foreground/70">الارتفاع الجوي</span>
         <span dir="ltr" className="bg-gradient-to-b from-white via-[#e3edfb] to-[#9fc0e8] bg-clip-text text-lg font-extrabold tabular-nums leading-none tracking-tight text-transparent drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
           {altText}
@@ -2162,7 +2366,7 @@ export default function InvestmentMap() {
 
       {/* عمود الأدوات العائمة: القاعدة · العودة · الطبقات ← ثم استوديو الرسم — فوق الجارت دائماً (z-20).
           م8.7: على lg تُزاح يسار الدوك العائم (end-[6.5rem]) كي لا تتداخل معه على الخريطة الكاملة. */}
-      <div className="absolute end-3 top-16 z-20 flex flex-col items-end gap-2 lg:end-[6.5rem]">
+      <div className={cn("absolute end-3 top-16 z-20 flex flex-col items-end gap-2 lg:end-[6.5rem]", tourActive && "hidden")}>
         <div className={cn("flex gap-0.5 rounded-2xl p-1", GLASS)}>
           {BASES.map((b) => (
             <button
@@ -2503,7 +2707,7 @@ export default function InvestmentMap() {
       {/* م8.8.2/م8.12.1 · نبضة الموقع — جبهة موجية سونار تحت الدبابيس (z-9 < deck): الحجم مرن مع الزوم.
           في 3D تنبسط الحلقات على الأرض (rotateX = ميل الكاميرا · perspective بمركز الشاشة = نقطة الكاميرا الرئيسة)
           فتبدو كأنها جزء من الرسمة لا حلقات عمودية عائمة؛ في 2D (ميل 0) = دوائر كما هي (rotateX(0) محايد). */}
-      {pinPings.length ? (
+      {!tourActive && pinPings.length ? (
         <div ref={pingLayerRef} className="pointer-events-none absolute inset-0 z-[9] overflow-hidden" style={{ perspective: `${pingTilt.persp}px` }}>
           {pinPings.map((p) => (
             <span key={p.key} ref={positionPingEl} data-lng={p.lng} data-lat={p.lat} className="absolute left-0 top-0" style={{ color: p.color, transformOrigin: "0 0", willChange: "transform" }}>
@@ -2519,7 +2723,7 @@ export default function InvestmentMap() {
 
       {/* م8.10 (مُحدَّث) · تسميات الدبابيس (§هـ.4) — تبدأ عند ~5كم: بطاقة **شفافة صغيرة فوق رأس الدبوس**،
           تظهر بحركة سلسة (CSS) وتتبع الدبوس حيّاً، وتتلاشى عند الإبعاد عبر labelOpacity. */}
-      {pinLabels.length ? (
+      {!tourActive && pinLabels.length ? (
         <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden" style={{ opacity: labelOpacity }}>
           {pinLabels.map((l) => (
             <span key={l.key} className="absolute" style={{ left: l.x, top: l.y - 54, transform: "translate(-50%, -100%)" }}>
@@ -2535,14 +2739,14 @@ export default function InvestmentMap() {
       ) : null}
 
       {/* الجارت الهولوكرامي (م7.6) — ينزاح بأناقة عند انشغال الأدوات العائمة (طبقات/رسم) فلا تداخل */}
-      <HoloStatsChart hidden={showLayers || drawOpen || drawMode !== "off"} />
+      <HoloStatsChart hidden={showLayers || drawOpen || drawMode !== "off" || tourActive} />
 
       {/* حوار «رسم بأبعاد» — بعد نقر الموقع */}
       {dimAnchor ? <DimensionDialog onSubmit={onDimensionSubmit} onClose={() => setDimAnchor(null)} /> : null}
 
       {/* شارة القطعة (م7.6) — تنبثق بجانب القطعة المنقورة بخط رشيق يتبعها مع الزوم/التنقّل */}
       <AnimatePresence>
-        {selectedProps && calloutPx && drawMode === "off" ? (
+        {selectedProps && calloutPx && drawMode === "off" && !tourActive ? (
           <SelectedParcelCard
             key={selectedProps.ref_id}
             props={selectedProps}
@@ -2567,7 +2771,7 @@ export default function InvestmentMap() {
 
       {/* بطاقة إشارة القطعة (م7.8) — هولوكرامية بخط ربط، فوق كل الإشارات، تتبع الإشارة حيّاً */}
       <AnimatePresence>
-        {mkSel && mkPx && drawMode === "off" ? (
+        {mkSel && mkPx && drawMode === "off" && !tourActive ? (
           <MarkerCallout
             key={mkSel.refId}
             label={mkSel.label}

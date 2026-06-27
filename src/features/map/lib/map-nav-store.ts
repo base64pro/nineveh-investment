@@ -1,4 +1,6 @@
 // ناقل بسيط (pub/sub) لطلب الانتقال لقطعة على الخريطة من السايدبار (§هـ.2 مبدأ التنقّل).
+import { useSyncExternalStore } from "react";
+
 type Listener = (refId: string) => void;
 
 // هدف رسم/ربط هندسة لقطعة بياناتية موجودة (فرصة/رخصة).
@@ -89,4 +91,72 @@ export function onOpenParcelDetail(listener: DetailListener): () => void {
   return () => {
     detailListeners.delete(listener);
   };
+}
+
+// ===== جولة العرض السينمائيّة الأوتوماتيكيّة (م9.10) =====
+// إعداد الجولة: المواقع المختارة (ref_id) + رقم وضع الكاميرا + التكرار.
+export type TourConfig = { refIds: string[]; mode: number; loop: boolean };
+
+const startTourListeners = new Set<(c: TourConfig) => void>();
+export function requestStartTour(c: TourConfig): void {
+  for (const l of startTourListeners) l(c);
+}
+export function onStartTour(listener: (c: TourConfig) => void): () => void {
+  startTourListeners.add(listener);
+  return () => {
+    startTourListeners.delete(listener);
+  };
+}
+
+const stopTourListeners = new Set<() => void>();
+export function requestStopTour(): void {
+  for (const l of stopTourListeners) l();
+}
+export function onStopTour(listener: () => void): () => void {
+  stopTourListeners.add(listener);
+  return () => {
+    stopTourListeners.delete(listener);
+  };
+}
+
+// حالة المواقع المتاحة للجولة — تنشرها الخريطة من مجموعة المجسّمات المعروضة فعلاً، وتستهلكها النافذة.
+export type TourLocation = { refId: string; nameAr: string; kind: string };
+let tourLocations: TourLocation[] = [];
+const tourLocListeners = new Set<() => void>();
+export function setTourLocations(locs: TourLocation[]): void {
+  const same =
+    tourLocations.length === locs.length &&
+    tourLocations.every((t, i) => t.refId === locs[i]?.refId && t.nameAr === locs[i]?.nameAr && t.kind === locs[i]?.kind);
+  if (same) return; // لا إعادة رسم إن لم تتغيّر المجموعة
+  tourLocations = locs;
+  for (const l of tourLocListeners) l();
+}
+export function useTourLocations(): TourLocation[] {
+  return useSyncExternalStore(
+    (cb) => {
+      tourLocListeners.add(cb);
+      return () => tourLocListeners.delete(cb);
+    },
+    () => tourLocations,
+    () => tourLocations,
+  );
+}
+
+// حالة نشاط الجولة — لإخفاء الواجهة (الخريطة + الهيدبار فقط) في الخريطة والشيل معاً.
+let tourActive = false;
+const tourActiveListeners = new Set<() => void>();
+export function setTourActive(v: boolean): void {
+  if (tourActive === v) return;
+  tourActive = v;
+  for (const l of tourActiveListeners) l();
+}
+export function useTourActive(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      tourActiveListeners.add(cb);
+      return () => tourActiveListeners.delete(cb);
+    },
+    () => tourActive,
+    () => false,
+  );
 }

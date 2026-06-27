@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogOut, Maximize2, X } from "lucide-react";
-import { requestResetView } from "@/features/map/lib/map-nav-store";
+import { requestResetView, useTourActive } from "@/features/map/lib/map-nav-store";
 import { signOut } from "@/app/actions";
 import { useRealtimeSync } from "@/lib/data/realtime";
 import { useCounts } from "@/lib/data/use-counts";
@@ -76,6 +76,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
   useRealtimeSync(); // المصدر الواحد: انعكاس فوري لأي تغيير
   const { data: counts } = useCounts();
   const { isViewer } = useRole();
+  const tourActive = useTourActive(); // م9.10 · أثناء الجولة السينمائيّة: تُخفى كلّ واجهة الشيل (تبقى الخريطة + الهيدبار)
   const sections = isViewer ? SECTIONS.filter((s) => !VIEWER_HIDDEN.has(s.id)) : SECTIONS;
   const [active, setActive] = useState<string | null>(null);
   // م8.10 · التاب الفرعي للرخص يصمد عبر فتح/إغلاق التاب (يُصفَّر عند دخول/خروج النظام فقط)
@@ -117,7 +118,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       {/* ===== الديسكتوب (md+): لوحة جانبية overlay + عدّادات الرخص ===== */}
       {!isMobile ? (
         <AnimatePresence>
-          {activeSection ? (
+          {activeSection && !tourActive ? (
             <motion.aside
               key={activeSection.id}
               initial={{ x: "100%", opacity: 0 }}
@@ -151,18 +152,18 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
               </div>
             </motion.aside>
           ) : null}
-          {activeSection?.id === "licenses" ? (
+          {activeSection?.id === "licenses" && !tourActive ? (
             <LicenseStatusCounters key="lic-counters" status={licenseStatus} onSelect={setLicenseStatus} />
           ) : null}
         </AnimatePresence>
       ) : (
         /* ===== الجوال (< md): ورقة سفلية للفرص/الرخص، وملء شاشة لبقية الأقسام ===== */
         <AnimatePresence>
-          {activeSection && isSheetSection ? (
+          {!tourActive && activeSection && isSheetSection ? (
             <MobileSectionSheet key={activeSection.id} title={activeSection.label} Icon={activeSection.icon} onClose={() => setActive(null)}>
               <PanelBody section={activeSection} licenseStatus={licenseStatus} setLicenseStatus={setLicenseStatus} counts={counts} />
             </MobileSectionSheet>
-          ) : activeSection ? (
+          ) : !tourActive && activeSection ? (
             <MobileFullscreen key={activeSection.id} title={activeSection.label} Icon={activeSection.icon} onClose={() => setActive(null)}>
               <PanelBody section={activeSection} licenseStatus={licenseStatus} setLicenseStatus={setLicenseStatus} counts={counts} />
             </MobileFullscreen>
@@ -171,6 +172,7 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       )}
 
       {/* الشريط — يمين الشاشة (§هـ.1) · ديسكتوب فقط (md+) · م7.6: زجاجي متدرّج + مؤشّر نشط منزلق */}
+      {!tourActive && (
       <nav className="absolute inset-y-0 right-0 z-30 hidden w-20 flex-col items-center gap-1.5 border-l border-l-[rgba(148,175,209,0.5)] bg-[linear-gradient(180deg,hsl(220_38%_16%/0.96),hsl(220_36%_11%/0.94))] py-3 shadow-[-4px_0_22px_-6px_rgba(148,175,209,0.55)] backdrop-blur md:flex lg:top-3 lg:bottom-[5.5rem] lg:right-3 lg:rounded-2xl lg:border lg:border-[rgba(148,175,209,0.5)] lg:py-4 lg:shadow-[0_18px_50px_-16px_rgba(0,0,0,0.85),0_0_40px_-12px_rgba(148,175,209,0.5)] lg:ring-1 lg:ring-inset lg:ring-white/[0.06]">
         <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-[rgba(148,175,209,0.7)] to-transparent lg:hidden" />
         {sections.map((s) => {
@@ -234,8 +236,10 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
           </button>
         </form>
       </nav>
+      )}
 
       {/* م8.8 · قرص «كامل نينوى» ثلاثي الأبعاد على الحاسوب (lg) — أسفل الدوك العائم، كنسخة الجوال. data-sfx=off: صوت طيران فقط */}
+      {!tourActive && (
       <button
         type="button"
         data-sfx="off"
@@ -246,9 +250,10 @@ export function AppSidebar({ userEmail }: { userEmail: string | null }) {
       >
         <Maximize2 className="size-[26px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]" strokeWidth={2} />
       </button>
+      )}
 
       {/* الدوك العائم — جوال فقط (يحوي نفس الأقسام المفلترة بالأدوار) */}
-      <MobileDock sections={sections} active={active} onSelect={selectSection} userEmail={userEmail} />
+      {!tourActive && <MobileDock sections={sections} active={active} onSelect={selectSection} userEmail={userEmail} />}
 
       {/* نوافذ القطعة المفترضة العامّة (تُفتح من الخريطة: بعد الرسم / من الإشارة) */}
       <ParcelModals />

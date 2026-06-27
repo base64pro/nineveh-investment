@@ -11,6 +11,7 @@ import {
   Download,
   Eye,
   FileText,
+  Film,
   FilterX,
   Home,
   Landmark,
@@ -41,6 +42,7 @@ import { FilterCombo } from "@/components/ui/filter-combo";
 import { LiveLocationButton } from "@/components/ui/live-location-button";
 import { StateBadge } from "@/features/parcels/state-badge";
 import { AssumedForm } from "./assumed-form";
+import { TourDialog } from "./tour-dialog";
 import { deleteAssumed } from "./actions";
 import { requestFlyTo, requestOpenParcelDetail } from "@/features/map/lib/map-nav-store";
 import { ASSUMED_EXPORT_COLUMNS } from "./fields";
@@ -88,6 +90,7 @@ export function AssumedPanel() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AssumedParcel | null>(null);
+  const [tourOpen, setTourOpen] = useState(false); // م9.10 · نافذة جولة العرض السينمائيّة
 
   const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
@@ -202,6 +205,9 @@ export function AssumedPanel() {
           <button type="button" onClick={() => void onExport()} title={`تصدير ${exportFormat === "pdf" ? "PDF" : "CSV"}`} aria-label="تصدير" className={cn(ORB, "size-12")}>
             <Download className="size-4" />
           </button>
+          <button type="button" onClick={() => setTourOpen(true)} title="جولة عرض سينمائيّة للمواقع" aria-label="جولة عرض سينمائيّة" className={cn(ORB, "size-12 ring-1 ring-inset ring-[rgba(159,192,232,0.55)]")}>
+            <Film className="size-4" />
+          </button>
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="قطعة مفترضة جديدة" aria-label="قطعة مفترضة جديدة" className={cn(ORB, "size-12")}>
             <Plus className="size-5" />
           </button>
@@ -312,6 +318,7 @@ export function AssumedPanel() {
       </div>
 
       <AssumedForm open={formOpen} onClose={() => setFormOpen(false)} initial={editing} optionSets={optionSets} />
+      <TourDialog open={tourOpen} onClose={() => setTourOpen(false)} />
     </div>
   );
 }
