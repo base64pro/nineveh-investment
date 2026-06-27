@@ -200,8 +200,8 @@
   box-shadow: 0 0 10px 0 currentColor, 0 0 26px 3px currentColor;     /* م9.7 · هالة مزدوجة أقوى (وضوح على الصور الفضائية) */
   opacity: 0;
   transform: scale(0.35);
-  /* تباطؤ ease-out لطيف وبطيء: انطلاق هادئ ثم انزلاق متّسع كموجة تتبدّد (لا قفزة حادّة) */
-  animation: pin-ping 5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  /* م9.9 · توقيت خطّيّ عامّ + تشكيل لكلّ مفتاح: نهوض ناعم ثمّ خفض مستمرّ متناسب للشفافية حتى 0 (تلاشٍ سونار أنيق) */
+  animation: pin-ping 5.2s linear infinite;
 }
 /* خمس طبقات متطابقة: تنبثق حلقة كل ثانية على دورة 5ث؛ التأخير سالب فالخمس في الجوّ
    منذ أوّل إطار (لا ومضة تزامن) — فدائماً خمس حلقات متّحدة المركز تزحف للخارج ببطء بتتابع سلس. */
@@ -211,9 +211,10 @@
 .pin-ping--l4 { animation-delay: -3s; }
 .pin-ping--l5 { animation-delay: -4s; }
 @keyframes pin-ping {
-  0% { transform: scale(0.35); opacity: 0; }
-  14% { opacity: 0.95; } /* م9.7 · ذروة أوضح لتبرز على القمر الصناعي */
-  100% { transform: scale(3.1); opacity: 0; } /* العتمة تبلغ 0 عند أقصى اتّساع (بلا مسافة ميّتة)؛ الأبعد أخفت = عمق */
+  /* م9.9 · نهوض سريع ناعم (0→9%) ثمّ خفض خطّيّ مستمرّ للشفافية حتى 0 خلال التوسّع — تلاشٍ متناسب مع سرعة التوسّع، لا انطفاء مفاجئ */
+  0% { transform: scale(0.30); opacity: 0; animation-timing-function: cubic-bezier(0.33, 0, 0.2, 1); }
+  9% { transform: scale(0.62); opacity: 0.92; animation-timing-function: linear; }
+  100% { transform: scale(3.2); opacity: 0; } /* الشفافية تبلغ 0 عند أقصى اتّساع — تتبدّد الحلقة تماماً بانخفاض متواصل */
 }
 @media (prefers-reduced-motion: reduce) {
   .pin-ping { animation: none; opacity: 0; }

@@ -1,30 +1,37 @@
 // م9.8 · طبقة الأرضية: الحلقات النابضة + ظلّ التماس (هالة المجسّم على الخريطة). منقولة حرفياً (سلوك مطابق).
 import type { Mesh3 } from "./types";
 
-// م9.7.1هـ · حلقات أرضية متوهّجة منبعثة تنبعث من مركز المجسّم وتملأ القطعة — فوق الأرضية وتحته (بارزة على القمر).
-export function generateGroundRings(maxRadius: number, count = 4): Mesh3 {
+// م9.9 · حلقة سونار أرضيّة **بنصف قطر وحدويّ (1)**: نطاق توهّج جرسيّ (سطوع 0→1→0 عبر اللون الرأسيّ grayscale). تُرسَم
+// **بمزجٍ جمعيّ (additive)** في buildRingLayers (الحوافّ المعتمة تُضيف صفراً ⇒ توهّج ناعم بلا أسود/مربّع)، و**لا تُلقي ظلّاً**
+// (shadowEnabled:false). نصف القطر الفعليّ يُضبَط لكلّ موجة عبر getScale (instancing) ⇒ تباعد متدرّج مستقلّ لكلّ حلقة.
+export function generateGroundRings(radius: number): Mesh3 {
   const P: number[] = [];
   const N: number[] = [];
-  const segs = 72;
-  const z = 0.6; // فوق الأرضية قليلاً (يتفادى تنازع العمق)
-  const gap = maxRadius / count;
-  const halfW = Math.max(0.4, gap * 0.06); // خطّ أرقّ أنيق — نسبة سُمك/نصف‑قطر ثابتة عبر الموجات (تناسق بصريّ) — م9.7.11
-  for (let i = 1; i <= count; i++) {
-    const r = gap * i;
-    const ri = r - halfW;
-    const ro = r + halfW;
-    for (let s = 0; s < segs; s++) {
-      const a0 = (s / segs) * Math.PI * 2;
-      const a1 = ((s + 1) / segs) * Math.PI * 2;
-      const c0 = Math.cos(a0);
-      const s0 = Math.sin(a0);
-      const c1 = Math.cos(a1);
-      const s1 = Math.sin(a1);
-      P.push(ri * c0, ri * s0, z, ro * c0, ro * s0, z, ro * c1, ro * s1, z, ri * c0, ri * s0, z, ro * c1, ro * s1, z, ri * c1, ri * s1, z);
-      for (let k = 0; k < 6; k++) N.push(0, 0, 1);
+  const C: number[] = []; // سطوع رأسيّ (grayscale) — أرضيّة **عالية** كي لا يُعتِم المزج العاديّ الخلفية (لا أسود على القمر الصناعي)
+  const segs = 80; // دائرة ناعمة
+  const z = 1.2; // **فوق أرضيّة المجسّم/الرسمة** (تتفادى الإخفاء وتنازع العمق) — البناء يبقى يحجبها فيظهر التدفّق حوله
+  const r = radius; // نصف قطر قلب الحلقة (يُضرب بمقياس الموجة في getScale)
+  const w = Math.max(radius * 0.036, 0.7); // م9.9 · سُمك مضاعَف (×٢) — مع مضاعفة تباعد الحلقات الفرعيّة في buildRingLayers يبقى الملف الناعم نفسه
+  const loops = [-1, 1]; // نطاق واحد رفيع
+  const bri = [1, 1]; // أبيض ثابت (التلاشي عند الحافّتين يأتي من تدرّج شفافيّة الحلقات الفرعيّة لا من السطوع)
+  const vert = (rr: number, ang: number, b: number): void => {
+    P.push(rr * Math.cos(ang), rr * Math.sin(ang), z);
+    N.push(0, 0, 1);
+    C.push(b, b, b);
+  };
+  for (let s = 0; s < segs; s++) {
+    const a0 = (s / segs) * Math.PI * 2;
+    const a1 = ((s + 1) / segs) * Math.PI * 2;
+    for (let li = 0; li < loops.length - 1; li++) {
+      const rA = r + loops[li]! * w;
+      const rB = r + loops[li + 1]! * w;
+      const bA = bri[li]!;
+      const bB = bri[li + 1]!;
+      vert(rA, a0, bA); vert(rB, a0, bB); vert(rB, a1, bB);
+      vert(rA, a0, bA); vert(rB, a1, bB); vert(rA, a1, bA);
     }
   }
-  return { positions: new Float32Array(P), normals: new Float32Array(N) };
+  return { positions: new Float32Array(P), normals: new Float32Array(N), colors: new Float32Array(C) };
 }
 
 // م9.7.1و+ · ظلّ تماسٍ أرضيّ مُخبوز (قرص داكن شفّاف ناعم) أسفل المجسّم، مُزاح عكس اتجاه الشمس = إيهام ظلّ مُلقى ثلاثيّ.

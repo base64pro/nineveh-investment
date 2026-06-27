@@ -61,6 +61,7 @@ import type { DrawTarget } from "../lib/map-nav-store";
 import { setMapBase } from "../lib/map-base-store";
 import { buildModelLayers, buildRingLayers, buildTowerLayers, parseBinaryStl, registerModelLoaders, type ModelRenderItem, type StlMesh, type TowerItem } from "../lib/model-render";
 import { generateContactShadow, generateGardenStrip, generateGroundRings, generateModel, type Mesh3, type ModelKind, type TowerMeshes } from "../lib/parametric-tower";
+import { prefetchOverview, featuresBBox, type PrefetchHandle } from "../lib/prefetch-tiles";
 import { useAssumedModels, useAssumedParametric } from "@/features/parcels/models/model-lib";
 import { useTable } from "@/lib/data/use-table";
 import { useSettings } from "@/features/settings/use-settings";
@@ -98,8 +99,8 @@ function zoomForModel(footprintM: number, heightM: number, lat: number, canvasH:
   const vSpan = heightM * Math.sin(pr); // إسقاط الارتفاع على الشاشة (يكبر بالميل)
   const spanM = Math.max(footprintM * 1.1, vSpan, 14); // أكبر امتداد ظاهر للمبنى
   const MIN_ALT = 1200; // حدّ أدنى للارتفاع الجوّي (متر) — لا تقترب الكاميرا أكثر
-  // م9.8 · المول حصراً يُؤطَّر من ارتفاع أقرب (900م) — بقيّة الأنواع بلا تغيير
-  const targetAlt = kind === "mall" ? 900 : Math.max(MIN_ALT, spanM * 6); // تناسب طرديّ: المباني الكبيرة ترفع الكاميرا أكثر
+  // م9.9 · المول يُؤطَّر من ارتفاع 1200م (كان 900) — بقيّة الأنواع بلا تغيير
+  const targetAlt = kind === "mall" ? 1200 : Math.max(MIN_ALT, spanM * 6); // تناسب طرديّ: المباني الكبيرة ترفع الكاميرا أكثر
   return Math.log2((1.5 * canvasH * 156543.03392 * Math.cos((lat * Math.PI) / 180)) / targetAlt);
 }
 
@@ -127,6 +128,9 @@ const ARABIC_LABEL = ["coalesce", ["get", "name:ar"], ["get", "name:latin"], ["g
  * طبقاتنا فوق القاعدة: قناع التعتيم ثمّ الحدود وتسمياتها — بطبقة هرمية (م2.3):
  * كلّما قرّبت تبهت طبقة الأعلى (المحافظة←الأقضية←النواحي) وتبرز الأصغر، والعكس بالإبعاد.
  */
+// م9.9 (②) · مفتاح التحميل المسبق للبلاطات — **معطّل**: يستنزف حصّة MapTiler المجانيّة (انظر التعليق عند مؤثّره). يلزمه باقة أعلى لتفعيله.
+const PREFETCH_ENABLED = false;
+
 function overlayLayers(): StyleLayer[] {
   const C = BOUNDARY_COLORS;
   const line = (id: string, color: string, width: number, minzoom: number, opacity: unknown): StyleLayer => ({
@@ -179,13 +183,13 @@ function overlayLayers(): StyleLayer[] {
 /** طبقات القطع الملوّنة بالحالة (deck.gl): ملء شفّاف + حدّ أعمق + هالة توهّج + تحديد/خفوت/مرور (§هـ.4). */
 // م9.3ب · إضاءة للنماذج المرفوعة (pbr) كي تظهر فوق الأرضية الداكنة بدل أن تُعتِم — إضاءة محيطة قوية + اتجاهيّتان.
 // إضاءة النماذج: محيط أخفض + شمس أقوى = تظليل اتجاهيّ أوضح (عمق 3D واقعي على الهيكل المضاء).
-// م9.8 (الأساس البصريّ) · شمس تُلقي ظلالاً حقيقيّة (_shadow) + محيط أخفض ليقرأ الظلّ + إضاءة ملء باردة.
+// م9.9 · **لا ظلّ مُلقى للمجسّم** (كان يسقط على حلقات السونار ويُزعج بصريّاً) — إضاءة Phong فقط (شمس + محيط + ملء).
+// إزالة `_shadow` تُلغي **تمريرة خريطة-الظلّ** كاملةً ⇒ صفر ظلّ مُلقى + **أداء أفضل** (لا تمريرة ظلّ لكلّ إطار).
 const MODEL_LIGHTING = new LightingEffect({
-  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 0.95 }),
-  sun: new DirectionalLight({ color: [255, 250, 238], intensity: 1.85, direction: [-1, -2, -3], _shadow: true }),
-  fill: new DirectionalLight({ color: [196, 214, 255], intensity: 0.5, direction: [2, 1, -1] }),
+  ambient: new AmbientLight({ color: [255, 255, 255], intensity: 0.72 }), // م9.9 · محيط أخفض ⇒ تباين اتّجاهيّ (عمق ثلاثيّ) وبروز اللمعان المرآويّ
+  sun: new DirectionalLight({ color: [255, 252, 244], intensity: 2.2, direction: [-1, -2, -3] }), // شمس أقوى ⇒ بريق زجاج لامع + وجوه مضيئة (بلا ظلّ)
+  fill: new DirectionalLight({ color: [196, 214, 255], intensity: 0.55, direction: [2, 1, -1] }),
 });
-MODEL_LIGHTING.shadowColor = [0, 0, 0, 0.32]; // ظلّ ناعم شفّاف — إضاءة أهدأ كي تقرأ الألوان (لا تغسلها)
 
 // م9.7.2 (مؤقّت) · نوع النموذج لكل قطعة مفترضة من اسمها — يُستبدل لاحقاً باختيار المدير من المنسدلة (م9.7.1ب/د).
 const FORCE_KIND: ModelKind | null = null; // (للتحقّق فقط: اضبطه "mall"/"hotel"/"tower" لفرض النوع على كلّ القطع)
@@ -364,6 +368,9 @@ function applyVisibility(m: GLMap | null, show: boolean): void {
   for (const id of BND_LAYER_IDS) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", vis);
 }
 
+// م9.9 · علم تدهور الخريطة (429/أساس احتياطيّ) — لتنبيه المستخدم **مرّة واحدة** وكتم تكرار رسائل أخطاء الخريطة بعدها.
+let mapDegraded = false;
+
 /**
  * يبني كائن النمط كاملاً: قاعدة MapTiler (عبر الوسيط، بلا تخزين، عناوين مطلقة)
  * + تعريب + ضبط كحلي + طبقاتنا (الحدود والقناع) — فتظهر من أوّل إطار وعند كل تبديل.
@@ -371,8 +378,18 @@ function applyVisibility(m: GLMap | null, show: boolean): void {
 async function buildStyle(base: BaseStyle, data: MapData, provider: SatelliteProvider): Promise<StyleSpecification> {
   // م9.8 · القمر الصناعي بمزوّد بديل (Esri/Mapbox) = طبقة raster مُمرَّرة بدل نمط MapTiler hybrid.
   if (base === "satellite" && provider !== "maptiler") return buildSatelliteStyle(provider, data);
-  const res = await fetch(styleUrl(base), { cache: "no-store" });
-  if (!res.ok) throw new Error(`تعذّر جلب نمط القاعدة (${res.status})`); // switchBase يلتقطه ويعرض تنبيهاً (§ز)
+  // تراجع تصاعديّ عند 429 (حدّ معدّل) / 5xx، ثمّ **تدهور لطيف**: صور Esri البديلة (مزوّد مستقلّ عن MapTiler) — لا انهيار.
+  let res = await fetch(styleUrl(base), { cache: "no-store" });
+  for (let i = 0; i < 2 && (res.status === 429 || res.status >= 500); i++) {
+    await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+    res = await fetch(styleUrl(base), { cache: "no-store" });
+  }
+  if (!res.ok) {
+    // أساس احتياط نظيف بلا أيّ تبعيّة MapTiler (تفادي 429 يحجب التحميل). تُستعاد MapTiler تلقائياً عند إعادة التحميل بعد التعافي.
+    if (typeof window !== "undefined" && !mapDegraded) toast.error(`تعذّر تحميل خرائط MapTiler (${res.status}) — أساس احتياطيّ (صور Esri) مؤقّتاً`);
+    mapDegraded = true; // كتم تكرار رسائل أخطاء الخريطة بعدها
+    return fallbackStyle(data);
+  }
   const style = (await res.json()) as StyleJson;
   const origin = window.location.origin;
   const abs = (u: string | undefined): string | undefined =>
@@ -473,6 +490,32 @@ function buildSatelliteStyle(provider: Exclude<SatelliteProvider, "maptiler">, d
     sprite: origin + "/api/maptiler/maps/streets-v2-dark/sprite",
     sources,
     layers: [{ id: "imagery", type: "raster", source: "imagery" }, ...overlayLayers()],
+  };
+  return style as unknown as StyleSpecification;
+}
+
+/**
+ * م9.9 · نمط **احتياط بلا أيّ تبعيّة MapTiler** (عند 429/فشل): أساس كحليّ + صور Esri (مزوّد مستقلّ) + حدود خطّيّة فقط —
+ * **بلا glyphs/sprite من MapTiler** (تفادي 429 يحجب تحميل النمط) وبلا تسميات نصّيّة. يُحمَّل دائماً (الأساس لا يعتمد على الشبكة).
+ */
+function fallbackStyle(data: MapData): StyleSpecification {
+  const origin = window.location.origin;
+  const esri = IMAGERY_SOURCES.esri;
+  const sources: Record<string, StyleSource> = {
+    imagery: { type: "raster", tiles: esri.tiles.map((t) => origin + t), tileSize: esri.tileSize, maxzoom: esri.maxzoom, attribution: esri.attribution } as unknown as StyleSource,
+    "dim-mask": { type: "geojson", data: data.maskFC } as unknown as StyleSource,
+    "bnd-governorate": { type: "geojson", data: data.gov } as unknown as StyleSource,
+    "bnd-districts": { type: "geojson", data: data.districts } as unknown as StyleSource,
+    "bnd-subdistricts": { type: "geojson", data: data.subdistricts } as unknown as StyleSource,
+  };
+  const style: StyleJson = {
+    version: 8,
+    sources,
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": NAVY.background } } as unknown as StyleLayer,
+      { id: "imagery", type: "raster", source: "imagery", paint: { "raster-fade-duration": 250 } } as unknown as StyleLayer, // تلاشٍ ناعم بدل ظهور مفاجئ
+      ...overlayLayers().filter((l) => l.type !== "symbol"), // حدود خطّيّة فقط — لا تسميات (تحتاج glyphs)
+    ],
   };
   return style as unknown as StyleSpecification;
 }
@@ -634,6 +677,20 @@ export default function InvestmentMap() {
   const { fc } = useMapParcels();
   const fcRef = useRef<FeatureCollection>(fc);
   fcRef.current = fc;
+  // م9.9 (A1) · تخبئة مراكز القطع: تُحسب مرّة عند تغيّر القطع وتُقرأ في حلقة النبضات/التسميات كلّ إطار
+  // بدل centroid() لكلّ قطعة كلّ إطار أثناء الحركة — نفس القيمة بالضبط (صفر تغيير بصريّ)؛ المفتاح ref_id.
+  const centroidMap = useMemo(() => {
+    const map = new Map<string, [number, number]>();
+    for (const f of fc.features) {
+      if (!f.geometry) continue;
+      const rid = f.properties?.ref_id;
+      if (rid == null) continue;
+      map.set(String(rid), centroid(f as Feature).geometry.coordinates as [number, number]);
+    }
+    return map;
+  }, [fc]);
+  const centroidMapRef = useRef(centroidMap);
+  centroidMapRef.current = centroidMap;
   const drawRef = useRef<TerraDraw | null>(null);
   const linkTargetRef = useRef<DrawTarget | null>(null);
   // استوديو الرسم (م7.1): وضعية الرسم + مساحة حيّة + تحرير قائم + مرسى الأبعاد + فلترة الحي + لوحة الطبقات
@@ -735,11 +792,20 @@ export default function InvestmentMap() {
   // م8.3 · تسميات الدبابيس عند الزوم القريب (~1كم): بطاقات زجاجية صغيرة فوق الدبابيس، تظهر/تتلاشى مع الزوم
   const [pinLabels, setPinLabels] = useState<{ x: number; y: number; name: string; key: string }[]>([]); // م8.10 · بطاقات شفافة صغيرة فوق الدبوس
   const [labelOpacity, setLabelOpacity] = useState(0);
-  const [pinPings, setPinPings] = useState<{ x: number; y: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع
+  const [pinPings, setPinPings] = useState<{ x: number; y: number; lng: number; lat: number; key: string; color: string }[]>([]); // م8.8 · نبضات الموقع (+ lng/lat لتموضع فوريّ متزامن مع الخريطة — م9.9)
   const [pingScale, setPingScale] = useState(1); // م8.8.2 · حجم النبضة المرن مع الزوم (يصغر عند الإبعاد لتفادي التداخل)
   const [pingTilt, setPingTilt] = useState({ deg: 48, persp: 1200 }); // م8.12.1 · ميل حلقات النبضة لتنبسط على الأرض في 3D (rotateX = ميل الكاميرا · perspective ≈ مسافة الكاميرا)
+  // م9.9 · مراجع لتموضع النبضات فوريّاً بتزامن مع رسم الخريطة (يزيل انزلاق/ارتجاف الحلقات أثناء حركة الكاميرا)
+  const pingScaleRef = useRef(1);
+  pingScaleRef.current = pingScale;
+  const pingTiltDegRef = useRef(48);
+  pingTiltDegRef.current = pingTilt.deg;
+  const pingLayerRef = useRef<HTMLDivElement>(null);
   const [altM, setAltM] = useState(0); // م8.8 · ارتفاع الكاميرا الفعلي (متر) من MapLibre — مؤشّر الارتفاع الجوي
   const [mapReady, setMapReady] = useState(false);
+  const [prefetchPct, setPrefetchPct] = useState<number | null>(null); // م9.9 (②) · نسبة التحميل الكامل للمدينة مسبقاً (null = خفيّ/منتهٍ)
+  const prefetchRef = useRef<PrefetchHandle | null>(null);
+  const prefetchStartedRef = useRef(false); // يضمن بدء التحميل الكامل مرّة واحدة (عند جهوز الخريطة + القطع)
   const { data: settingsData } = useSettings();
   const startApplied = useRef(false);
   const showBoundariesRef = useRef(showBoundaries);
@@ -763,7 +829,8 @@ export default function InvestmentMap() {
       if (cancelled || !containerRef.current) return;
 
       if (maplibregl.getRTLTextPluginStatus() === "unavailable") {
-        maplibregl.setRTLTextPlugin("/vendor/mapbox-gl-rtl-text.js", true);
+        // عنوان مطلق (origin) أمتن لعامل importScripts على الشبكة البطيئة من المسار النسبيّ؛ lazy يبقى (يُحمَّل عند أوّل نصّ عربيّ).
+        maplibregl.setRTLTextPlugin(`${window.location.origin}/vendor/mapbox-gl-rtl-text.js`, true);
       }
 
       const [gov, districts, subdistricts] = (await Promise.all([
@@ -789,6 +856,9 @@ export default function InvestmentMap() {
         center: MAP_CENTER,
         zoom: INITIAL_ZOOM,
         maxZoom: MAX_ZOOM,
+        // م9.9 (②) · كاش بلاط كبير يُبقي البلاطات مفكوكة في الذاكرة (لا إعادة فكّ/وميض عند العودة لموقع) — مع التحميل
+        // المسبق ⇒ تنقّل بلا تقطّع. أعلى على الحاسوب، أهدأ على الجوّال (ضغط الذاكرة).
+        maxTileCacheSize: typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches ? 500 : 1200,
         pitch: 48, // م8.12 · العرض الافتراضي ثلاثي الأبعاد (3D) — قابل للتبديل لـ2D (fitBounds/flyTo تحفظ الميل)
         maxPitch: 85, // م9.7.4 · ميل أعمق لاستعراض المجسّمات من زوايا منخفضة (تدوير حرّ شبه-سكتشفاب)
         attributionControl: false, // م8.8: لا زرّ «!» منبثق
@@ -801,6 +871,7 @@ export default function InvestmentMap() {
       // §ز.5 · فشل الخريطة (الشبكة): تنبيه مخفَّف (مرّة/60 ثانية) — البيانات والأقسام تبقى متاحة من السايدبار
       let lastMapErrorAt = 0;
       map.on("error", (e) => {
+        if (mapDegraded) return; // في حالة التدهور (429/أساس احتياطيّ) المستخدم نُبّه مرّة — لا تكرار لرسائل الأخطاء
         const msg = e?.error?.message ?? "";
         if (!/fetch|network|http|upstream|tile|source|style|failed/i.test(msg)) return; // أخطاء الشبكة/المصادر (لا ضجيج حميد)
         const now = Date.now();
@@ -834,7 +905,11 @@ export default function InvestmentMap() {
         const m = mapRef.current;
         if (cancelled || !m) return;
         // طبقة القطع الملوّنة (deck.gl فوق الخريطة)
-        const overlay = new MapboxOverlay({ interleaved: false, effects: [MODEL_LIGHTING], layers: parcelLayers(fcRef.current, selectedIdRef.current) });
+        // م9.9 (C) · سقف DPR للجوال: على شاشات الجوال (DPR≈3 · 120Hz) نُحدّد دقّة canvas الـ3D بـ2 (لا يتجاوز DPR الجهاز)
+        // لخفض كلفة fill-rate كثيراً مع حدّة تبقى ريتينا — **الخريطة الأساس تبقى بدقّتها الكاملة** (canvas منفصل). الحاسوب بلا تغيير.
+        const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+        const overlayDpr = isMobile ? Math.min(window.devicePixelRatio || 2, 2) : true;
+        const overlay = new MapboxOverlay({ interleaved: false, useDevicePixels: overlayDpr, effects: [MODEL_LIGHTING], layers: parcelLayers(fcRef.current, selectedIdRef.current) });
         m.addControl(overlay);
         overlayRef.current = overlay;
         // م8.8.2 · ارفع لوحة deck (القطع + الإشارات) فوق طبقة النبضات (z-9) كي تظهر النبضات **تحت** الدبابيس
@@ -969,6 +1044,8 @@ export default function InvestmentMap() {
 
     return () => {
       cancelled = true;
+      prefetchRef.current?.cancel();
+      prefetchRef.current = null;
       try {
         drawRef.current?.stop();
       } catch {
@@ -1042,7 +1119,7 @@ export default function InvestmentMap() {
           const fd = dOv ?? Math.max(8, cellDm * fmul); // عمق يدويّ أو تلقائيّ
           const tower = generateModel(kind, fw, fd, hOv ?? undefined);
           const bMin = Math.min(fw, fd); // بصمة المبنى الفعليّة
-          const rings = generateGroundRings(0.5 * Math.hypot(fw, fd) * 1.2, 1); // نصف قطر يُحيط بصمة المجسّم كاملةً (قطرها + هامش) فلا تتقاطع الحلقة مع زواياه — تنبض من تحت حدّه للخارج
+          const rings = generateGroundRings(0.5 * Math.hypot(fw, fd) * 1.2); // نصف قطر يُحيط بصمة المجسّم كاملةً (قطرها + هامش) فلا تتقاطع الحلقة مع زواياه — تنبض من تحت حدّه للخارج
           const sr = bMin * 0.42;
           const shadow = generateContactShadow(sr, sr * 0.28, sr * 0.55);
           cached = { tower, rings, shadow, kind, footprintM: Math.max(fw, fd), heightM: tower.height };
@@ -1058,7 +1135,9 @@ export default function InvestmentMap() {
           const bh = b[3] - b[1];
           const cLng = (b[0] + b[2]) / 2;
           const cLat = (b[1] + b[3]) / 2;
-          // المجسّمات بلا حلقات فرديّة — الموقع متعدّد المجسّمات كيانٌ واحد له حلقة نابضة مركزيّة (أدناه)
+          // م9.9 (B1) · المجسّمات بلا حلقات فرديّة — الموقع متعدّد المجسّمات كيانٌ واحد له حلقة نابضة مركزيّة (أدناه).
+          // كلّ النُسخ تتشارك نفس الشبكة/الخامة/التوجيه ⇒ تُرسَم **instanced** (نداء رسم واحد/سطح بدل N) — صفر تغيير بصريّ.
+          const instances: { center: [number, number]; yaw: number }[] = [];
           for (let i = 0; i < count; i++) {
             const col = i % cols;
             const row = Math.floor(i / cols);
@@ -1070,10 +1149,11 @@ export default function InvestmentMap() {
               lng += (jx * bw * 0.34) / cols;
               lat += (jy * bh * 0.34) / rows;
             }
-            towerItems.push({ id: `${rid}#${i}`, center: [lng, lat], meshes: cached.tower, kind: cached.kind, yaw: rotationDeg, shadow: cached.shadow });
+            instances.push({ center: [lng, lat], yaw: rotationDeg });
           }
+          towerItems.push({ id: rid, center: [cLng, cLat], meshes: cached.tower, kind: cached.kind, instances, shadow: cached.shadow });
           // حلقة نابضة مركزيّة واحدة تُحيط المجسّمات كلّها (نفس سلوك المفرد، لكن للموقع ككيان واحد)
-          towerItems.push({ id: `${rid}#rings`, center: [cLng, cLat], kind: cached.kind, rings: generateGroundRings(0.5 * Math.hypot(wM, dM) * 1.05, 1) });
+          towerItems.push({ id: `${rid}#rings`, center: [cLng, cLat], kind: cached.kind, rings: generateGroundRings(0.5 * Math.hypot(wM, dM) * 1.05) });
           // حديقة ممرّ ممتدّة بين صفوف الأبراج (٤ أبراج فأكثر · للأبراج فقط · لا حديقة للمفرد)
           if (kind === "tower" && count >= 4 && rows >= 2) {
             const gardenMesh = generateGardenStrip(wM * 0.96, (dM / rows) * 0.44); // يملأ الممرّ بين الصفّين بالطول الكامل دون تداخل مع الأبراج
@@ -1090,19 +1170,52 @@ export default function InvestmentMap() {
     overlayRef.current?.setProps({ layers: [...staticLayers, ...buildRingLayers(towerItems, ringPhaseRef.current)] });
   }, [fc, selectedId, assumedModels, parametricCfg, stlMeshes, showParcels, hiddenStates, nbhFilter, editing]);
 
-  // م9.7.7 · تحريك نبض الحلقات (RAF مخنوق ~11 إطار/ث، فقط عند التقرّب z≥13 لصون الأداء) — يعيد بناء طبقات الحلقات فقط فوق الثابتة.
+  // م9.9 (②) · تحميل بلاطات المدينة مسبقاً (z8→z16 حول القطع) — **معطّل افتراضياً**: استنزف حصّة MapTiler المجانيّة (حادثة 429).
+  // حتى التحميل اللطيف (٨٠٠٠ بلاطة/تحميل بارد) ≈ ٢٤٠ألف طلب/شهر لمستخدمَين — فوق الباقة المجانيّة (١٠٠ألف). يلزمه باقة MapTiler أعلى.
+  // البديل بلا كلفة: تدفّق عند الطلب + كاش بلاط أكبر (maxTileCacheSize). لإعادة التفعيل (بعد ترقية الباقة): اجعل PREFETCH_ENABLED=true.
+  useEffect(() => {
+    if (!PREFETCH_ENABLED || !mapReady || prefetchStartedRef.current) return;
+    const m = mapRef.current;
+    const feats = fc?.features ?? [];
+    if (!m || feats.length === 0) return; // انتظر تحميل القطع لتُحسَب المنطقة الصحيحة
+    const prov = satProviderRef.current;
+    if (prov === "google" || prov === "airbus") { prefetchStartedRef.current = true; return; } // كاش رديء — تخطٍّ دائم
+    // المنطقة الكاملة (الخريطة كلّها) = حدود المحافظة؛ الاحتياط = صندوق القطع.
+    const wide = (dataRef.current?.bounds ?? featuresBBox(feats)) as [number, number, number, number] | undefined;
+    if (!wide) return; // لا منطقة صالحة بعد — أعد المحاولة عند تحديث القطع (لا تثبّت العلم)
+    // مراكز القطع للتحميل العميق حولها (z14–z16) — من تخبئة المراكز أو حساب آنيّ.
+    const deepPoints: [number, number][] = [];
+    for (const f of feats) {
+      const rid = (f.properties as { ref_id?: string | number } | null)?.ref_id;
+      const c = (rid != null ? centroidMapRef.current.get(String(rid)) : undefined) ?? (f.geometry ? (centroid(f as Feature).geometry.coordinates as [number, number]) : undefined);
+      if (c) deepPoints.push(c);
+    }
+    prefetchStartedRef.current = true; // مرّة واحدة — بعد ضمان بدء فعليّ
+    prefetchRef.current = prefetchOverview(m, wide, {
+      zMin: 8,
+      zMax: 16,
+      wideZMax: 13, // الخريطة كلّها حتى z13 (عرض/طيران) + عمق z14–z16 حول القطع
+      deepPoints,
+      deepRadius: 1,
+      // **لطيف على وسيط MapTiler** (تفادي 429/استنزاف الحصّة): تزامن منخفض + مهلة بين الطلبات + توقّف فوريّ عند 429.
+      concurrency: 3,
+      maxTiles: 8000,
+      throttleMs: 120,
+      onProgress: (d, t) => setPrefetchPct(t > 0 && d < t ? Math.round((d / t) * 100) : null),
+    });
+  }, [mapReady, fc]);
+
+  // م9.9 · تحريك حلقات السونار — RAF بمعدّل كامل (60fps) فقط عند التقرّب z≥13 لتوسّع/تدفّق سلس تامّ بلا تقطّع
+  // (في الحركة والسكون)؛ يعيد بناء طبقات الحلقات فقط فوق الطبقات الثابتة المخبّأة.
   useEffect(() => {
     if (!mapReady) return;
     let raf = 0;
-    let last = 0;
-    const PERIOD = 3200; // مدّة دورة النبض (مللي)
+    const PERIOD = 7000; // مدّة دورة النبض (مللي) — أبطأ (م9.9: تدفّق أبطأ + تباعد أكبر بين الحلقات)
     const tick = (now: number): void => {
       raf = requestAnimationFrame(tick);
       const m = mapRef.current;
       const items = towerItemsRef.current;
       if (!m || !overlayRef.current || items.length === 0 || m.getZoom() < 13) return; // لا نبض في العرض البعيد (صون الأداء)
-      if (now - last < 90) return; // خنق ~11 إطار/ث (نبض بطيء سلس + أداء خفيف)
-      last = now;
       ringPhaseRef.current = (now % PERIOD) / PERIOD;
       overlayRef.current.setProps({ layers: [...staticLayersRef.current, ...buildRingLayers(items, ringPhaseRef.current)] });
     };
@@ -1773,9 +1886,11 @@ export default function InvestmentMap() {
     const PING_HEX: Record<string, string> = { announced: "#C7A24E", "in-progress": "#5775A8", completed: "#5E977A", withdrawn: "#B5616A", assumed: "#0E5FB0" };
     const PING_S_MAX_EXTRA = 2.0; // م9.7 · أقصى توسيع إضافي للقطر عند التقرّب الشديد من القطعة
     let raf = 0;
+    let lastTs = -1e9; // م9.9 (A2) · ختم آخر حسبة عضويّة — لخنق ~30fps أثناء الحركة المستمرّة
+    const MOTION_THROTTLE = 32; // ~30fps أثناء الطيران/مدار الدرون؛ المواضع تبقى ملتصقة كلّ إطار عبر positionPingEl (60fps) فلا ارتجاف
     // مرور واحد على القطع: نبضات الموقع (كل مستويات الزوم) + تسميات الدبابيس (عند الاقتراب op>0) — تفادياً لمرورين.
     const compute = (): void => {
-      raf = 0;
+      raf = 0; // حارس دفاعيّ: أيّ استدعاء مباشر/مجدوَل يصفّر الجدولة فلا ازدواج حساب (onMove يجدول من جديد عند الحاجة)
       const mm = mapRef.current;
       if (!mm) return;
       const op = Math.max(0, Math.min(1, (mm.getZoom() - (SHOW - FADE)) / FADE));
@@ -1797,7 +1912,7 @@ export default function InvestmentMap() {
       const hideCenterPing = (0.5 / Math.tan(0.6435011087932844 / 2)) * Ht * mpp0 <= 2000;
       const hidden = hiddenStatesRef.current;
       const wantLabels = op > 0.01; // التسميات عند الاقتراب فقط؛ النبضات على كل مستويات الزوم
-      const pings: { x: number; y: number; key: string; color: string; d: number }[] = [];
+      const pings: { x: number; y: number; lng: number; lat: number; key: string; color: string; d: number }[] = [];
       const cand: { x: number; y: number; name: string; key: string; d: number }[] = [];
       for (const f of fcRef.current.features) {
         if (!f.geometry) continue;
@@ -1806,19 +1921,21 @@ export default function InvestmentMap() {
         if (hidden.has(st)) continue;
         if (nbhFilterRef.current && p.neighborhood !== nbhFilterRef.current) continue; // احترم فلتر الحي
         if (editingRef.current && p.ref_id === editingRef.current.refId) continue; // القطعة قيد التحرير لا نبضة/تسمية لها
-        const c = centroid(f as Feature).geometry.coordinates as [number, number];
+        // م9.9 (A1) · المركز من التخبئة (نفس قيمة turf — صفر تغيير)؛ احتياطاً يُحسب آنياً للقطعة بلا ref_id
+        const rid = p.ref_id;
+        const c = (rid != null ? centroidMapRef.current.get(String(rid)) : undefined) ?? (centroid(f as Feature).geometry.coordinates as [number, number]);
         const pt = mm.project(c);
         if (pt.x < -30 || pt.x > W + 30 || pt.y < -30 || pt.y > Ht + 30) continue;
         const d = Math.hypot(pt.x - cx, pt.y - cy);
         // م9.8 · ≤2كم جوّي: تُحجَب نبضة مركز المجسّم (المفترضة)؛ تبقى حلقات deck من حدّ البصمة. (التسمية تبقى.)
-        if (!(hideCenterPing && p.kind === "assumed")) pings.push({ x: pt.x, y: pt.y, key: String(p.ref_id ?? `${Math.round(pt.x)},${Math.round(pt.y)}`), color: PING_HEX[st] ?? "#9fc0e8", d });
+        if (!(hideCenterPing && p.kind === "assumed")) pings.push({ x: pt.x, y: pt.y, lng: c[0], lat: c[1], key: String(p.ref_id ?? `${Math.round(pt.x)},${Math.round(pt.y)}`), color: PING_HEX[st] ?? "#9fc0e8", d });
         if (wantLabels) {
           const name = typeof p.label === "string" && p.label ? p.label : typeof p.parcel_no === "string" ? p.parcel_no : "";
           if (name) cand.push({ x: pt.x, y: pt.y, name, key: String(p.ref_id ?? name), d });
         }
       }
       pings.sort((a, b) => a.d - b.d);
-      setPinPings(pings.slice(0, PING_CAP).map((r) => ({ x: r.x, y: r.y, key: r.key, color: r.color })));
+      setPinPings(pings.slice(0, PING_CAP).map((r) => ({ x: r.x, y: r.y, lng: r.lng, lat: r.lat, key: r.key, color: r.color })));
       // م8.8.2 · حجم النبضة مرن مع الزوم: الحجم الكامل عند التقريب (تتباعد القطع فلا تتداخل الحلقات)،
       // ويصغر تدريجياً عند الإبعاد (زوم-آوت) حيث تتقارب القطع — لعرض أنيق بلا تداخل. (smoothstep بين عتبتَي الزوم.)
       const z = mm.getZoom();
@@ -1836,19 +1953,69 @@ export default function InvestmentMap() {
       cand.sort((a, b) => a.d - b.d); // الأقرب لمركز الشاشة أولاً
       setPinLabels(wantLabels ? cand.slice(0, CAP).map((r) => ({ x: r.x, y: r.y, name: r.name, key: r.key })) : []);
     };
+    // م9.9 (A2) · خنق إعادة حساب العضويّة/الحجم إلى ~30fps أثناء الحركة المستمرّة (يخفّف إعادة تصيير React لنبضات/تسميات
+    // عددها كبير كلّ إطار)؛ يُعاد الجدولة دون حساب حتى تنقضي العتبة، فتُضمن حسبة نهائيّة دقيقة عند الاستقرار.
+    const tick = (ts: number): void => {
+      if (ts - lastTs < MOTION_THROTTLE) { raf = requestAnimationFrame(tick); return; } // مبكّر — أعد الجدولة (تضمن حسبة لاحقة)
+      lastTs = ts;
+      compute(); // compute يصفّر raf في رأسه
+    };
     const onMove = (): void => {
-      if (!raf) raf = requestAnimationFrame(compute);
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    // عند استقرار الحركة (نهاية flyTo/fitBounds + نهاية مدار الدرون): حسبة نهائيّة **فوريّة دقيقة** بالحالة النهائيّة —
+    // تُلغي أيّ جدولة مخنوقة معلّقة وتصفّر العتبة فلا تبقى العضويّة/الحجم على حالة وسطى من الحركة.
+    const onSettle = (): void => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      lastTs = -1e9;
+      compute();
     };
     m.on("move", onMove);
     m.on("zoom", onMove);
+    m.on("moveend", onSettle);
+    m.on("zoomend", onSettle);
     compute();
     return () => {
       m.off("move", onMove);
       m.off("zoom", onMove);
+      m.off("moveend", onSettle);
+      m.off("zoomend", onSettle);
       if (raf) cancelAnimationFrame(raf);
     };
     // fc ضمن التبعيات: يُعيد الحساب عند تحميل/تغيّر القطع دون انتظار حركة المستخدم (مهمّ للنبضات في العرض الساكن)
   }, [mapReady, fc]);
+
+  // م9.9 · يضع عنصر نبضة واحداً بإسقاط إحداثيّاته العالميّة (data-lng/lat). الموضع يُدار **إمبراطيفياً فقط** (لا في style
+  // الخاصّ بـReact) كي لا يُعيد React كتابة transform بقيمة متأخّرة إطاراً فيعود الانزلاق. يُستدعى عند التركيب (ref) وكلّ إطار رسم.
+  const positionPingEl = (el: HTMLElement | null): void => {
+    if (!el) return;
+    const mm = mapRef.current;
+    if (!mm) return;
+    const lng = Number(el.dataset.lng);
+    const lat = Number(el.dataset.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    const pt = mm.project([lng, lat]);
+    el.style.transform = `translate(${pt.x}px, ${pt.y}px) rotateX(${pingTiltDegRef.current}deg) scale(${pingScaleRef.current})`;
+  };
+  // تموضع النبضات فوريّاً بتزامن مع رسم الخريطة (حدث "render" كلّ إطار) — العضويّة تُحدَّث على "move" أعلاه، أمّا الموضع
+  // فيُعاد إسقاطه كلّ إطار فيبقى ملتصقاً بالأرض بلا تأخّر إطار. يزيل ارتجاف/انزلاق الحلقات أثناء الطيران والدوران.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !mapReady) return;
+    const sync = (): void => {
+      const layer = pingLayerRef.current;
+      if (!layer) return;
+      for (const el of Array.from(layer.children) as HTMLElement[]) positionPingEl(el);
+    };
+    m.on("render", sync);
+    sync();
+    return () => {
+      m.off("render", sync);
+    };
+    // positionPingEl يقرأ مراجع ثابتة فقط — لا حاجة لإدراجه في التبعيات
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
 
   // م8.8 · مؤشّر الارتفاع الجوي: ارتفاع الكاميرا فوق المركز محسوباً **حتمياً** من الزوم/خط العرض/مجال الرؤية
   // (هندسة ميركاتور — قيمة فعلية لا مؤلَّفة)، يتحدّث لحظياً مع الزوم.
@@ -1959,6 +2126,31 @@ export default function InvestmentMap() {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* م9.9 (②) · شاشة تحميل المدينة كاملةً عند بدء الجلسة (بنسبة مئويّة لاتينية) — يُحمَّل مرّة واحدة ثمّ تنقّل بلا تقطّع.
+          قابلة للتخطّي والدخول فوراً. تختفي عند الاكتمال. */}
+      {prefetchPct !== null && (
+        <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-[hsl(221_44%_7%/0.82)] backdrop-blur-md">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <span className="text-sm font-bold text-foreground/90">جارٍ تحميل خريطة المدينة كاملةً</span>
+            <span className="text-[11px] text-foreground/55">تنقّل وطيران بلا تقطّع — يُحمَّل مرّة واحدة لهذه الجلسة</span>
+          </div>
+          <div className="h-2.5 w-72 max-w-[78vw] overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
+            <div className="h-full rounded-full bg-gradient-to-r from-[#5775A8] via-[#9fc0e8] to-[#e3edfb] shadow-[0_0_12px_-2px_rgba(159,192,232,0.8)] transition-[width] duration-200 ease-out" style={{ width: `${prefetchPct}%` }} />
+          </div>
+          <span dir="ltr" className="text-base font-extrabold tabular-nums text-[#cfe0f6]">{prefetchPct}%</span>
+          <button
+            type="button"
+            onClick={() => {
+              prefetchRef.current?.cancel();
+              setPrefetchPct(null);
+            }}
+            className="mt-1 rounded-full border border-[rgba(159,192,232,0.4)] bg-white/[0.04] px-4 py-1.5 text-xs font-semibold text-foreground/80 transition hover:bg-white/[0.1]"
+          >
+            تخطٍّ والدخول الآن
+          </button>
+        </div>
+      )}
 
       {/* م8.8 · مؤشّر «مسافة الارتفاع الجوي عن الخريطة» — رقم ثلاثي الأبعاد عائم أسفل-يمين يتحدّث لحظياً */}
       <div className="pointer-events-none absolute bottom-[calc(var(--sab)+5.5rem)] left-3 z-[13] flex flex-col items-start gap-0.5 rounded-2xl border border-[rgba(159,192,232,0.45)] bg-[linear-gradient(160deg,hsl(221_40%_17%/0.95),hsl(221_44%_9%/0.95))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_-12px_rgba(0,0,0,0.9),0_0_24px_-8px_rgba(148,175,209,0.6)] backdrop-blur-md md:bottom-[8.75rem] md:left-auto md:right-3 md:items-end lg:right-[6.5rem]">
@@ -2312,9 +2504,9 @@ export default function InvestmentMap() {
           في 3D تنبسط الحلقات على الأرض (rotateX = ميل الكاميرا · perspective بمركز الشاشة = نقطة الكاميرا الرئيسة)
           فتبدو كأنها جزء من الرسمة لا حلقات عمودية عائمة؛ في 2D (ميل 0) = دوائر كما هي (rotateX(0) محايد). */}
       {pinPings.length ? (
-        <div className="pointer-events-none absolute inset-0 z-[9] overflow-hidden" style={{ perspective: `${pingTilt.persp}px` }}>
+        <div ref={pingLayerRef} className="pointer-events-none absolute inset-0 z-[9] overflow-hidden" style={{ perspective: `${pingTilt.persp}px` }}>
           {pinPings.map((p) => (
-            <span key={p.key} className="absolute" style={{ left: p.x, top: p.y, color: p.color, transform: `rotateX(${pingTilt.deg}deg) scale(${pingScale})`, transformOrigin: "0 0" }}>
+            <span key={p.key} ref={positionPingEl} data-lng={p.lng} data-lat={p.lat} className="absolute left-0 top-0" style={{ color: p.color, transformOrigin: "0 0", willChange: "transform" }}>
               <span className="pin-ping pin-ping--l1" />
               <span className="pin-ping pin-ping--l2" />
               <span className="pin-ping pin-ping--l3" />

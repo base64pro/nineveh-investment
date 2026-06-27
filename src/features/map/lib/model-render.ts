@@ -4,7 +4,7 @@
 //  - glb/gltf → ScenegraphLayer (loaders.gl يحمّل الرابط ذاتياً · Draco مدعوم)
 //  - stl       → SimpleMeshLayer بشبكة محلَّلة يدوياً (لا محمّل STL في loaders.gl)
 // مرسىً عند مركز القطعة، بتحويل (مقياس/دوران/ارتفاع) المحفوظ. النموذج «تصوّر تصميمي».
-import type { Layer } from "@deck.gl/core";
+import type { Layer, LayerExtension } from "@deck.gl/core";
 import { ScenegraphLayer, SimpleMeshLayer } from "@deck.gl/mesh-layers";
 import { registerLoaders } from "@loaders.gl/core";
 import { GLTFLoader } from "@loaders.gl/gltf";
@@ -12,7 +12,8 @@ import { DracoWorkerLoader } from "@loaders.gl/draco";
 import type { ParcelModel } from "@/features/parcels/models/model-lib";
 import { fillRgba } from "./parcel-colors";
 import { getTexture } from "./building/textures";
-import type { Mesh3, ModelKind, TowerMeshes } from "./parametric-tower";
+import { ENV_REFLECT_BODY, ENV_REFLECT_GLASS } from "./reflect-extension";
+import type { Extra, Mesh3, ModelKind, TowerMeshes } from "./parametric-tower";
 
 let registered = false;
 /** تسجيل محمّلات glTF/Draco مرّة واحدة (عميل فقط). */
@@ -119,6 +120,7 @@ export interface TowerItem {
   glb?: { url: string; sizeScale: number; yaw: number; elevationM?: number }; // م9.7.5 · نموذج واقعيّ glb (يُفضَّل)
   kind?: ModelKind; // م9.7.2 · نوع النموذج (لاختيار لوحة الألوان)
   yaw?: number; // م9.7.8 · توجيه المجسّم (دوران حول المحور الرأسيّ، درجات)
+  instances?: { center: [number, number]; yaw: number }[]; // م9.9 (B1) · نُسخ متعدّدة بنفس الشبكة — تُرسَم instanced (نداء رسم واحد/سطح بدل N)
   rings?: Mesh3; // م9.7.1هـ · حلقات أرضية متوهّجة تملأ القطعة (تحت البرج)
   shadow?: Mesh3; // م9.7.1و+ · ظلّ تماسٍ أرضيّ مُخبوز (أسفل كلّ شيء)
 }
@@ -141,16 +143,10 @@ const PALETTES: Record<ModelKind, Palette> = {
   // م9.8 · الثيمة على الفندق (منتجع فاخر): هيكل كريميّ دافئ فاتح + زجاج أزرق منقّى + تتويج **ذهبيّ** (هويّة المنتجع)
   hotel: { body: [226, 214, 192, 255], glassA: [120, 168, 206, 255], glassB: [86, 140, 186, 255], winCool: [255, 234, 190, 255], winWarm: [255, 200, 122, 255], accent: [252, 216, 142, 255] },
 };
-const MAT_GLASS = { ambient: 0.55, diffuse: 0.46, shininess: 160, specularColor: [190, 232, 255] as [number, number, number] }; // زجاج لمّاع عالي البريق
-// م9.8 (الثيمة) · زجاج لكل نوع — البرج **أهدأ لمعاناً** (طلب المستخدم: تقليل لمعان البرج)؛ المول/الفندق بالبريق العالي.
-const MAT_GLASS_BY_KIND: Record<ModelKind, typeof MAT_GLASS> = {
-  tower: { ambient: 0.56, diffuse: 0.46, shininess: 140, specularColor: [180, 225, 255] }, // زجاج أزرق مبهر
-  mall: MAT_GLASS,
-  hotel: MAT_GLASS,
-};
-const TOWER_CRYSTAL: [number, number, number, number] = [96, 172, 255, 240]; // مادّة المكعّب الكريستاليّ المنبعث (= زجاج طوابق البرج)
-const TOWER_RING: [number, number, number, number] = [100, 165, 205, 255]; // حلقات أرضية أزرق هولوكراميّ أهدأ (حدّة لون أقلّ — م9.7.11)
 const TOWER_SHADOW: [number, number, number, number] = [2, 6, 14, 140]; // ظلّ تماسٍ داكن شفّاف (أوضح)
+// م9.9 · زجاج موحّد لكلّ المباني = **أزرق القبّة الكريستاليّ المنبعث** (نغمة crystal [96,172,255])، مع انعكاس سماء برّاق ⇒ لامع مبهر.
+const GLASS_BLUE_A: [number, number, number, number] = [58, 112, 206, 255]; // زجاج أزرق **مائل للكحليّ** لامع (رؤية)
+const GLASS_BLUE_B: [number, number, number, number] = [34, 80, 180, 255]; // ألواح كحليّة أعمق (تباين)
 
 // م9.7.5 · مكتبة النماذج الواقعية حسب النوع (glb احترافيّة CC0 في public/models) — تحلّ محلّ الإجرائيّ.
 // footprint = أكبر بُعد أفقيّ (glTF X/Z) · height = بُعد Y — لحساب مقياس الملاءمة في الخريطة.
@@ -161,14 +157,16 @@ export const TYPE_MODELS: Record<ModelKind, { url: string; footprint: number; he
 };
 
 // م9.7.6 · خامات Phong حسب السطح (لمعان الزجاج · مطّ الهيكل) — تُطبَّق على المضاء فقط.
-const MAT_BODY = { ambient: 0.32, diffuse: 0.86, shininess: 18, specularColor: [70, 80, 95] as [number, number, number] };
-// م9.8 · خامة هيكل لكل نوع — هويّة سطح متمايزة: برج بارد لمّاع · مول أحيد · فندق أدفأ أنعم.
+const MAT_BODY = { ambient: 0.32, diffuse: 0.82, shininess: 70, specularColor: [200, 212, 230] as [number, number, number] };
+// م9.9 · لمعان قويّ على الهياكل (والبلاط الكرستاليّ يستخدم هذه الخامة) — بريق حادّ ساطع ⇒ سطح لامع حقيقيّ ثلاثيّ الأبعاد (بلا ظلال).
 const MAT_BODY_BY_KIND: Record<ModelKind, typeof MAT_BODY> = {
-  tower: { ambient: 0.52, diffuse: 0.82, shininess: 4, specularColor: [96, 110, 130] }, // هيكل أزرق مطفأ (بلا لمعان)
-  mall: { ambient: 0.4, diffuse: 0.82, shininess: 14, specularColor: [120, 124, 132] },
-  hotel: { ambient: 0.46, diffuse: 0.78, shininess: 12, specularColor: [190, 178, 156] }, // كريميّ دافئ فاتح
+  tower: { ambient: 0.5, diffuse: 0.8, shininess: 58, specularColor: [205, 220, 240] }, // هيكل أزرق لامع
+  mall: { ambient: 0.4, diffuse: 0.8, shininess: 62, specularColor: [210, 218, 230] },
+  hotel: { ambient: 0.46, diffuse: 0.76, shininess: 56, specularColor: [246, 232, 205] }, // كريميّ دافئ لامع
 };
-function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], color: [number, number, number, number], lit: boolean, material?: object, yaw = 0, texture?: string): SimpleMeshLayer {
+// م9.9 (B1) · موضع نسخة واحدة (مركز + توجيه). نسخة مفردة = مصفوفة بعنصر واحد؛ نُسخ متعدّدة = instanced بنداء رسم واحد.
+type Placement = { position: [number, number, number]; yaw: number };
+function meshLayer(id: string, mesh: Mesh3, placements: Placement[], color: [number, number, number, number], lit: boolean, material?: object, texture?: string, reflect?: LayerExtension): SimpleMeshLayer {
   const attrs: Record<string, { value: Float32Array; size: number }> = {
     positions: { value: mesh.positions, size: 3 },
     normals: { value: mesh.normals, size: 3 },
@@ -178,24 +176,80 @@ function meshLayer(id: string, mesh: Mesh3, position: [number, number, number], 
   if (useTex) attrs.texCoords = { value: mesh.texCoords as Float32Array, size: 2 }; // م9.8 · إحداثيّات الخامة
   return new SimpleMeshLayer({
     id,
-    data: [{ position }],
+    data: placements,
     mesh: { attributes: attrs } as never,
-    getPosition: (d: { position: [number, number, number] }) => d.position,
-    getOrientation: [0, yaw, 0], // م9.7.8 · توجيه المجسّم حول المحور الرأسيّ
+    getPosition: (d: Placement) => d.position,
+    getOrientation: (d: Placement) => [0, d.yaw, 0], // م9.7.8/م9.9 · توجيه كلّ نسخة حول المحور الرأسيّ
     sizeScale: 1,
     getColor: color,
     ...(useTex ? { texture } : {}), // خامة إجرائيّة تُضاعَف باللون والإضاءة
     material: lit ? (material ?? MAT_BODY) : false, // مضاء بخامة Phong · أو منبعث (توهّج)
+    extensions: reflect ? [reflect] : [], // م9.9 (③) · انعكاس سماء إجرائيّ — يُمرَّر صراحةً للزجاج/الهيكل فقط (يعمل على المضاء والمنبعث؛ مفتاح ثابت الشكل لاستقرار مطابقة deck)
     pickable: false,
   });
+}
+
+// م9.9 (B2) · دمج المرافق المعتمة في نداءات رسم أقلّ — **بلا أيّ تغيير بصريّ**.
+// نُمرّر على extras بترتيبها، ونجمع **التتابعات المتّصلة** من المرافق المعتمة (alpha=255) غير المكسوّة في mesh
+// واحد (مفصول lit/منبعث لاختلاف الخامة)، بخبز لون كلّ مرفق في ألوان رأسه (grayscale×color/255) وgetColor=أبيض.
+// المعتم يُختبَر عمقياً ⇒ ترتيبه داخل التتابع لا يؤثّر؛ والمرافق الشفّافة/المكسوّة تبقى طبقات مفردة **بموضعها الأصليّ بالضبط**
+// فلا يتغيّر ترتيب المزج معتم↔شفّاف. النتيجة مخبّأة بمرجع مصفوفة extras (WeakMap) فتبقى مراجع Float32Array ثابتة (لا رفع GPU متكرّر).
+type ExtraOp = { idSuffix: string; mesh: Mesh3; color: [number, number, number, number]; lit: boolean; tex?: string };
+const WHITE_RGBA: [number, number, number, number] = [255, 255, 255, 255];
+const extrasOpsCache = new WeakMap<readonly Extra[], ExtraOp[]>();
+function bakeRun(run: { P: number[]; N: number[]; C: number[] }): Mesh3 {
+  return { positions: new Float32Array(run.P), normals: new Float32Array(run.N), colors: new Float32Array(run.C) };
+}
+function extrasRenderOps(extras: readonly Extra[]): ExtraOp[] {
+  const hit = extrasOpsCache.get(extras);
+  if (hit) return hit;
+  const ops: ExtraOp[] = [];
+  let runLit: { P: number[]; N: number[]; C: number[] } | null = null;
+  let runEmis: { P: number[]; N: number[]; C: number[] } | null = null;
+  let runIdx = 0;
+  const flush = (): void => {
+    if (runLit) ops.push({ idSuffix: `M${runIdx}l`, mesh: bakeRun(runLit), color: WHITE_RGBA, lit: true });
+    if (runEmis) ops.push({ idSuffix: `M${runIdx}e`, mesh: bakeRun(runEmis), color: WHITE_RGBA, lit: false });
+    if (runLit || runEmis) runIdx++;
+    runLit = null;
+    runEmis = null;
+  };
+  extras.forEach((ex, i) => {
+    if (!ex.mesh.positions.length) return; // فارغ — لا طبقة (مطابق للسابق)
+    const mergeable = ex.color[3] === 255 && !ex.tex && !!ex.mesh.colors && ex.mesh.colors.length === ex.mesh.positions.length;
+    if (!mergeable) {
+      flush(); // اقطع التتابع قبل أيّ مرفق شفّاف/مكسوّ — صون ترتيب المزج
+      ops.push({ idSuffix: `${i}`, mesh: ex.mesh, color: ex.color, lit: ex.lit, tex: ex.tex });
+      return;
+    }
+    if (ex.lit) { if (!runLit) runLit = { P: [], N: [], C: [] }; }
+    else if (!runEmis) runEmis = { P: [], N: [], C: [] };
+    const buf = ex.lit ? (runLit as { P: number[]; N: number[]; C: number[] }) : (runEmis as { P: number[]; N: number[]; C: number[] });
+    const P = ex.mesh.positions;
+    const N = ex.mesh.normals;
+    const C = ex.mesh.colors as Float32Array;
+    const r = ex.color[0] / 255;
+    const g = ex.color[1] / 255;
+    const b = ex.color[2] / 255;
+    for (let v = 0; v < P.length; v += 3) {
+      buf.P.push(P[v]!, P[v + 1]!, P[v + 2]!);
+      buf.N.push(N[v]!, N[v + 1]!, N[v + 2]!);
+      buf.C.push(C[v]! * r, C[v + 1]! * g, C[v + 2]! * b);
+    }
+  });
+  flush();
+  extrasOpsCache.set(extras, ops);
+  return ops;
 }
 
 export function buildTowerLayers(items: TowerItem[]): Layer[] {
   const layers: Layer[] = [];
   for (const it of items) {
-    const position: [number, number, number] = [it.center[0], it.center[1], 0];
+    // م9.9 (B1) · مواضع النُسخ: نسخة مفردة من center/yaw، أو عدّة نُسخ instanced بنفس الشبكة (نداء رسم واحد/سطح).
+    const placements: Placement[] =
+      it.instances && it.instances.length ? it.instances.map((ins) => ({ position: [ins.center[0], ins.center[1], 0] as [number, number, number], yaw: ins.yaw })) : [{ position: [it.center[0], it.center[1], 0] as [number, number, number], yaw: it.yaw ?? 0 }];
     // الترتيب من الأسفل للأعلى: ظلّ التماس → المجسّم. (الحلقات تُرسَم نابضةً منفصلةً عبر buildRingLayers — تحت المجسّم.)
-    if (it.shadow && it.shadow.positions.length) layers.push(meshLayer(`tower-shadow-${it.id}`, it.shadow, position, TOWER_SHADOW, false));
+    if (it.shadow && it.shadow.positions.length) layers.push(meshLayer(`tower-shadow-${it.id}`, it.shadow, placements, TOWER_SHADOW, false));
     if (it.glb) {
       // م9.7.5 · نموذج واقعيّ glb (PBR) محلّ الإجرائيّ — glTF محوره Y → roll 90 لتقويمه في Z
       layers.push(
@@ -215,53 +269,62 @@ export function buildTowerLayers(items: TowerItem[]): Layer[] {
       const m = it.meshes;
       const k = it.kind ?? "tower";
       const pal = PALETTES[k];
-      const y = it.yaw ?? 0; // توجيه المجسّم
-      if (m.body.positions.length) layers.push(meshLayer(`tower-body-${it.id}`, m.body, position, pal.body, true, MAT_BODY_BY_KIND[k], y, getTexture("facade"))); // واجهة مكسوّة (الجسم قد يكون فارغاً لكيان حديقة الممرّ)
-      if (m.glassA.positions.length) {
-        if (k === "tower") layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, TOWER_CRYSTAL, false, undefined, y)); // زجاج الطوابق = مادّة المكعّب الكريستاليّ المنبعث
-        else { layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, position, pal.glassA, true, MAT_GLASS_BY_KIND[k], y, getTexture("glass"))); layers.push(meshLayer(`tower-glowA-${it.id}`, m.glassA, position, [Math.min(255, pal.glassA[0] + 75), Math.min(255, pal.glassA[1] + 90), Math.min(255, pal.glassA[2] + 85), 125], false, undefined, y)); }
+      if (m.body.positions.length) layers.push(meshLayer(`tower-body-${it.id}`, m.body, placements, pal.body, true, MAT_BODY_BY_KIND[k], getTexture("facade"), ENV_REFLECT_BODY)); // واجهة مكسوّة (الجسم قد يكون فارغاً لكيان حديقة الممرّ) — مع انعكاس سماء أهدأ
+      // م9.9 · زجاج كلّ المباني = **أزرق القبّة الكريستاليّ المنبعث** (مضيء، نفس مادّة القبّة) + انعكاس سماء برّاق ⇒ لامع مبهر مثل القبّة.
+      if (m.glassA.positions.length) layers.push(meshLayer(`tower-glassA-${it.id}`, m.glassA, placements, GLASS_BLUE_A, false, undefined, undefined, ENV_REFLECT_GLASS));
+      if (m.glassB.positions.length) layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, placements, GLASS_BLUE_B, false, undefined, undefined, ENV_REFLECT_GLASS));
+      if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, placements, pal.winCool, false));
+      if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, placements, pal.winWarm, false));
+      if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, placements, pal.accent, false));
+      for (const op of extrasRenderOps(m.extras ?? [])) {
+        layers.push(meshLayer(`tower-extra-${it.id}-${op.idSuffix}`, op.mesh, placements, op.color, op.lit, undefined, op.tex ? getTexture(op.tex) : undefined));
       }
-      if (m.glassB.positions.length) {
-        if (k === "tower") layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, TOWER_CRYSTAL, false, undefined, y));
-        else { layers.push(meshLayer(`tower-glassB-${it.id}`, m.glassB, position, pal.glassB, true, MAT_GLASS_BY_KIND[k], y, getTexture("glass"))); layers.push(meshLayer(`tower-glowB-${it.id}`, m.glassB, position, [Math.min(255, pal.glassB[0] + 55), Math.min(255, pal.glassB[1] + 75), Math.min(255, pal.glassB[2] + 30), 110], false, undefined, y)); }
-      }
-      if (m.winCool.positions.length) layers.push(meshLayer(`tower-winC-${it.id}`, m.winCool, position, pal.winCool, false, undefined, y));
-      if (m.winWarm.positions.length) layers.push(meshLayer(`tower-winW-${it.id}`, m.winWarm, position, pal.winWarm, false, undefined, y));
-      if (m.accent.positions.length) layers.push(meshLayer(`tower-accent-${it.id}`, m.accent, position, pal.accent, false, undefined, y));
-      (m.extras ?? []).forEach((ex, i) => {
-        if (ex.mesh.positions.length) layers.push(meshLayer(`tower-extra-${it.id}-${i}`, ex.mesh, position, ex.color, ex.lit, undefined, y, ex.tex ? getTexture(ex.tex) : undefined));
-      });
     }
   }
   return layers;
 }
 
-// م9.7.7 · حلقات نابضة منفصلة تحت المجسّم — تتدفّق من قلبه نحو الخارج (موجتان متعاقبتان)، تظهر فقط بعد تجاوز حدوده.
-// phase ∈ [0,1) من حلقة الرسم؛ الحلقة الأساس بنصف قطر بصمة المجسّم، تتمدّد بالمقياس وتتلاشى.
+// م9.9 · حلقات سونار **بيضاء خفيفة**: **طبقة instanced واحدة لكلّ موقع** تضمّ كلّ الموجات كـ«نُسخ» — لكلّ نسخة **مقياسها
+// وشفافيّتها** (getScale/getColor)؛ يضمن deck قيماً مستقلّة لكلّ حلقة ⇒ **حلقة تتبع حلقة بتدفّق مستمرّ لا ينقطع**.
+// لونها أبيض بمزج عاديّ + شبكة بأرضيّة سطوع عالية ⇒ **توهّج أبيض خفيف بلا أسود/إعتام** (المزج الجمعيّ لا يُطبَّق في وضع deck المتراكب).
+const RING_RGB: [number, number, number] = [242, 248, 255]; // أبيض متوهّج بمسحة زرقاء **خفيفة جداً** — لا تُعتِم
+const RING_WAVES = 6; // حلقات أقلّ ⇒ تباعد أكبر بينها (تأخير الانبثاق)
+// م9.9 · حلقات فرعيّة متراكبة لكلّ موجة بشفافيّة متدرّجة ⇒ الحافّة الداخليّة والخارجيّة **تتلاشيان بنعومة** (لا حافّة حادّة).
+const RING_SUB: { d: number; f: number }[] = [
+  { d: -0.08, f: 0.1 }, // الحافّة الداخليّة — خافتة (تتلاشى) — تباعد مضاعَف (×٢ سُمك)
+  { d: -0.04, f: 0.42 },
+  { d: 0, f: 1 }, // القلب — أنصع
+  { d: 0.04, f: 0.42 },
+  { d: 0.08, f: 0.1 }, // الحافّة الخارجيّة — خافتة (تتلاشى)
+];
 export function buildRingLayers(items: TowerItem[], phase: number): Layer[] {
   const layers: Layer[] = [];
   for (const it of items) {
-    if (!it.rings || !it.rings.positions.length) continue;
+    if (!it.rings || !it.rings.positions.length || !it.rings.colors) continue;
     const position: [number, number, number] = [it.center[0], it.center[1], 0];
-    const WAVES = 3;
-    for (let wv = 0; wv < WAVES; wv++) {
-      const p = (phase + wv / WAVES) % 1; // موجات متعاقبة لتدفّق مستمرّ
-      const ss = 1.0 + 1.7 * p; // من حدّ بصمة المجسّم (1×) نحو الخارج (2.7×) — لا تدخل تحت جسمه أبداً (نفس تساريع التمدّد)
-      const a = Math.round(180 * Math.pow(Math.sin(Math.PI * p), 1.35)); // أهدأ وأشفّ + غلاف أنعم: ظهور/تلاشٍ سلس مريح (ذروة ١٨٠/٢٥٥ بدل ٢٣٥)
-      layers.push(
-        new SimpleMeshLayer({
-          id: `ring-${it.id}-${wv}`,
-          data: [{ position }],
-          mesh: { attributes: { positions: { value: it.rings.positions, size: 3 }, normals: { value: it.rings.normals, size: 3 } } } as never,
-          getPosition: (d: { position: [number, number, number] }) => d.position,
-          getOrientation: [0, 0, 0],
-          sizeScale: ss,
-          getColor: [TOWER_RING[0], TOWER_RING[1], TOWER_RING[2], a],
-          material: false,
-          pickable: false,
-        }),
-      );
+    // نُسخ: لكلّ موجة عدّة حلقات فرعيّة متراكبة (مقياس + شفافيّة مستقلّان) ⇒ نطاق ناعم يتلاشى عند حافّتيه + تدفّق مستقلّ لكلّ موجة.
+    const waves: { s: number; a: number }[] = [];
+    for (let wv = 0; wv < RING_WAVES; wv++) {
+      const p = (phase + wv / RING_WAVES) % 1;
+      const baseS = 0.25 + 1.65 * p; // نصف القطر يتباعد بوتيرة ثابتة سلسة
+      const baseA = 250 * Math.min(1, p / 0.08) * Math.pow(1 - p, 0.85); // **توهّج أبيض أقوى**: نهوض ناعم ثمّ تلاشٍ مستمرّ حتى 0
+      for (const sub of RING_SUB) waves.push({ s: baseS * (1 + sub.d), a: Math.round(baseA * sub.f) });
     }
+    layers.push(
+      new SimpleMeshLayer({
+        id: `ring-${it.id}`,
+        data: waves,
+        mesh: { attributes: { positions: { value: it.rings.positions, size: 3 }, normals: { value: it.rings.normals, size: 3 }, colors: { value: it.rings.colors, size: 3 } } } as never,
+        getPosition: () => position, // كلّ النُسخ في مركز الموقع
+        getOrientation: [0, 0, 0],
+        getScale: (d: { s: number }) => [d.s, d.s, d.s], // نصف قطر كلّ موجة (مستقلّ)
+        getColor: (d: { a: number }) => [RING_RGB[0], RING_RGB[1], RING_RGB[2], d.a], // أبيض بشفافيّة كلّ موجة (مستقلّة)
+        material: false, // منبعث (بلا تظليل) + مزج عاديّ شفّاف (deck الافتراضيّ) ⇒ أبيض خفيف بلا إعتام
+        shadowEnabled: false, // لا تُلقي الحلقات ظلّاً
+        updateTriggers: { getScale: phase, getColor: phase }, // إعادة تقييم لكلّ إطار مع تقدّم الطور
+        pickable: false,
+      }),
+    );
   }
   return layers;
 }

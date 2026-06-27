@@ -29,7 +29,11 @@ export function styleUrl(base: BaseStyle): string {
 // تُقارَن البدائل محلّياً عبر شريط المقارنة، ويُغيَّر هذا السطر للفائز بعد توفّر مفتاحه. Mapbox مُستبعَد:
 // شروطه (§2.8.1/§3.56) تمنع التمرير عبر وسيط وتشترط محرّك Mapbox GL JS (وMapLibre ليس منه).
 export type SatelliteProvider = "maptiler" | "esri" | "google" | "azure" | "airbus";
-export const SATELLITE_PROVIDER: SatelliteProvider = "maptiler";
+// م9.9 · المزوّد قابل للتبديل **عبر متغيّر بيئة بلا تعديل كود**: NEXT_PUBLIC_SATELLITE_PROVIDER=google (مع GOOGLE_MAPS_KEY خادميّاً).
+// الافتراضي "maptiler". (NEXT_PUBLIC مُضمَّن وقت البناء — يلزم إعادة بناء على Render / إعادة تشغيل محلّيّاً.)
+const ALLOWED_PROVIDERS: readonly SatelliteProvider[] = ["maptiler", "esri", "google", "azure", "airbus"];
+const ENV_PROVIDER = process.env.NEXT_PUBLIC_SATELLITE_PROVIDER as SatelliteProvider | undefined;
+export const SATELLITE_PROVIDER: SatelliteProvider = ENV_PROVIDER && ALLOWED_PROVIDERS.includes(ENV_PROVIDER) ? ENV_PROVIDER : "maptiler";
 
 // مصادر الصور البديلة (raster عبر الوسيط) — القوالب مُمرَّرة، المفتاح يُحقَن خادمياً في /api/imagery.
 export const IMAGERY_SOURCES: Record<
