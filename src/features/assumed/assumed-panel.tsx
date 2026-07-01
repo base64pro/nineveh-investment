@@ -8,6 +8,7 @@ import {
   Building2,
   CheckCheck,
   ChevronDown,
+  Clapperboard,
   Download,
   Eye,
   FileText,
@@ -91,6 +92,7 @@ export function AssumedPanel() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AssumedParcel | null>(null);
   const [tourOpen, setTourOpen] = useState(false); // م9.10 · نافذة جولة العرض السينمائيّة
+  const [cineTourOpen, setCineTourOpen] = useState(false); // م9.18 · نافذة الجولة السينمائيّة (مشاهد معتمَدة)
 
   const all = useMemo(() => [...(data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")), [data]); // الأحدث أولاً (افتراضي معتمد)
   const { data: fo } = useFieldOptions(); // القاموس الموحّد (م7.7) — نفس القيم في كل منسدلات النظام
@@ -208,6 +210,9 @@ export function AssumedPanel() {
           <button type="button" onClick={() => setTourOpen(true)} title="جولة عرض سينمائيّة للمواقع" aria-label="جولة عرض سينمائيّة" className={cn(ORB, "size-12 ring-1 ring-inset ring-[rgba(159,192,232,0.55)]")}>
             <Film className="size-4" />
           </button>
+          <button type="button" onClick={() => setCineTourOpen(true)} title="جولة سينمائيّة — مشاهد كلّ موقع المعتمَدة + البطاقات" aria-label="جولة سينمائيّة (مشاهد معتمَدة)" className={cn(ORB, "size-12 ring-1 ring-inset ring-[rgba(52,211,153,0.6)]")}>
+            <Clapperboard className="size-4" />
+          </button>
           <button type="button" onClick={() => { setEditing(null); setFormOpen(true); }} title="قطعة مفترضة جديدة" aria-label="قطعة مفترضة جديدة" className={cn(ORB, "size-12")}>
             <Plus className="size-5" />
           </button>
@@ -319,6 +324,7 @@ export function AssumedPanel() {
 
       <AssumedForm open={formOpen} onClose={() => setFormOpen(false)} initial={editing} optionSets={optionSets} />
       <TourDialog open={tourOpen} onClose={() => setTourOpen(false)} />
+      <TourDialog open={cineTourOpen} onClose={() => setCineTourOpen(false)} cinematic />
     </div>
   );
 }

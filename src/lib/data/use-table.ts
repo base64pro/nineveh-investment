@@ -31,7 +31,7 @@ export function useTable<T>(table: string) {
       const orderKey = PK[table] ?? "id";
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase.from(table).select("*").order(orderKey, { ascending: true }).range(from, from + PAGE - 1);
-        if (error) throw new Error(error.message);
+        if (error) throw error; // م9.12 · خطأ supabase الأصليّ (code/status) للتصنيف المركزيّ
         const page = (data ?? []) as T[];
         all.push(...page);
         if (page.length < PAGE) break;

@@ -21,7 +21,7 @@ export function useDashboardStats() {
     queryFn: async (): Promise<DashboardStats> => {
       const supabase = createClient();
       const { data, error } = await supabase.rpc("dashboard_stats");
-      if (error) throw new Error(error.message);
+      if (error) throw error; // م9.12 · نحفظ خطأ supabase الأصليّ (code/status) ليصنّفه معالج الأخطاء المركزيّ (سقوط جلسة ← /login)
       return data as DashboardStats;
     },
   });

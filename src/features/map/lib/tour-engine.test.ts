@@ -66,11 +66,11 @@ describe("tour-engine", () => {
     expect(bEnd - b0).toBeGreaterThan(300); // قرابة دورة كاملة
   });
 
-  it("ارتفاع الانتقال ينزل نحو ١٠٠٠م قرب الوصول (لا يبقى ١٢٠٠)", () => {
+  it("ارتفاع الانتقال يرتفع لارتفاع العرض وسط الرحلة ثمّ يهبط لـ١كم قبيل الوصول", () => {
     const tl = buildTimeline([mk("a", "hotel", 43.1, 36.34), mk("b", "mall", 43.2, 36.35)], 1, START);
     const transitStart = 9900;
-    expect(tl.sample(transitStart + 5200 * 0.5).altM).toBeCloseTo(1200, 2); // المنتصف = الوضع الطبيعيّ
-    expect(tl.sample(transitStart + 5200 * 0.99).altM).toBeCloseTo(1000, 0); // الوصول = ١كم
+    expect(tl.sample(transitStart + 5200 * 0.5).altM).toBeGreaterThan(2500); // المنتصف = ارتفاع العرض (≈٤كم) ⇒ تنقّل سريع فوق بلاطات مُحمَّلة
+    expect(tl.sample(transitStart + 5200 * 0.97).altM).toBeLessThan(1300); // قبيل الوصول = قرب ١كم (انقضاض على الموقع)
   });
 
   it("المسار متّصل: لا قفزات في المركز/الارتفاع/الميل/الاتّجاه عبر حدود المقاطع", () => {
@@ -97,5 +97,22 @@ describe("tour-engine", () => {
     const near = zoomForAltitude(400, 36.34, 800);
     const far = zoomForAltitude(1200, 36.34, 800);
     expect(near).toBeGreaterThan(far);
+  });
+
+  it("جولة خاصّة (closeApproach): غطس قريب ~١٨٠م ثمّ دوران ثمّ انسحاب — مسار متّصل", () => {
+    const locs: TourLoc[] = [mk("a", "hotel", 43.1, 36.34), { ...mk("b", "tower", 43.18, 36.36, 45), closeApproach: true }];
+    const tl = buildTimeline(locs, 1, START);
+    let minAlt = Infinity;
+    let prev = tl.sample(0);
+    for (let t = 25; t <= tl.durationMs; t += 25) {
+      const cur = tl.sample(t);
+      if (cur.refId === "b") minAlt = Math.min(minAlt, cur.altM);
+      expect(Math.abs(cur.altM - prev.altM)).toBeLessThan(100); // بلا قفزات (غطس متعمَّد سلس)
+      expect(Math.abs(cur.pitch - prev.pitch)).toBeLessThan(6);
+      expect(angDelta(prev.bearing, cur.bearing)).toBeLessThan(6);
+      prev = cur;
+    }
+    expect(minAlt).toBeLessThan(220); // اقتراب شديد (~١٨٠م) — أقرب من دورة المواقع العاديّة (٤٠٠م)
+    expect(tl.sample(tl.durationMs).altM).toBeCloseTo(1000, 4); // ينتهي منسحباً عند ١كم للانطلاق
   });
 });

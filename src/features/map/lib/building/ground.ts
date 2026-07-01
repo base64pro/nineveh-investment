@@ -1,5 +1,13 @@
 // م9.8 · طبقة الأرضية: الحلقات النابضة + ظلّ التماس (هالة المجسّم على الخريطة). منقولة حرفياً (سلوك مطابق).
 import type { Mesh3 } from "./types";
+import { box, buf, freeze } from "./geom";
+
+// م9.11 · صندوق أساس/قاعدة (foundation) تحت نموذج glb واقعيّ — يمنحه سُمكاً يصل به للأرض (يملأ فجوة الرفع فيلتصق). بلا سطح علويّ (المبنى يغطّيه).
+export function generateFoundation(halfW: number, halfD: number, z0: number, z1: number): Mesh3 {
+  const b = buf();
+  box(b, -halfW, halfW, -halfD, halfD, z0, z1, { top: false });
+  return freeze(b);
+}
 
 // م9.9 · حلقة سونار أرضيّة **بنصف قطر وحدويّ (1)**: نطاق توهّج جرسيّ (سطوع 0→1→0 عبر اللون الرأسيّ grayscale). تُرسَم
 // **بمزجٍ جمعيّ (additive)** في buildRingLayers (الحوافّ المعتمة تُضيف صفراً ⇒ توهّج ناعم بلا أسود/مربّع)، و**لا تُلقي ظلّاً**

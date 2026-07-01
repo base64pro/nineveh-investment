@@ -152,9 +152,9 @@ export function prefetchOverview(
       const i = idx++;
       if (i >= total) return;
       try {
-        // التخبئة تعتمد على رؤوس Cache-Control من الوسيط (MapTiler/Azure/Esri: max-age=86400) لا على استهلاك الجسم.
+        // التخبئة تعتمد على رؤوس Cache-Control من الوسيط (Google/MapTiler: max-age=86400) لا على استهلاك الجسم.
         const res = await fetch(urls[i]!, { signal: ctrl.signal, cache: "force-cache" });
-        if (res.status === 429) { cancelled = true; ctrl.abort(); break; } // **حدّ المعدّل**: أوقف التحميل المسبق فوراً (الباقي يتدفّق عند الطلب) — لا نُغرق MapTiler
+        if (res.status === 429 || res.status === 403) { cancelled = true; ctrl.abort(); break; } // حدّ معدّل/فوترة (Google 403/429): أوقف فوراً — الباقي يتدفّق عند الطلب
         await res.arrayBuffer(); // إكمال التنزيل (العنوان مطابق لما تطلبه MapLibre ⇒ إصابة كاش)
       } catch {
         // ومضة شبكة/إلغاء — تجاهل (MapLibre سيُعيد المحاولة عند الطلب)

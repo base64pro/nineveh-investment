@@ -21,7 +21,7 @@ export function useCounts() {
       const entries = await Promise.all(
         COUNT_TABLES.map(async (table) => {
           const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true });
-          if (error) throw new Error(error.message);
+          if (error) throw error; // م9.12 · خطأ supabase الأصليّ (code/status) للتصنيف المركزيّ
           return [table, count ?? 0] as const;
         }),
       );

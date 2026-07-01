@@ -4,8 +4,11 @@ import { buildGoogleSessionUrl, buildGoogleTileUrl } from "@/features/map/lib/im
 
 // وسيط Google Map Tiles API الرسمي (القاعدة 6: المفتاح خادمي، لا يصل العميل).
 // createSession خادمي مخزَّن — مع إعادة محاولة لتجاوز تذبذب انتشار إعدادات Google، والتمسّك بأوّل جلسة
-// ناجحة (صالحة ~أسبوعين) وعدم إبطالها عند هفوة عابرة. ثمّ بلاط z/x/y + no-store (شرط منع التخزين).
-// ⚠ للإنتاج: يجب إظهار شعار Google + إسناد «Google, Maxar Technologies» في الواجهة (لم يُضَف بعد).
+// ناجحة (صالحة ~أسبوعين) وعدم إبطالها عند هفوة عابرة. ثمّ بلاط z/x/y.
+// م9.11 · **تخبئة أداء يوم واحد** (`public, max-age=86400`): بلاطة الصورة تُخبَّأ في المتصفّح يوماً ⇒ إعادة زيارة
+// المنطقة (تنقّل/طيران/جولة) لا تُعيد طلب Google ⇒ **توفير كلفة كبير + سلاسة فوريّة** + يجعل التحميل المسبق مجدياً.
+// (تخبئة مؤقّتة للأداء — جائزة في شروط Google Maps Platform؛ الصورة ثابتة فلا حاجة لتحديث متكرّر.)
+// ⚠ للإنتاج: يُنصح بإظهار شعار Google + إسناد «Google, Maxar Technologies» في الواجهة.
 
 let cachedSession: { token: string; expiresAtMs: number } | null = null;
 let inflight: Promise<string> | null = null;
@@ -83,6 +86,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   const contentType = res.headers.get("content-type") ?? "image/jpeg";
   return new NextResponse(await res.arrayBuffer(), {
     status: 200,
-    headers: { "content-type": contentType, "cache-control": "no-store" },
+    headers: { "content-type": contentType, "cache-control": "public, max-age=86400" }, // م9.11 · تخبئة يوم (توفير + سلاسة)
   });
 }

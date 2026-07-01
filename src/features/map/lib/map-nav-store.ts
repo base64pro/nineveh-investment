@@ -119,6 +119,29 @@ export function onStopTour(listener: () => void): () => void {
   };
 }
 
+// ===== جولة سينمائيّة منفصلة (م9.18) — تطير لكلّ موقع وتستقرّ على مشهده المعتمَد وتنبثق بطاقاته (سلسلة طيرانات مفردة) =====
+const startCineTourListeners = new Set<(c: TourConfig) => void>();
+export function requestStartCinematicTour(c: TourConfig): void {
+  for (const l of startCineTourListeners) l(c);
+}
+export function onStartCinematicTour(listener: (c: TourConfig) => void): () => void {
+  startCineTourListeners.add(listener);
+  return () => {
+    startCineTourListeners.delete(listener);
+  };
+}
+
+const stopCineTourListeners = new Set<() => void>();
+export function requestStopCinematicTour(): void {
+  for (const l of stopCineTourListeners) l();
+}
+export function onStopCinematicTour(listener: () => void): () => void {
+  stopCineTourListeners.add(listener);
+  return () => {
+    stopCineTourListeners.delete(listener);
+  };
+}
+
 // حالة المواقع المتاحة للجولة — تنشرها الخريطة من مجموعة المجسّمات المعروضة فعلاً، وتستهلكها النافذة.
 export type TourLocation = { refId: string; nameAr: string; kind: string };
 let tourLocations: TourLocation[] = [];
@@ -157,6 +180,25 @@ export function useTourActive(): boolean {
       return () => tourActiveListeners.delete(cb);
     },
     () => tourActive,
+    () => false,
+  );
+}
+
+// م9.18 · نشاط الجولة السينمائيّة — تُخفي الواجهة كالجولة، لكن **تُبقي بطاقات المجسّم ظاهرة** (بخلاف الجولة العاديّة).
+let cinematicTourActive = false;
+const cineActiveListeners = new Set<() => void>();
+export function setCinematicTourActive(v: boolean): void {
+  if (cinematicTourActive === v) return;
+  cinematicTourActive = v;
+  for (const l of cineActiveListeners) l();
+}
+export function useCinematicTourActive(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      cineActiveListeners.add(cb);
+      return () => cineActiveListeners.delete(cb);
+    },
+    () => cinematicTourActive,
     () => false,
   );
 }

@@ -1,12 +1,48 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { createClient } from "@/lib/supabase/client";
+import { looksLikeSessionDenied } from "@/lib/supabase/query-errors";
 
 export function Providers({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
+  const router = useRouter();
+  const [queryClient] = useState(() => {
+    let lastRedirectAt = 0; // كبح ارتداد: تحويل واحد كحدّ أقصى كلّ 5ث (يمنع الحلقات، ويُعاد التسليح بعدها)
+    return new QueryClient({
+      // م9.12 · معالج أخطاء مركزيّ: عند إشارة سقوط جلسة، نتحقّق **نهائيّاً** عبر getUser الموثوق (نداء شبكيّ)، فإن
+      // انعدم المستخدم نعيد تشغيل الخادم (router.refresh) فيحوّل الوسيط إلى /login — لا نُخفي خروجاً حقيقيّاً. الأخطاء
+      // الشبكيّة العابرة (مثل إجهاض تحديث الرمز عند التحديث القسريّ) لا تَعبُر هذه البوّابة ويعيدها TanStack تلقائيّاً.
+      queryCache: new QueryCache({
+        onError: (error) => {
+          if (!looksLikeSessionDenied(error)) return;
+          void (async () => {
+            try {
+              const { data } = await createClient().auth.getUser();
+              if (!data.user && Date.now() - lastRedirectAt > 5000) {
+                lastRedirectAt = Date.now();
+                router.refresh();
+              }
+            } catch {
+              /* تعذّر التحقّق (شبكة) — لا نحوّل؛ قد يكون عابراً */
+            }
+          })();
+        },
+      }),
+      defaultOptions: {
+        queries: {
+          // البيانات لحظيّة عبر Realtime (يُبطل ويُعيد الجلب فوراً مهما كانت النضارة) — فنضارة قصيرة تكفي وتمنع
+          // إعادة جلب عند كلّ تركيز نافذة/تبويب (وهو ما كان يُكثّر تسابق تحديث الرمز الخلفيّ). إعادة الجلب عند عودة
+          // الشبكة تبقى مفعّلة (refetchOnReconnect الافتراضيّ) فتُغطّي إيقاظ الجهاز من السكون.
+          staleTime: 30_000,
+          refetchOnWindowFocus: false,
+        },
+      },
+    });
+  });
 
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>

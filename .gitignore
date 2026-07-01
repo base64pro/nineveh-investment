@@ -43,3 +43,7 @@ next-env.d.ts
 # سجلّات خادم التطوير المحلّي
 /dev.log
 /dev-server.log
+
+# نماذج 3D الخام (مصدر تحريريّ — لا يُلتزَم/يُدفَع؛ المُخرَج المُحسَّن في public/models)
+/models-src/*.glb
+/models-src/*.gltf

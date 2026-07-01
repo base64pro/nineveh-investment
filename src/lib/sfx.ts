@@ -209,6 +209,51 @@ export function sfxOpen(): void {
   tone(a, { type: "sine", f0: 3000, f1: 3600, dur: 0.05, peak: 0.03, delay: 0.24, reverb: 0.4 });
 }
 
+/** م9.13 · انبثاق بطاقة هولوغراميّة — ومضة ظهور أنصع/أقصر من sfxOpen: نفخة صاعدة خاطفة (تشكّل المادّة) + جرسا FM لامعان + بريق علويّ. */
+export function sfxPop(): void {
+  const a = audio();
+  if (!a) return;
+  tone(a, { type: "sine", f0: 180, f1: 520, dur: 0.22, peak: 0.06, filter: 1500, reverb: 0.3 }); // نفخة صاعدة (مادّة تتشكّل)
+  fm(a, { carrier: 1320, ratio: 2.0, index: 5, dur: 0.3, peak: 0.085, delay: 0.04, filter: 7200, reverb: 0.5 }); // جرس بلّوريّ
+  fm(a, { carrier: 1980, ratio: 3.0, index: 3, dur: 0.24, peak: 0.04, delay: 0.07, filter: 8200, reverb: 0.55 }); // جرس أعلى (فاصل خامسة)
+  tone(a, { type: "sine", f0: 3200, f1: 3900, dur: 0.05, peak: 0.025, delay: 0.05, reverb: 0.4 }); // بريق علويّ خاطف
+}
+
+let lastTypeAt = 0;
+let typeStep = 0;
+/** م9.15 · نقرة طباعة **ميكانيكيّة حقيقيّة** (لوحة مفاتيح): (١) نقرة علويّة حادّة جافّة (المفتاح يلامس) عبر دفعة ضوضاء
+ *  عالية ~١٣مللي + (٢) ثوك الكيكاب السفليّ (يستقرّ) عبر نغمتين منخفضتين جافّتين. صدى ضئيل جدّاً (واقعيّ لا فضائيّ). */
+export function sfxType(): void {
+  const a = audio();
+  if (!a) return;
+  const now = performance.now();
+  if (now - lastTypeAt < 42) return;
+  lastTypeAt = now;
+  typeStep = (typeStep + 1) % 7;
+  const t = a.currentTime;
+  // (1) النقرة العلويّة الحادّة (لمسة المفتاح) — ضوضاء عالية قصيرة جدّاً عبر تمرير عالٍ
+  const len = Math.floor(a.sampleRate * 0.013);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const dch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) dch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.6);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const hp = a.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 1500 + typeStep * 90; // تنويع طفيف بين الضربات
+  const ng = a.createGain();
+  ng.gain.setValueAtTime(0.085, t);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.014);
+  src.connect(hp);
+  hp.connect(ng);
+  routeOut(a, ng, 0.04);
+  src.start(t);
+  src.stop(t + 0.02);
+  // (2) ثوك الكيكاب السفليّ (الاستقرار) — نغمتان منخفضتان جافّتان
+  tone(a, { type: "sine", f0: 188 + typeStep * 9, f1: 130, dur: 0.045, peak: 0.05, filter: 820 });
+  tone(a, { type: "triangle", f0: 360, f1: 248, dur: 0.022, peak: 0.018, filter: 1500 });
+}
+
 /** انسياب طيران تقني فخم — **أطول وأنعم وأجمل**: سووش طويل بقوس تردّدي رشيق + قاع نغمي حالم + شمرة هوائية. */
 export function sfxFly(): void {
   const a = audio();
@@ -243,6 +288,67 @@ export function sfxFly(): void {
   fm(a, { carrier: 450, ratio: 2.0, index: 1.4, dur: 0.6, glide: 600, peak: 0.022, delay: 0.1, filter: 3200, reverb: 0.34 });
   // شمرة هوائية عالية خافتة تنساب
   tone(a, { type: "sine", f0: 2200, f1: 3000, dur: 0.7, peak: 0.012, delay: 0.08, reverb: 0.3 });
+}
+
+/** م9.18 · مقبض «سووش طيران» مستمرّ ومُتحكَّم به بالسرعة (للجولة السينمائيّة). */
+export type FlightWhooshHandle = { setSpeed: (v: number) => void; stop: () => void };
+
+/**
+ * م9.18 · محرّك سووش طيران **مستمرّ** يُقاد إطاراً بإطار من سرعة الكاميرا الفعليّة — يبقى الصوت متّسقاً مع الحركة دائماً
+ * (بدل طلقة sfxFly المنفصلة): طبقة هواء (ضوضاء دوّارة عبر تمرير نطاقيّ يتّسع تردّده مع السرعة) + قاع محرّك (منشاريّة منخفضة عبر تمرير منخفض).
+ * كلّ المعاملات تتبع setSpeed(0..1) بتنعيم setTargetAtTime. يعيد null إن كان الصوت مكتوماً/غير مهيّأ.
+ */
+export function createFlightWhoosh(): FlightWhooshHandle | null {
+  const a = audio();
+  if (!a) return null;
+  const t = a.currentTime;
+  // سووش هوائيّ **هادئ ناعم**: ضوضاء ورديّة (تمرير منخفض بسيط على البيضاء ⇒ بلا هسهسة حادّة) → تمرير منخفض + تمرير عالٍ يزيل الهدير.
+  const len = Math.floor(a.sampleRate * 2);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  let lp1 = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    lp1 = lp1 * 0.96 + w * 0.04; // تنعيم ⇒ ضوضاء ورديّة ناعمة
+    d[i] = lp1 * 6;
+  }
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  const lp = a.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.Q.value = 0.5;
+  lp.frequency.setValueAtTime(560, t);
+  const hp = a.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 150; // أزِل الهدير السفليّ
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  src.connect(lp);
+  lp.connect(hp);
+  hp.connect(g);
+  routeOut(a, g, 0.3); // صدى لطيف = سلاسة إضافيّة
+  src.start(t);
+  let stopped = false;
+  const setSpeed = (v: number): void => {
+    if (stopped || !ctx) return;
+    const s = muted ? 0 : Math.max(0, Math.min(1, v)); // كتمٌ أثناء التشغيل ⇒ صمت
+    const tt = ctx.currentTime;
+    g.gain.setTargetAtTime(0.0002 + 0.03 * s, tt, 0.13); // **خفيف جداً** (ذروة ~٠٫٠٣) وسلس
+    lp.frequency.setTargetAtTime(520 + 800 * s, tt, 0.13); // يفتح قليلاً مع السرعة (ناعم لا حادّ)
+  };
+  const stop = (): void => {
+    if (stopped || !ctx) return;
+    stopped = true;
+    const tt = ctx.currentTime;
+    g.gain.setTargetAtTime(0.0001, tt, 0.2); // تلاشٍ ناعم
+    try {
+      src.stop(tt + 0.8);
+    } catch {
+      /* تجاهل */
+    }
+  };
+  return { setSpeed, stop };
 }
 
 /** نغمة افتتاح النظام عند أوّل تفاعل — كورد FM مهيب صاعد (مرّة واحدة). */

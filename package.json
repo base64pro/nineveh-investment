@@ -20,7 +20,8 @@
     "verify:rls": "tsx scripts/verify-rls.ts",
     "verify:user": "tsx scripts/verify-user.ts",
     "verify:maptiler": "tsx scripts/verify-maptiler.ts",
-    "embed:legal": "tsx scripts/embed-legal.ts"
+    "embed:legal": "tsx scripts/embed-legal.ts",
+    "optimize:model": "npx --yes @gltf-transform/cli optimize models-src/nineveh-authority.glb public/models/nineveh-authority.glb --compress draco --texture-compress jpeg --texture-size 2048 --simplify true --simplify-error 0.0008"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.3",

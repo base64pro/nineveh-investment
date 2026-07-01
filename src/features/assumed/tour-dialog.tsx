@@ -6,12 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Play, Repeat } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { requestStartTour, useTourLocations } from "@/features/map/lib/map-nav-store";
+import { requestStartCinematicTour, requestStartTour, useTourLocations } from "@/features/map/lib/map-nav-store";
 import { TOUR_MODES } from "@/features/map/lib/tour-engine";
 
 const KIND_LABEL: Record<string, string> = { tower: "برج", mall: "مول", hotel: "فندق" };
 
-export function TourDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function TourDialog({ open, onClose, cinematic = false }: { open: boolean; onClose: () => void; cinematic?: boolean }) {
   const locations = useTourLocations();
   const ordered = useMemo(() => locations, [locations]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -43,12 +43,13 @@ export function TourDialog({ open, onClose }: { open: boolean; onClose: () => vo
     } catch {
       /* غير مدعوم (مثل iOS Safari) — تُكمل الجولة بإخفاء الواجهة فقط */
     }
-    requestStartTour({ refIds, mode, loop });
+    if (cinematic) requestStartCinematicTour({ refIds, mode: 0, loop });
+    else requestStartTour({ refIds, mode, loop });
     onClose();
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="جولة عرض سينمائيّة" size="md">
+    <Dialog open={open} onClose={onClose} title={cinematic ? "جولة سينمائيّة — مشاهد معتمَدة" : "جولة عرض سينمائيّة"} size="md">
       <div className="space-y-4">
         {/* المواقع */}
         <div>
@@ -93,27 +94,33 @@ export function TourDialog({ open, onClose }: { open: boolean; onClose: () => vo
           ) : null}
         </div>
 
-        {/* وضع حركة الكاميرا */}
-        <div>
-          <span className="mb-2 block text-sm font-bold">وضع حركة الكاميرا</span>
-          <div className="space-y-1.5">
-            {TOUR_MODES.map((mo) => (
-              <label
-                key={mo.id}
-                className={cn(
-                  "flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2 transition",
-                  mode === mo.id ? "border-primary/50 bg-primary/10" : "border-border/60 bg-background/40 hover:bg-white/[0.04]",
-                )}
-              >
-                <input type="radio" name="tour-mode" checked={mode === mo.id} onChange={() => setMode(mo.id)} className="mt-0.5 size-4 accent-primary" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">{mo.label}</span>
-                  <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{mo.description}</span>
-                </span>
-              </label>
-            ))}
+        {/* وضع حركة الكاميرا — للجولة العاديّة؛ الجولة السينمائيّة تستخدم المشاهد المعتمَدة */}
+        {cinematic ? (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            تطير الجولة لكلّ موقع وتستقرّ على <span className="font-semibold text-foreground">مشهده المعتمَد</span> (الذي ضبطتَه) مع انبثاق بطاقاته، ثمّ دورانٌ خفيف عند المغادرة والانتقال للتالي. بطاقات الموقع تبقى حتّى يصل الطيران للموقع الذي بعده فتُغلَق — مثاليّ للحلقة المتكرّرة.
           </div>
-        </div>
+        ) : (
+          <div>
+            <span className="mb-2 block text-sm font-bold">وضع حركة الكاميرا</span>
+            <div className="space-y-1.5">
+              {TOUR_MODES.map((mo) => (
+                <label
+                  key={mo.id}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2 transition",
+                    mode === mo.id ? "border-primary/50 bg-primary/10" : "border-border/60 bg-background/40 hover:bg-white/[0.04]",
+                  )}
+                >
+                  <input type="radio" name="tour-mode" checked={mode === mo.id} onChange={() => setMode(mo.id)} className="mt-0.5 size-4 accent-primary" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{mo.label}</span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{mo.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* التكرار */}
         <label className="flex cursor-pointer items-center gap-2.5">

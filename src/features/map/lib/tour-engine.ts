@@ -14,6 +14,7 @@ export type TourLoc = {
   heightM: number;
   kind: ModelKind;
   rotationDeg: number;
+  closeApproach?: boolean; // م9.11 · جولة خاصّة (غطس قريب نحو الباب → ارتفاع وتصوير → دوران ٣٦٠° → انسحاب) — لمبنى الهيئة الواقعيّ
 };
 
 // حالة الكاميرا عند البدء (تُمرَّر من الخريطة) — لانطلاق اقتراب الموقع الأوّل بسلاسة من حيث الكاميرا الآن.
@@ -106,15 +107,37 @@ type SegFrame = { center: LngLat; altM: number; pitch: number; bearing: number }
 type Segment = { dur: number; refId: string; frame: (p: number) => SegFrame };
 type EndState = { center: LngLat; altM: number; pitch: number; bearing: number };
 
-// منحنى الارتفاع للانتقال: صعود لـ١٢٠٠ (طبيعيّ)، ثمّ نزول لـ١٠٠٠ عند المنتصف، فالتثبيت حتى الوصول.
+// م9.11 · ارتفاع طيران الانتقال (مسافة تأطير ≈z15) — **فوق العرض المُحمَّل مسبقاً**: الكاميرا ترتفع وسط الرحلة فتطير
+// سريعاً فوق بلاطات مُحمَّلة (لا فجوات كحليّة)، ثمّ تنقضّ إلى الموقع. (التنقّل القريب السريع كان سبب الفجوات.)
+const TRANSIT_CRUISE_ALT = 4000;
+// منحنى الارتفاع للانتقال: **صعود** إلى ارتفاع العرض (cruise) في أوّل الرحلة، طيران عرض سريع، ثمّ **هبوط** إلى 1كم قبيل
+// الوصول من الباب. الحركة الأسرع (منتصف المسار) تقع وهي عالية ⇒ بلاطات مُحمَّلة ⇒ بلا تقطّع.
 function transitAlt(p: number, startAlt: number): number {
-  if (p < 0.25) return lerp(startAlt, NATURAL_ALT, easeInOut(p / 0.25));
-  if (p < 0.5) return NATURAL_ALT;
-  if (p < 0.75) return lerp(NATURAL_ALT, TRANSIT_LOW_ALT, easeInOut((p - 0.5) / 0.25));
-  return TRANSIT_LOW_ALT;
+  if (p < 0.4) return lerp(startAlt, TRANSIT_CRUISE_ALT, easeInOut(p / 0.4)); // صعود إلى العرض
+  if (p < 0.68) return TRANSIT_CRUISE_ALT; // طيران عرض (سريع، مُحمَّل مسبقاً)
+  return lerp(TRANSIT_CRUISE_ALT, TRANSIT_LOW_ALT, easeInOut((p - 0.68) / 0.32)); // هبوط للوصول من الباب عند 1كم
 }
 function transitPitch(p: number, startPitch: number): number {
-  return p < 0.25 ? lerp(startPitch, DRONE_PITCH, easeInOut(p / 0.25)) : DRONE_PITCH;
+  return p < 0.4 ? lerp(startPitch, DRONE_PITCH, easeInOut(p / 0.4)) : DRONE_PITCH;
+}
+
+// م9.11 · جولة خاصّة لمبنًى مميّز (الهيئة): ① غطس قريب جداً نحو الباب → ② ارتفاع فوقه + ميل لتصوير المبنى بوضوح →
+// ③ دوران تصويريّ ٣٦٠° حوله → ④ انسحاب وارتفاع للانطلاق. `fromAlt/fromBearing` = نهاية المقطع السابق (وصل/اقتراب) لاتّصال سلس.
+const SP_DIVE_MS = 2600;
+const SP_RISE_MS = 2600;
+const SP_ORBIT_MS = 9000;
+const SP_PULLBACK_MS = 1900;
+const SP_NEAR_ALT = 180; // اقتراب شديد (دخول تجاه الباب)
+const SP_ORBIT_ALT = 460; // ارتفاع التصوير المداريّ
+const SP_RISE_PITCH = 20; // ميل عند الارتفاع فوقه (نظرة شبه علويّة)
+const SP_ORBIT_PITCH = 36; // ميل الدوران (٣/٤ يُظهر الواجهات والسطح)
+function specialDisplaySegments(loc: TourLoc, gate: number, fromAlt: number, fromBearing: number): { segs: Segment[]; end: EndState } {
+  const c = loc.center;
+  const dive: Segment = { dur: SP_DIVE_MS, refId: loc.refId, frame: (p) => ({ center: c, altM: lerp(fromAlt, SP_NEAR_ALT, easeInOut(p)), pitch: DRONE_PITCH, bearing: lerpAngle(fromBearing, gate, easeInOut(p)) }) }; // غطس نحو الباب
+  const rise: Segment = { dur: SP_RISE_MS, refId: loc.refId, frame: (p) => ({ center: c, altM: lerp(SP_NEAR_ALT, SP_ORBIT_ALT, easeInOut(p)), pitch: lerp(DRONE_PITCH, SP_RISE_PITCH, easeInOut(p)), bearing: gate }) }; // ارتفاع فوقه + تصوير
+  const orbit: Segment = { dur: SP_ORBIT_MS, refId: loc.refId, frame: (p) => ({ center: c, altM: SP_ORBIT_ALT, pitch: lerp(SP_RISE_PITCH, SP_ORBIT_PITCH, smoothstep(Math.min(1, p * 4))), bearing: gate + 360 * p }) }; // دوران كامل حوله
+  const pullback: Segment = { dur: SP_PULLBACK_MS, refId: loc.refId, frame: (p) => ({ center: c, altM: lerp(SP_ORBIT_ALT, HERO_FAR_ALT, easeInOut(p)), pitch: lerp(SP_ORBIT_PITCH, DRONE_PITCH, easeInOut(p)), bearing: gate + 360 }) }; // انسحاب ثمّ انطلاق
+  return { segs: [dive, rise, orbit, pullback], end: { center: c, altM: HERO_FAR_ALT, pitch: DRONE_PITCH, bearing: gate } };
 }
 
 // مقاطع عرض موقعٍ تالٍ (انتقال → اقتراب → دورة ٣٦٠°). تُحدِّث `prevEnd` لاحقاً عبر القيمة المُعادة.
@@ -130,6 +153,11 @@ function transitionSegments(prev: EndState, loc: TourLoc): { segs: Segment[]; en
       bearing: lerpAngle(prev.bearing, gate, easeInOut(Math.min(1, p / 0.85))), // يستقرّ على اتّجاه الباب قبل الوصول
     }),
   };
+  if (loc.closeApproach) {
+    // جولة خاصّة (الهيئة): بعد الوصول من الباب عند 1كم ← غطس قريب + ارتفاع وتصوير + دوران + انسحاب.
+    const sp = specialDisplaySegments(loc, gate, TRANSIT_LOW_ALT, gate);
+    return { segs: [transit, ...sp.segs], end: sp.end };
+  }
   const closeIn: Segment = {
     dur: CLOSEIN_MS,
     refId: loc.refId,
@@ -161,6 +189,12 @@ function firstLocationSegments(start: StartCam, loc: TourLoc): { segs: Segment[]
       bearing: start.bearing, // الاقتراب يُبقي الاتّجاه ثابتاً (كالطيران الحاليّ)
     }),
   };
+  if (loc.closeApproach) {
+    // جولة خاصّة (الهيئة) حتى لو كانت الموقع الأوّل: بعد الاقتراب ← غطس + ارتفاع وتصوير + دوران + انسحاب.
+    const gate = gateCameraBearing(loc.kind, loc.rotationDeg);
+    const sp = specialDisplaySegments(loc, gate, targetAlt, start.bearing);
+    return { segs: [approach, ...sp.segs], end: sp.end };
+  }
   const ss = (u: number): number => u * u * (3 - 2 * u);
   const orbit: Segment = {
     dur: L1_ORBIT_MS,

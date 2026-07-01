@@ -14,7 +14,7 @@ export function useFieldOptions() {
     queryFn: async (): Promise<Record<string, string[]>> => {
       const supabase = createClient();
       const { data, error } = await supabase.from("field_value_options").select("field_key,value");
-      if (error) throw new Error(error.message);
+      if (error) throw error; // م9.12 · خطأ supabase الأصليّ (code/status) للتصنيف المركزيّ
       const map: Record<string, string[]> = {};
       for (const row of (data ?? []) as { field_key: string; value: string }[]) {
         (map[row.field_key] ??= []).push(row.value);
